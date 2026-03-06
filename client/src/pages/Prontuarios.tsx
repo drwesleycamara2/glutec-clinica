@@ -1,0 +1,82 @@
+import { useState } from "react";
+import { useLocation } from "wouter";
+import { trpc } from "@/lib/trpc";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Search, FileText, User, ChevronRight, Loader2 } from "lucide-react";
+
+export default function Prontuarios() {
+  const [, setLocation] = useLocation();
+  const [query, setQuery] = useState("");
+  const { data: patients, isLoading } = trpc.patients.list.useQuery({ query: query || undefined, limit: 50 });
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Prontuários</h1>
+          <p className="text-sm text-muted-foreground mt-1">Prontuário Eletrônico do Paciente · CFM 1821/2007</p>
+        </div>
+      </div>
+
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Buscar paciente por nome ou CPF..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+      ) : !patients || patients.length === 0 ? (
+        <Card className="border shadow-sm">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <FileText className="h-12 w-12 text-muted-foreground/30 mb-4" />
+            <p className="text-base font-medium text-muted-foreground">Nenhum paciente encontrado</p>
+            <p className="text-sm text-muted-foreground/70 mt-1">Cadastre pacientes na seção de Pacientes para acessar seus prontuários.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {patients.map((patient) => (
+            <Card
+              key={patient.id}
+              className="border shadow-sm cursor-pointer hover:border-primary/40 hover:shadow-md transition-all"
+              onClick={() => setLocation(`/prontuarios/${patient.id}`)}
+            >
+              <CardContent className="flex items-center gap-4 p-4">
+                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  {patient.photoUrl ? (
+                    <img src={patient.photoUrl} alt={patient.fullName} className="h-10 w-10 rounded-full object-cover" />
+                  ) : (
+                    <User className="h-5 w-5 text-primary" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{patient.fullName}</p>
+                  <div className="flex items-center gap-3 mt-0.5">
+                    {patient.birthDate && (
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(patient.birthDate).toLocaleDateString("pt-BR")}
+                      </span>
+                    )}
+                    {patient.cpf && <span className="text-xs text-muted-foreground font-mono">{patient.cpf}</span>}
+                    {patient.insuranceName && (
+                      <Badge variant="outline" className="text-xs h-5">{patient.insuranceName}</Badge>
+                    )}
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
