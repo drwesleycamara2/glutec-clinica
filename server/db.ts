@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, like, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, like, lte, or, sql, asc, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertAuditLog,
@@ -8,6 +8,28 @@ import {
   InsertPrescription,
   InsertScheduleBlock,
   InsertUser,
+  InsertAppointment,
+  InsertDocumentSignature,
+  InsertMedicalRecordTemplate,
+  InsertMedicalRecordChaperone,
+  InsertPatientPhoto,
+  InsertPatientDocument,
+  InsertInventoryProduct,
+  InsertInventoryMovement,
+  InsertCrmIndication,
+  InsertBudgetProcedureCatalog,
+  InsertBudgetProcedureArea,
+  InsertBudgetProcedurePricing,
+  InsertBudgetPaymentPlan,
+  InsertBudget,
+  InsertBudgetItem,
+  InsertFinancialTransaction,
+  InsertChatMessage,
+  InsertClinicSettings,
+  InsertAnamnesisLink,
+  InsertAudioTranscription,
+  InsertPermission,
+  InsertUserSession,
   auditLogs,
   documentSignatures,
   examRequests,
@@ -17,10 +39,29 @@ import {
   scheduleBlocks,
   appointments,
   users,
-  InsertAppointment,
-  InsertDocumentSignature,
+  userSessions,
+  permissions,
+  clinicSettings,
+  medicalRecordTemplates,
+  medicalRecordChaperones,
+  patientPhotos,
+  patientDocuments,
+  inventoryProducts,
+  inventoryMovements,
+  crmIndications,
+  budgetProcedureCatalog,
+  budgetProcedureAreas,
+  budgetProcedurePricing,
+  budgetPaymentPlans,
+  budgets,
+  budgetItems,
+  financialTransactions,
+  chatMessages,
+  anamnesisLinks,
+  audioTranscriptions,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import crypto from "crypto";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -80,6 +121,13 @@ export async function getUserByOpenId(openId: string) {
   return result[0];
 }
 
+export async function getUserById(userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  return result[0];
+}
+
 export async function getAllUsers() {
   const db = await getDb();
   if (!db) return [];
@@ -92,6 +140,12 @@ export async function getDoctors() {
   return db.select().from(users).where(eq(users.role, "medico")).orderBy(users.name);
 }
 
+export async function getStaffByRoles(roles: string[]) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(users).where(and(inArray(users.role, roles as any), eq(users.active, true))).orderBy(users.name);
+}
+
 export async function updateUserRole(userId: number, role: "admin" | "medico" | "recepcionista" | "enfermeiro" | "user") {
   const db = await getDb();
   if (!db) return;
@@ -102,6 +156,98 @@ export async function updateUserProfile(userId: number, data: Partial<InsertUser
   const db = await getDb();
   if (!db) return;
   await db.update(users).set(data).where(eq(users.id, userId));
+}
+
+export async function incrementFailedLogin(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({
+    failedLoginAttempts: sql`${users.failedLoginAttempts} + 1`,
+  }).where(eq(users.id, userId));
+}
+
+export async function resetFailedLogin(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ failedLoginAttempts: 0, lockedUntil: null }).where(eq(users.id, userId));
+}
+
+export async function lockUser(userId: number, until: Date) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ lockedUntil: until }).where(eq(users.id, userId));
+}
+
+// ─── User Sessions ───────────────────────────────────────────────────────────
+
+export async function createUserSession(data: InsertUserSession) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.insert(userSessions).values(data);
+}
+
+export async function getActiveSession(token: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(userSessions)
+    .where(and(eq(userSessions.sessionToken, token), gte(userSessions.expiresAt, new Date())))
+    .limit(1);
+  return result[0];
+}
+
+export async function revokeSession(sessionId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(userSessions).set({ revokedAt: new Date() }).where(eq(userSessions.id, sessionId));
+}
+
+export async function revokeAllUserSessions(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(userSessions).set({ revokedAt: new Date() }).where(eq(userSessions.userId, userId));
+}
+
+// ─── Permissions ─────────────────────────────────────────────────────────────
+
+export async function getUserPermissions(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(permissions).where(eq(permissions.userId, userId));
+}
+
+export async function setUserPermission(data: InsertPermission) {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await db.select().from(permissions)
+    .where(and(eq(permissions.userId, data.userId), eq(permissions.module, data.module)))
+    .limit(1);
+  if (existing.length > 0) {
+    await db.update(permissions).set(data).where(eq(permissions.id, existing[0].id));
+  } else {
+    await db.insert(permissions).values(data);
+  }
+}
+
+// ─── Clinic Settings ─────────────────────────────────────────────────────────
+
+export async function getClinicSettings() {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(clinicSettings).limit(1);
+  return result[0];
+}
+
+export async function upsertClinicSettings(data: InsertClinicSettings) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const existing = await db.select().from(clinicSettings).limit(1);
+  if (existing.length > 0) {
+    await db.update(clinicSettings).set(data).where(eq(clinicSettings.id, existing[0].id));
+    return existing[0].id;
+  } else {
+    const result = await db.insert(clinicSettings).values(data);
+    return result[0].insertId;
+  }
 }
 
 // ─── Patients ─────────────────────────────────────────────────────────────────
@@ -251,6 +397,35 @@ export async function deleteScheduleBlock(id: number) {
   await db.delete(scheduleBlocks).where(eq(scheduleBlocks.id, id));
 }
 
+// ─── Medical Record Templates ────────────────────────────────────────────────
+
+export async function createMedicalRecordTemplate(data: InsertMedicalRecordTemplate) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(medicalRecordTemplates).values(data);
+  return result[0];
+}
+
+export async function listMedicalRecordTemplates(activeOnly = true) {
+  const db = await getDb();
+  if (!db) return [];
+  const where = activeOnly ? eq(medicalRecordTemplates.active, true) : undefined;
+  return db.select().from(medicalRecordTemplates).where(where).orderBy(medicalRecordTemplates.name);
+}
+
+export async function getMedicalRecordTemplateById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(medicalRecordTemplates).where(eq(medicalRecordTemplates.id, id)).limit(1);
+  return result[0];
+}
+
+export async function updateMedicalRecordTemplate(id: number, data: Partial<InsertMedicalRecordTemplate>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(medicalRecordTemplates).set(data).where(eq(medicalRecordTemplates.id, id));
+}
+
 // ─── Medical Records ──────────────────────────────────────────────────────────
 
 export async function createMedicalRecord(data: InsertMedicalRecord) {
@@ -281,6 +456,151 @@ export async function updateMedicalRecord(id: number, data: Partial<InsertMedica
   const db = await getDb();
   if (!db) return;
   await db.update(medicalRecords).set(data).where(eq(medicalRecords.id, id));
+}
+
+// ─── Medical Record Chaperones ───────────────────────────────────────────────
+
+export async function addChaperone(data: InsertMedicalRecordChaperone) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.insert(medicalRecordChaperones).values(data);
+}
+
+export async function getChaperonesByRecord(medicalRecordId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(medicalRecordChaperones).where(eq(medicalRecordChaperones.medicalRecordId, medicalRecordId));
+}
+
+// ─── Patient Photos ──────────────────────────────────────────────────────────
+
+export async function createPatientPhoto(data: InsertPatientPhoto) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(patientPhotos).values(data);
+  return result[0];
+}
+
+export async function getPatientPhotos(patientId: number, category?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const where = category
+    ? and(eq(patientPhotos.patientId, patientId), eq(patientPhotos.category, category as any))
+    : eq(patientPhotos.patientId, patientId);
+  return db.select().from(patientPhotos).where(where).orderBy(desc(patientPhotos.createdAt));
+}
+
+export async function deletePatientPhoto(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(patientPhotos).where(eq(patientPhotos.id, id));
+}
+
+// ─── Patient Documents ───────────────────────────────────────────────────────
+
+export async function createPatientDocument(data: InsertPatientDocument) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(patientDocuments).values(data);
+  return result[0];
+}
+
+export async function getPatientDocuments(patientId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(patientDocuments).where(eq(patientDocuments.patientId, patientId)).orderBy(desc(patientDocuments.createdAt));
+}
+
+export async function deletePatientDocument(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(patientDocuments).where(eq(patientDocuments.id, id));
+}
+
+// ─── Inventory ───────────────────────────────────────────────────────────────
+
+export async function createInventoryProduct(data: InsertInventoryProduct) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(inventoryProducts).values(data);
+  return result[0];
+}
+
+export async function listInventoryProducts(activeOnly = true) {
+  const db = await getDb();
+  if (!db) return [];
+  const where = activeOnly ? eq(inventoryProducts.active, true) : undefined;
+  return db.select().from(inventoryProducts).where(where).orderBy(inventoryProducts.name);
+}
+
+export async function getInventoryProductById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(inventoryProducts).where(eq(inventoryProducts.id, id)).limit(1);
+  return result[0];
+}
+
+export async function updateInventoryProduct(id: number, data: Partial<InsertInventoryProduct>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(inventoryProducts).set(data).where(eq(inventoryProducts.id, id));
+}
+
+export async function createInventoryMovement(data: InsertInventoryMovement) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.insert(inventoryMovements).values(data);
+  // Update stock
+  const product = await getInventoryProductById(data.productId);
+  if (product) {
+    let newStock = product.currentStock;
+    if (data.type === "entrada") newStock += data.quantity;
+    else if (data.type === "saida") newStock -= data.quantity;
+    else newStock = data.quantity; // ajuste
+    await db.update(inventoryProducts).set({ currentStock: newStock }).where(eq(inventoryProducts.id, data.productId));
+  }
+}
+
+export async function getInventoryMovements(productId: number, limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(inventoryMovements).where(eq(inventoryMovements.productId, productId)).orderBy(desc(inventoryMovements.createdAt)).limit(limit);
+}
+
+export async function getLowStockProducts() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(inventoryProducts)
+    .where(and(eq(inventoryProducts.active, true), sql`${inventoryProducts.currentStock} <= ${inventoryProducts.minimumStock}`))
+    .orderBy(inventoryProducts.name);
+}
+
+// ─── CRM / Indicações ────────────────────────────────────────────────────────
+
+export async function createCrmIndication(data: InsertCrmIndication) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(crmIndications).values(data);
+  return result[0];
+}
+
+export async function getCrmIndicationsByPatient(patientId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(crmIndications).where(eq(crmIndications.patientId, patientId)).orderBy(desc(crmIndications.createdAt));
+}
+
+export async function listCrmIndications(status?: string, limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  const where = status ? eq(crmIndications.status, status as any) : undefined;
+  return db.select().from(crmIndications).where(where).orderBy(desc(crmIndications.createdAt)).limit(limit);
+}
+
+export async function updateCrmIndication(id: number, data: Partial<InsertCrmIndication>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(crmIndications).set(data).where(eq(crmIndications.id, id));
 }
 
 // ─── Prescriptions ────────────────────────────────────────────────────────────
@@ -347,12 +667,292 @@ export async function updateExamRequest(id: number, data: Partial<InsertExamRequ
   await db.update(examRequests).set(data).where(eq(examRequests.id, id));
 }
 
-// ─── Audit Logs ───────────────────────────────────────────────────────────────
+// ─── Budget Procedure Catalog ────────────────────────────────────────────────
+
+export async function createBudgetProcedure(data: InsertBudgetProcedureCatalog) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(budgetProcedureCatalog).values(data);
+  return result[0];
+}
+
+export async function listBudgetProcedures(activeOnly = true) {
+  const db = await getDb();
+  if (!db) return [];
+  const where = activeOnly ? eq(budgetProcedureCatalog.active, true) : undefined;
+  return db.select().from(budgetProcedureCatalog).where(where).orderBy(budgetProcedureCatalog.name);
+}
+
+export async function getBudgetProcedureById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(budgetProcedureCatalog).where(eq(budgetProcedureCatalog.id, id)).limit(1);
+  return result[0];
+}
+
+export async function updateBudgetProcedure(id: number, data: Partial<InsertBudgetProcedureCatalog>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(budgetProcedureCatalog).set(data).where(eq(budgetProcedureCatalog.id, id));
+}
+
+// ─── Budget Procedure Areas ──────────────────────────────────────────────────
+
+export async function createBudgetProcedureArea(data: InsertBudgetProcedureArea) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(budgetProcedureAreas).values(data);
+  return result[0];
+}
+
+export async function getAreasByProcedure(procedureId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(budgetProcedureAreas)
+    .where(and(eq(budgetProcedureAreas.procedureId, procedureId), eq(budgetProcedureAreas.active, true)))
+    .orderBy(budgetProcedureAreas.sortOrder);
+}
+
+export async function updateBudgetProcedureArea(id: number, data: Partial<InsertBudgetProcedureArea>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(budgetProcedureAreas).set(data).where(eq(budgetProcedureAreas.id, id));
+}
+
+// ─── Budget Procedure Pricing ────────────────────────────────────────────────
+
+export async function upsertBudgetPricing(data: InsertBudgetProcedurePricing) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const existing = await db.select().from(budgetProcedurePricing)
+    .where(and(
+      eq(budgetProcedurePricing.procedureId, data.procedureId),
+      eq(budgetProcedurePricing.areaId, data.areaId),
+      eq(budgetProcedurePricing.complexity, data.complexity),
+    ))
+    .limit(1);
+  if (existing.length > 0) {
+    await db.update(budgetProcedurePricing).set({ priceInCents: data.priceInCents }).where(eq(budgetProcedurePricing.id, existing[0].id));
+  } else {
+    await db.insert(budgetProcedurePricing).values(data);
+  }
+}
+
+export async function getPricingByProcedure(procedureId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(budgetProcedurePricing)
+    .where(and(eq(budgetProcedurePricing.procedureId, procedureId), eq(budgetProcedurePricing.active, true)));
+}
+
+export async function getPrice(procedureId: number, areaId: number, complexity: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(budgetProcedurePricing)
+    .where(and(
+      eq(budgetProcedurePricing.procedureId, procedureId),
+      eq(budgetProcedurePricing.areaId, areaId),
+      eq(budgetProcedurePricing.complexity, complexity as any),
+      eq(budgetProcedurePricing.active, true),
+    ))
+    .limit(1);
+  return result[0];
+}
+
+// ─── Budget Payment Plans ────────────────────────────────────────────────────
+
+export async function listPaymentPlans(activeOnly = true) {
+  const db = await getDb();
+  if (!db) return [];
+  const where = activeOnly ? eq(budgetPaymentPlans.active, true) : undefined;
+  return db.select().from(budgetPaymentPlans).where(where).orderBy(budgetPaymentPlans.sortOrder);
+}
+
+export async function createPaymentPlan(data: InsertBudgetPaymentPlan) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.insert(budgetPaymentPlans).values(data);
+}
+
+export async function updatePaymentPlan(id: number, data: Partial<InsertBudgetPaymentPlan>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(budgetPaymentPlans).set(data).where(eq(budgetPaymentPlans.id, id));
+}
+
+// ─── Budgets ─────────────────────────────────────────────────────────────────
+
+export async function createBudget(data: InsertBudget) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(budgets).values(data);
+  return result[0];
+}
+
+export async function getBudgetById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(budgets).where(eq(budgets.id, id)).limit(1);
+  return result[0];
+}
+
+export async function getBudgetsByPatient(patientId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(budgets).where(eq(budgets.patientId, patientId)).orderBy(desc(budgets.createdAt));
+}
+
+export async function listBudgets(status?: string, limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  const where = status ? eq(budgets.status, status as any) : undefined;
+  return db.select().from(budgets).where(where).orderBy(desc(budgets.createdAt)).limit(limit);
+}
+
+export async function updateBudget(id: number, data: Partial<InsertBudget>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(budgets).set(data).where(eq(budgets.id, id));
+}
+
+// ─── Budget Items ────────────────────────────────────────────────────────────
+
+export async function addBudgetItem(data: InsertBudgetItem) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.insert(budgetItems).values(data);
+}
+
+export async function getBudgetItems(budgetId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(budgetItems).where(eq(budgetItems.budgetId, budgetId)).orderBy(budgetItems.sortOrder);
+}
+
+export async function removeBudgetItem(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(budgetItems).where(eq(budgetItems.id, id));
+}
+
+export async function clearBudgetItems(budgetId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(budgetItems).where(eq(budgetItems.budgetId, budgetId));
+}
+
+// ─── Financial Transactions ──────────────────────────────────────────────────
+
+export async function createFinancialTransaction(data: InsertFinancialTransaction) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(financialTransactions).values(data);
+  return result[0];
+}
+
+export async function listFinancialTransactions(filters: { type?: string; status?: string; from?: Date; to?: Date }, limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [];
+  if (filters.type) conditions.push(eq(financialTransactions.type, filters.type as any));
+  if (filters.status) conditions.push(eq(financialTransactions.status, filters.status as any));
+  if (filters.from) conditions.push(gte(financialTransactions.createdAt, filters.from));
+  if (filters.to) conditions.push(lte(financialTransactions.createdAt, filters.to));
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  return db.select().from(financialTransactions).where(where).orderBy(desc(financialTransactions.createdAt)).limit(limit);
+}
+
+export async function updateFinancialTransaction(id: number, data: Partial<InsertFinancialTransaction>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(financialTransactions).set(data).where(eq(financialTransactions.id, id));
+}
+
+export async function getFinancialSummary(from: Date, to: Date) {
+  const db = await getDb();
+  if (!db) return { totalReceitas: 0, totalDespesas: 0, saldo: 0 };
+  const [receitas, despesas] = await Promise.all([
+    db.select({ total: sql<number>`COALESCE(SUM(${financialTransactions.amountInCents}), 0)` })
+      .from(financialTransactions)
+      .where(and(eq(financialTransactions.type, "receita"), eq(financialTransactions.status, "pago"), gte(financialTransactions.createdAt, from), lte(financialTransactions.createdAt, to))),
+    db.select({ total: sql<number>`COALESCE(SUM(${financialTransactions.amountInCents}), 0)` })
+      .from(financialTransactions)
+      .where(and(eq(financialTransactions.type, "despesa"), eq(financialTransactions.status, "pago"), gte(financialTransactions.createdAt, from), lte(financialTransactions.createdAt, to))),
+  ]);
+  const totalReceitas = receitas[0]?.total ?? 0;
+  const totalDespesas = despesas[0]?.total ?? 0;
+  return { totalReceitas, totalDespesas, saldo: totalReceitas - totalDespesas };
+}
+
+// ─── Chat Messages ───────────────────────────────────────────────────────────
+
+export async function createChatMessage(data: InsertChatMessage) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(chatMessages).values(data);
+  return result[0];
+}
+
+export async function getChatMessages(channelId: string, limit = 50, before?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [eq(chatMessages.channelId, channelId)];
+  if (before) conditions.push(sql`${chatMessages.id} < ${before}`);
+  return db.select().from(chatMessages).where(and(...conditions)).orderBy(desc(chatMessages.id)).limit(limit);
+}
+
+// ─── Anamnesis Links ─────────────────────────────────────────────────────────
+
+export async function createAnamnesisLink(data: InsertAnamnesisLink) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(anamnesisLinks).values(data);
+  return result[0];
+}
+
+export async function getAnamnesisLinkByToken(token: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(anamnesisLinks).where(eq(anamnesisLinks.token, token)).limit(1);
+  return result[0];
+}
+
+export async function updateAnamnesisLink(id: number, data: Partial<InsertAnamnesisLink>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(anamnesisLinks).set(data).where(eq(anamnesisLinks.id, id));
+}
+
+// ─── Audio Transcriptions ────────────────────────────────────────────────────
+
+export async function createAudioTranscription(data: InsertAudioTranscription) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(audioTranscriptions).values(data);
+  return result[0];
+}
+
+export async function updateAudioTranscription(id: number, data: Partial<InsertAudioTranscription>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(audioTranscriptions).set(data).where(eq(audioTranscriptions.id, id));
+}
+
+export async function getAudioTranscriptionsByPatient(patientId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(audioTranscriptions).where(eq(audioTranscriptions.patientId, patientId)).orderBy(desc(audioTranscriptions.createdAt));
+}
+
+// ─── Audit Logs (LGPD) ──────────────────────────────────────────────────────
 
 export async function createAuditLog(data: InsertAuditLog) {
   const db = await getDb();
   if (!db) return;
-  await db.insert(auditLogs).values(data);
+  // Generate integrity hash (chain-based)
+  const payload = JSON.stringify({ ...data, timestamp: new Date().toISOString() });
+  const hash = crypto.createHash("sha256").update(payload).digest("hex");
+  await db.insert(auditLogs).values({ ...data, integrityHash: hash });
 }
 
 export async function getAuditLogsByPatient(patientId: number, limit = 50) {
@@ -414,18 +1014,20 @@ export async function updateDocumentSignature(id: number, data: Partial<InsertDo
 
 export async function getDashboardStats() {
   const db = await getDb();
-  if (!db) return { totalPatients: 0, todayAppointments: 0, pendingSignatures: 0, totalDoctors: 0 };
+  if (!db) return { totalPatients: 0, todayAppointments: 0, pendingSignatures: 0, totalDoctors: 0, pendingBudgets: 0, lowStockItems: 0 };
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
-  const [totalPatientsResult, todayAppointmentsResult, pendingSignaturesResult, totalDoctorsResult] = await Promise.all([
+  const [totalPatientsResult, todayAppointmentsResult, pendingSignaturesResult, totalDoctorsResult, pendingBudgetsResult, lowStockResult] = await Promise.all([
     db.select({ count: sql<number>`count(*)` }).from(patients).where(eq(patients.active, true)),
     db.select({ count: sql<number>`count(*)` }).from(appointments).where(and(gte(appointments.scheduledAt, today), lte(appointments.scheduledAt, tomorrow))),
     db.select({ count: sql<number>`count(*)` }).from(documentSignatures).where(eq(documentSignatures.status, "enviado")),
     db.select({ count: sql<number>`count(*)` }).from(users).where(and(eq(users.role, "medico"), eq(users.active, true))),
+    db.select({ count: sql<number>`count(*)` }).from(budgets).where(eq(budgets.status, "emitido")),
+    db.select({ count: sql<number>`count(*)` }).from(inventoryProducts).where(and(eq(inventoryProducts.active, true), sql`${inventoryProducts.currentStock} <= ${inventoryProducts.minimumStock}`)),
   ]);
 
   return {
@@ -433,6 +1035,8 @@ export async function getDashboardStats() {
     todayAppointments: todayAppointmentsResult[0]?.count ?? 0,
     pendingSignatures: pendingSignaturesResult[0]?.count ?? 0,
     totalDoctors: totalDoctorsResult[0]?.count ?? 0,
+    pendingBudgets: pendingBudgetsResult[0]?.count ?? 0,
+    lowStockItems: lowStockResult[0]?.count ?? 0,
   };
 }
 

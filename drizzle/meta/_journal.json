@@ -15,6 +15,13 @@
       "when": 1772714458056,
       "tag": "0001_handy_annihilus",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1772812597453,
+      "tag": "0002_previous_ezekiel",
+      "breakpoints": true
     }
   ]
 }

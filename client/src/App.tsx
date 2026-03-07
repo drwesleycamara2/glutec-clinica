@@ -21,6 +21,18 @@ import Usuarios from "./pages/Usuarios";
 import Auditoria from "./pages/Auditoria";
 import Perfil from "./pages/Perfil";
 
+// New Pages
+import Empresa from "./pages/Empresa";
+import Templates from "./pages/Templates";
+import Orcamentos from "./pages/Orcamentos";
+import Catalogo from "./pages/Catalogo";
+import Estoque from "./pages/Estoque";
+import CRM from "./pages/CRM";
+import Financeiro from "./pages/Financeiro";
+import Chat from "./pages/Chat";
+import Fotos from "./pages/Fotos";
+import Permissoes from "./pages/Permissoes";
+
 function AppRoutes() {
   return (
     <DashboardLayout>
@@ -38,6 +50,19 @@ function AppRoutes() {
         <Route path="/usuarios" component={Usuarios} />
         <Route path="/auditoria" component={Auditoria} />
         <Route path="/perfil" component={Perfil} />
+
+        {/* Novos Módulos */}
+        <Route path="/empresa" component={Empresa} />
+        <Route path="/templates" component={Templates} />
+        <Route path="/orcamentos" component={Orcamentos} />
+        <Route path="/catalogo" component={Catalogo} />
+        <Route path="/estoque" component={Estoque} />
+        <Route path="/crm" component={CRM} />
+        <Route path="/financeiro" component={Financeiro} />
+        <Route path="/chat" component={Chat} />
+        <Route path="/fotos" component={Fotos} />
+        <Route path="/permissoes" component={Permissoes} />
+
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

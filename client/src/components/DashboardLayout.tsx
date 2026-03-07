@@ -41,6 +41,18 @@ import {
   Users,
   UserCog,
   ShieldCheck,
+  Receipt,
+  Package,
+  CreditCard,
+  FileStack,
+  Building2,
+  Camera,
+  Archive,
+  HeartPulse,
+  MessageSquare,
+  AlertTriangle,
+  FileDown,
+  Gauge,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -72,6 +84,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { icon: Users, label: "Pacientes", path: "/pacientes" },
       { icon: ClipboardList, label: "Prontuários", path: "/prontuarios", roles: ["admin", "medico", "enfermeiro"] },
+      { icon: Camera, label: "Fotos", path: "/fotos", roles: ["admin", "medico", "enfermeiro"] },
     ],
   },
   {
@@ -83,8 +96,26 @@ const menuGroups: MenuGroup[] = [
     ],
   },
   {
+    label: "Financeiro",
+    items: [
+      { icon: Receipt, label: "Orçamentos", path: "/orcamentos", roles: ["admin", "medico", "recepcionista"] },
+      { icon: Gauge, label: "Financeiro", path: "/financeiro", roles: ["admin"] },
+    ],
+  },
+  {
+    label: "Operacional",
+    items: [
+      { icon: Archive, label: "Estoque", path: "/estoque", roles: ["admin", "enfermeiro"] },
+      { icon: HeartPulse, label: "CRM", path: "/crm", roles: ["admin", "medico", "recepcionista"] },
+      { icon: MessageSquare, label: "Chat", path: "/chat" },
+    ],
+  },
+  {
     label: "Administração",
     items: [
+      { icon: Building2, label: "Empresa", path: "/empresa", roles: ["admin"] },
+      { icon: FileStack, label: "Templates", path: "/templates", roles: ["admin", "medico"] },
+      { icon: Package, label: "Catálogo", path: "/catalogo", roles: ["admin"] },
       { icon: BarChart3, label: "Relatórios", path: "/relatorios", roles: ["admin"] },
       { icon: UserCog, label: "Usuários", path: "/usuarios", roles: ["admin"] },
       { icon: ShieldCheck, label: "Auditoria (LGPD)", path: "/auditoria", roles: ["admin"] },
@@ -136,9 +167,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <Stethoscope className="h-6 w-6 text-primary-foreground" />
               </div>
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight text-center">ClinicaFácil</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-center">Glutec</h1>
             <p className="text-sm text-muted-foreground text-center max-w-sm">
-              Sistema de Gestão para Clínicas Médicas. Acesse com suas credenciais para continuar.
+              Sistema de Gestão Clínica Glutée. Acesse com suas credenciais para continuar.
             </p>
           </div>
           <Button
@@ -236,8 +267,8 @@ function DashboardLayoutContent({
                     <Stethoscope className="h-4 w-4 text-sidebar-primary-foreground" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-sidebar-foreground truncate leading-none">ClinicaFácil</p>
-                    <p className="text-xs text-sidebar-foreground/50 truncate mt-0.5">Sistema Médico</p>
+                    <p className="text-sm font-semibold text-sidebar-foreground truncate leading-none">Glutec</p>
+                    <p className="text-xs text-sidebar-foreground/50 truncate mt-0.5">Clínica Glutée</p>
                   </div>
                 </div>
               )}
@@ -337,7 +368,7 @@ function DashboardLayoutContent({
               <SidebarTrigger className="h-9 w-9 rounded-lg" />
               <div className="flex items-center gap-2">
                 <Stethoscope className="h-4 w-4 text-primary" />
-                <span className="font-semibold text-sm">{activeItem?.label ?? "ClinicaFácil"}</span>
+                <span className="font-semibold text-sm">{activeItem?.label ?? "Glutec"}</span>
               </div>
             </div>
           </div>

@@ -222,15 +222,15 @@ export default function Dashboard() {
           </Card>
 
           {/* Conformidade LGPD */}
-          <Card className="border shadow-sm mt-4 bg-blue-50/50 border-blue-100">
+          <Card className="border shadow-sm mt-4 bg-primary/5 border-primary/20">
             <CardContent className="p-4">
               <div className="flex items-start gap-3">
-                <div className="h-8 w-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0 mt-0.5">
-                  <Activity className="h-4 w-4 text-blue-600" />
+                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <Activity className="h-4 w-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-blue-900">Conformidade Ativa</p>
-                  <p className="text-xs text-blue-700 mt-1">
+                  <p className="text-sm font-semibold text-foreground">Conformidade Ativa</p>
+                  <p className="text-xs text-muted-foreground mt-1">
                     Sistema em conformidade com CFM 1821/2007 e LGPD. Todos os acessos ao prontuário são registrados.
                   </p>
                 </div>
