@@ -12,7 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, FileText, Activity, Stethoscope, ClipboardList, Loader2, Calendar, User, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Plus, FileText, Activity, Stethoscope, ClipboardList, Loader2, Calendar, User, ShieldCheck, FileDown } from "lucide-react";
+import { AllergyAlert } from "@/components/AllergyAlert";
+import { ExportProntuarioButton } from "@/components/ExportProntuario";
 
 const defaultEntryForm = {
   chiefComplaint: "", historyOfPresentIllness: "", physicalExam: "",
@@ -56,12 +58,18 @@ export default function ProntuarioDetalhe() {
           </div>
           <p className="text-sm text-muted-foreground mt-1">Prontuário Eletrônico do Paciente</p>
         </div>
-        {canAddEntry && (
-          <Button onClick={() => setShowAddEntry(true)}>
-            <Plus className="h-4 w-4 mr-2" />Nova Entrada
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <ExportProntuarioButton patientId={patientId} patientName={patient.fullName} />
+          {canAddEntry && (
+            <Button onClick={() => setShowAddEntry(true)}>
+              <Plus className="h-4 w-4 mr-2" />Nova Entrada
+            </Button>
+          )}
+        </div>
       </div>
+
+      {/* Alerta de Alergias - Fase 16 */}
+      <AllergyAlert allergies={patient.allergies} patientName={patient.fullName} variant="banner" />
 
       <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-50 border border-blue-100">
         <ShieldCheck className="h-4 w-4 text-blue-600 shrink-0" />

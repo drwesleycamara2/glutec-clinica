@@ -7,9 +7,15 @@ import {
   Activity,
   CalendarDays,
   ClipboardList,
+  DollarSign,
   FileSignature,
+  MessageSquare,
+  Package,
   Stethoscope,
   Users,
+  AlertTriangle,
+  TrendingUp,
+  Receipt,
 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -31,6 +37,13 @@ const STATUS_COLORS: Record<string, string> = {
   falta: "bg-orange-100 text-orange-800",
 };
 
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return "Bom dia";
+  if (h < 18) return "Boa tarde";
+  return "Boa noite";
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -50,6 +63,7 @@ export default function Dashboard() {
   });
 
   const { data: doctors } = trpc.admin.getDoctors.useQuery();
+  const { data: lowStock } = trpc.inventory.getLowStock.useQuery();
 
   const getDoctorName = (doctorId: number) => {
     return doctors?.find((d) => d.id === doctorId)?.name ?? `Médico #${doctorId}`;
@@ -60,84 +74,115 @@ export default function Dashboard() {
       title: "Total de Pacientes",
       value: statsLoading ? "..." : stats?.totalPatients ?? 0,
       icon: Users,
-      color: "text-blue-600",
-      bg: "bg-blue-50",
+      color: "text-blue-500",
+      bg: "bg-blue-500/10",
       action: () => setLocation("/pacientes"),
     },
     {
       title: "Consultas Hoje",
       value: statsLoading ? "..." : stats?.todayAppointments ?? 0,
       icon: CalendarDays,
-      color: "text-green-600",
-      bg: "bg-green-50",
+      color: "text-green-500",
+      bg: "bg-green-500/10",
       action: () => setLocation("/agenda"),
     },
     {
       title: "Assinaturas Pendentes",
       value: statsLoading ? "..." : stats?.pendingSignatures ?? 0,
       icon: FileSignature,
-      color: "text-orange-600",
-      bg: "bg-orange-50",
+      color: "text-amber-500",
+      bg: "bg-amber-500/10",
       action: () => setLocation("/assinaturas"),
     },
     {
       title: "Médicos Ativos",
       value: statsLoading ? "..." : stats?.totalDoctors ?? 0,
       icon: Stethoscope,
-      color: "text-purple-600",
-      bg: "bg-purple-50",
+      color: "text-purple-500",
+      bg: "bg-purple-500/10",
       action: userRole === "admin" ? () => setLocation("/usuarios") : undefined,
+    },
+    {
+      title: "Orçamentos Pendentes",
+      value: statsLoading ? "..." : stats?.pendingBudgets ?? 0,
+      icon: DollarSign,
+      color: "text-primary",
+      bg: "bg-primary/10",
+      action: () => setLocation("/orcamentos"),
+    },
+    {
+      title: "Estoque Baixo",
+      value: statsLoading ? "..." : stats?.lowStockItems ?? 0,
+      icon: Package,
+      color: (stats?.lowStockItems ?? 0) > 0 ? "text-red-500" : "text-green-500",
+      bg: (stats?.lowStockItems ?? 0) > 0 ? "bg-red-500/10" : "bg-green-500/10",
+      action: () => setLocation("/estoque"),
     },
   ];
 
   return (
     <div className="space-y-6">
       {/* Saudação */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">
-            Bom dia, {user?.name?.split(" ")[0] ?? "Usuário"}
+            {getGreeting()}, {user?.name?.split(" ")[0] ?? "Usuário"}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             {today.toLocaleDateString("pt-BR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={() => setLocation("/pacientes")}>
             <Users className="h-4 w-4 mr-2" />
             Novo Paciente
           </Button>
-          <Button size="sm" onClick={() => setLocation("/agenda")}>
+          <Button size="sm" onClick={() => setLocation("/agenda")} className="bg-primary hover:bg-primary/90">
             <CalendarDays className="h-4 w-4 mr-2" />
             Nova Consulta
           </Button>
         </div>
       </div>
 
+      {/* Alerta de estoque baixo */}
+      {lowStock && lowStock.length > 0 && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl">
+          <AlertTriangle className="h-5 w-5 text-red-500 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-red-500">Alerta de Estoque</p>
+            <p className="text-xs text-muted-foreground">
+              {lowStock.length} produto(s) abaixo do estoque mínimo: {lowStock.slice(0, 3).map((p: any) => p.name).join(", ")}
+              {lowStock.length > 3 && ` e mais ${lowStock.length - 3}`}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setLocation("/estoque")} className="shrink-0">
+            Ver Estoque
+          </Button>
+        </div>
+      )}
+
       {/* Cards de estatísticas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {statCards.map((card) => (
           <Card
             key={card.title}
-            className={`border shadow-sm transition-shadow hover:shadow-md ${card.action ? "cursor-pointer" : ""}`}
+            className={`border shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${card.action ? "cursor-pointer" : ""}`}
             onClick={card.action}
           >
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground font-medium">{card.title}</p>
-                  <p className="text-3xl font-bold mt-1 text-foreground">{card.value}</p>
-                </div>
-                <div className={`h-12 w-12 rounded-xl ${card.bg} flex items-center justify-center`}>
-                  <card.icon className={`h-6 w-6 ${card.color}`} />
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`h-8 w-8 rounded-lg ${card.bg} flex items-center justify-center shrink-0`}>
+                  <card.icon className={`h-4 w-4 ${card.color}`} />
                 </div>
               </div>
+              <p className="text-2xl font-bold text-foreground">{card.value}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{card.title}</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Consultas de hoje */}
+      {/* Consultas de hoje + Ações rápidas */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <Card className="border shadow-sm">
@@ -182,6 +227,11 @@ export default function Dashboard() {
                       </Badge>
                     </div>
                   ))}
+                  {todayAppointments.length > 8 && (
+                    <p className="text-xs text-center text-muted-foreground pt-2">
+                      + {todayAppointments.length - 8} consultas adicionais
+                    </p>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -189,7 +239,7 @@ export default function Dashboard() {
         </div>
 
         {/* Ações rápidas */}
-        <div>
+        <div className="space-y-4">
           <Card className="border shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base font-semibold flex items-center gap-2">
@@ -198,31 +248,35 @@ export default function Dashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button variant="outline" className="w-full justify-start gap-3 h-11" onClick={() => setLocation("/pacientes")}>
-                <Users className="h-4 w-4 text-blue-600" />
+              <Button variant="outline" className="w-full justify-start gap-3 h-10 text-sm" onClick={() => setLocation("/pacientes")}>
+                <Users className="h-4 w-4 text-blue-500" />
                 Cadastrar Paciente
               </Button>
-              <Button variant="outline" className="w-full justify-start gap-3 h-11" onClick={() => setLocation("/agenda")}>
-                <CalendarDays className="h-4 w-4 text-green-600" />
+              <Button variant="outline" className="w-full justify-start gap-3 h-10 text-sm" onClick={() => setLocation("/agenda")}>
+                <CalendarDays className="h-4 w-4 text-green-500" />
                 Agendar Consulta
               </Button>
               {["admin", "medico"].includes(userRole) && (
                 <>
-                  <Button variant="outline" className="w-full justify-start gap-3 h-11" onClick={() => setLocation("/prescricoes")}>
-                    <ClipboardList className="h-4 w-4 text-purple-600" />
-                    Nova Prescrição
+                  <Button variant="outline" className="w-full justify-start gap-3 h-10 text-sm" onClick={() => setLocation("/orcamentos")}>
+                    <Receipt className="h-4 w-4 text-primary" />
+                    Novo Orçamento
                   </Button>
-                  <Button variant="outline" className="w-full justify-start gap-3 h-11" onClick={() => setLocation("/exames")}>
-                    <ClipboardList className="h-4 w-4 text-teal-600" />
-                    Pedido de Exames
+                  <Button variant="outline" className="w-full justify-start gap-3 h-10 text-sm" onClick={() => setLocation("/prescricoes")}>
+                    <ClipboardList className="h-4 w-4 text-purple-500" />
+                    Nova Prescrição
                   </Button>
                 </>
               )}
+              <Button variant="outline" className="w-full justify-start gap-3 h-10 text-sm" onClick={() => setLocation("/chat")}>
+                <MessageSquare className="h-4 w-4 text-teal-500" />
+                Chat da Equipe
+              </Button>
             </CardContent>
           </Card>
 
-          {/* Conformidade LGPD */}
-          <Card className="border shadow-sm mt-4 bg-primary/5 border-primary/20">
+          {/* Card de conformidade */}
+          <Card className="border shadow-sm bg-primary/5 border-primary/20">
             <CardContent className="p-4">
               <div className="flex items-start gap-3">
                 <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
@@ -231,7 +285,7 @@ export default function Dashboard() {
                 <div>
                   <p className="text-sm font-semibold text-foreground">Conformidade Ativa</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Sistema em conformidade com CFM 1821/2007 e LGPD. Todos os acessos ao prontuário são registrados.
+                    Sistema em conformidade com CFM 1821/2007, LGPD e CDC. Todos os acessos ao prontuário são registrados com hash de integridade.
                   </p>
                 </div>
               </div>
