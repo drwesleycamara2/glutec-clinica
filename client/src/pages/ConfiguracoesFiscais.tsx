@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Upload, CheckCircle2, AlertCircle, Shield, Smartphone, FileText, Settings } from "lucide-react";
+import { Upload, CheckCircle2, AlertCircle, Shield, Smartphone, FileText, Settings, AlertTriangle, Zap } from "lucide-react";
 
 interface CertificateConfig {
   id: number;
@@ -34,6 +34,7 @@ interface FiscalConfig {
 }
 
 export function ConfiguracoesFiscais() {
+  const [environment, setEnvironment] = useState<"homologacao" | "producao">("homologacao");
   const [certificates, setCertificates] = useState<CertificateConfig[]>([
     {
       id: 1,
@@ -144,6 +145,35 @@ export function ConfiguracoesFiscais() {
 
   return (
     <div className="space-y-6">
+      {/* Environment Alert */}
+      {environment === "homologacao" && (
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <h3 className="font-semibold text-yellow-900">Modo Homologação (Testes)</h3>
+              <p className="text-sm text-yellow-800 mt-1">
+                Você está em ambiente de testes. As NFS-es emitidas aqui NÃO têm valor fiscal e são apenas para validação.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {environment === "producao" && (
+        <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <h3 className="font-semibold text-red-900">🔴 Modo Produção (Real)</h3>
+              <p className="text-sm text-red-800 mt-1">
+                Você está em ambiente de produção. As NFS-es emitidas aqui têm valor fiscal. Verifique todos os dados antes de emitir.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Configurações Fiscais e Digitais</h1>
@@ -152,15 +182,82 @@ export function ConfiguracoesFiscais() {
         </p>
       </div>
 
+      {/* Environment Selector */}
+      <Card className="border-gray-300 bg-gradient-to-br from-blue-50 to-indigo-50">
+        <CardHeader>
+          <CardTitle className="text-lg text-gray-900 flex items-center gap-2">
+            <Zap className="h-5 w-5 text-blue-600" />
+            Ambiente de Emissão
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Homologação */}
+            <div
+              onClick={() => setEnvironment("homologacao")}
+              className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                environment === "homologacao"
+                  ? "border-yellow-400 bg-yellow-50"
+                  : "border-gray-200 bg-white hover:border-yellow-300"
+              }`}
+            >
+              <div className="flex items-start justify-between mb-2">
+                <h3 className="font-semibold text-gray-900">Homologação (Testes)</h3>
+                {environment === "homologacao" && (
+                  <Badge className="bg-yellow-100 text-yellow-700">Ativo</Badge>
+                )}
+              </div>
+              <p className="text-sm text-gray-600 mb-3">
+                Ambiente para testes. NFS-es emitidas aqui não têm valor fiscal.
+              </p>
+              <ul className="text-xs text-gray-600 space-y-1">
+                <li>✓ Sem valor fiscal</li>
+                <li>✓ Ideal para validação</li>
+                <li>✓ Sem limite de emissões</li>
+              </ul>
+            </div>
+
+            {/* Produção */}
+            <div
+              onClick={() => setEnvironment("producao")}
+              className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                environment === "producao"
+                  ? "border-green-400 bg-green-50"
+                  : "border-gray-200 bg-white hover:border-green-300"
+              }`}
+            >
+              <div className="flex items-start justify-between mb-2">
+                <h3 className="font-semibold text-gray-900">Produção (Real)</h3>
+                {environment === "producao" && (
+                  <Badge className="bg-green-100 text-green-700">Ativo</Badge>
+                )}
+              </div>
+              <p className="text-sm text-gray-600 mb-3">
+                Ambiente de produção. NFS-es emitidas aqui têm valor fiscal.
+              </p>
+              <ul className="text-xs text-gray-600 space-y-1">
+                <li>✓ Valor fiscal</li>
+                <li>✓ Emissão oficial</li>
+                <li>✓ Válido para SEFAZ</li>
+              </ul>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Fiscal Configuration Card */}
-      <Card className="border-gray-300">
+      <Card className={`border-2 ${
+        environment === "homologacao" ? "border-yellow-200 bg-yellow-50" : "border-green-200 bg-green-50"
+      }`}>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="text-lg text-gray-900 flex items-center gap-2">
               <Settings className="h-5 w-5 text-amber-600" />
               Configuração Fiscal
             </CardTitle>
-            <p className="text-sm text-gray-600 mt-1">Dados da clínica para emissão de NFS-e</p>
+            <p className="text-sm text-gray-600 mt-1">
+              Dados da clínica para emissão de NFS-e ({environment === "homologacao" ? "Homologação" : "Produção"})
+            </p>
           </div>
           <Button onClick={() => setShowConfigureFiscal(true)} className="btn-gold-gradient">
             Editar
@@ -305,7 +402,11 @@ export function ConfiguracoesFiscais() {
       </Card>
 
       {/* NFS-e Information Card */}
-      <Card className="border-gray-300 bg-gradient-to-br from-green-50 to-green-100">
+      <Card className={`border-2 ${
+        environment === "homologacao"
+          ? "border-yellow-200 bg-gradient-to-br from-yellow-50 to-yellow-100"
+          : "border-green-200 bg-gradient-to-br from-green-50 to-green-100"
+      }`}>
         <CardHeader>
           <CardTitle className="text-lg text-gray-900 flex items-center gap-2">
             <FileText className="h-5 w-5 text-green-600" />
@@ -313,12 +414,22 @@ export function ConfiguracoesFiscais() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="bg-white p-4 rounded-lg border border-green-200 space-y-3">
+          <div className="bg-white p-4 rounded-lg border border-gray-200 space-y-3">
             <div>
               <p className="text-sm font-semibold text-gray-900 mb-1">Padrão Nacional</p>
               <p className="text-sm text-gray-700">
                 Portal de Gestão do Governo Federal - <strong>nfse.gov.br</strong>
               </p>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900 mb-1">Ambiente Ativo</p>
+              <Badge className={`${
+                environment === "homologacao"
+                  ? "bg-yellow-100 text-yellow-700"
+                  : "bg-green-100 text-green-700"
+              }`}>
+                {environment === "homologacao" ? "Homologação (Testes)" : "Produção (Real)"}
+              </Badge>
             </div>
             <div>
               <p className="text-sm font-semibold text-gray-900 mb-1">Autenticação</p>
@@ -330,10 +441,20 @@ export function ConfiguracoesFiscais() {
                 {fiscalConfig.cnpj ? "Pronto para emitir" : "Aguardando configuração"}
               </Badge>
             </div>
-            <div className="bg-blue-50 p-3 rounded border border-blue-200 mt-3">
-              <p className="text-xs text-blue-900">
-                <strong>Nota:</strong> Após configurar o certificado A1 e os dados fiscais, você poderá emitir NFS-es
-                diretamente do módulo financeiro.
+            <div className={`p-3 rounded border mt-3 ${
+              environment === "homologacao"
+                ? "bg-yellow-50 border-yellow-200"
+                : "bg-red-50 border-red-200"
+            }`}>
+              <p className={`text-xs ${
+                environment === "homologacao"
+                  ? "text-yellow-900"
+                  : "text-red-900"
+              }`}>
+                <strong>Nota:</strong> Você está emitindo em <strong>{environment === "homologacao" ? "HOMOLOGAÇÃO" : "PRODUÇÃO"}</strong>. 
+                {environment === "homologacao" 
+                  ? " As NFS-es aqui são apenas para testes e não têm valor fiscal."
+                  : " As NFS-es aqui têm valor fiscal e são válidas para SEFAZ."}
               </p>
             </div>
           </div>
