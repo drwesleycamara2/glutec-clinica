@@ -51,6 +51,7 @@ import {
   HeartPulse,
   MessageSquare,
   Gauge,
+  FileText as DocumentIcon,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -88,6 +89,7 @@ const menuGroups: MenuGroup[] = [
   {
     label: "Documentos",
     items: [
+      { icon: FileText, label: "Documentos (Texto Livre)", path: "/documentos", roles: ["admin", "medico"] },
       { icon: FileText, label: "Prescrições", path: "/prescricoes", roles: ["admin", "medico"] },
       { icon: FlaskConical, label: "Exames", path: "/exames", roles: ["admin", "medico"] },
       { icon: FileSignature, label: "Assinaturas", path: "/assinaturas", roles: ["admin", "medico"] },

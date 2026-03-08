@@ -133,7 +133,7 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: "Inter", "Lato", sans-serif;
+    font-family: "Montserrat", sans-serif;
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-semibold tracking-tight;
@@ -163,6 +163,35 @@
   .flex {
     min-height: 0;
     min-width: 0;
+  }
+
+  /* Botão com degradê dourado metálico */
+  .btn-gold-gradient {
+    background: linear-gradient(135deg, #d4a853 0%, #c9943a 50%, #b8860b 100%);
+    color: white;
+    font-weight: 600;
+    font-family: "Montserrat", sans-serif;
+    border: none;
+    border-radius: 0.625rem;
+    padding: 0.5rem 1rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(212, 168, 83, 0.3);
+  }
+
+  .btn-gold-gradient:hover:not(:disabled) {
+    background: linear-gradient(135deg, #e0b86f 0%, #d4a853 50%, #c9943a 100%);
+    box-shadow: 0 4px 12px rgba(212, 168, 83, 0.5);
+    transform: translateY(-2px);
+  }
+
+  .btn-gold-gradient:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(212, 168, 83, 0.3);
+  }
+
+  .btn-gold-gradient:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   @media (min-width: 640px) {
