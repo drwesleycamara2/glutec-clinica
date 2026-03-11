@@ -74,32 +74,32 @@ export default function Dashboard() {
       title: "Total de Pacientes",
       value: statsLoading ? "..." : stats?.totalPatients ?? 0,
       icon: Users,
-      color: "text-blue-500",
-      bg: "bg-blue-500/10",
+      color: "text-primary",
+      bg: "bg-primary/10",
       action: () => setLocation("/pacientes"),
     },
     {
       title: "Consultas Hoje",
       value: statsLoading ? "..." : stats?.todayAppointments ?? 0,
       icon: CalendarDays,
-      color: "text-green-500",
-      bg: "bg-green-500/10",
+      color: "text-primary",
+      bg: "bg-primary/10",
       action: () => setLocation("/agenda"),
     },
     {
       title: "Assinaturas Pendentes",
       value: statsLoading ? "..." : stats?.pendingSignatures ?? 0,
       icon: FileSignature,
-      color: "text-amber-500",
-      bg: "bg-amber-500/10",
+      color: "text-primary",
+      bg: "bg-primary/10",
       action: () => setLocation("/assinaturas"),
     },
     {
       title: "Médicos Ativos",
       value: statsLoading ? "..." : stats?.totalDoctors ?? 0,
       icon: Stethoscope,
-      color: "text-purple-500",
-      bg: "bg-purple-500/10",
+      color: "text-primary",
+      bg: "bg-primary/10",
       action: userRole === "admin" ? () => setLocation("/usuarios") : undefined,
     },
     {
@@ -114,8 +114,8 @@ export default function Dashboard() {
       title: "Estoque Baixo",
       value: statsLoading ? "..." : stats?.lowStockItems ?? 0,
       icon: Package,
-      color: (stats?.lowStockItems ?? 0) > 0 ? "text-red-500" : "text-green-500",
-      bg: (stats?.lowStockItems ?? 0) > 0 ? "bg-red-500/10" : "bg-green-500/10",
+      color: (stats?.lowStockItems ?? 0) > 0 ? "text-red-500" : "text-primary",
+      bg: (stats?.lowStockItems ?? 0) > 0 ? "bg-red-500/10" : "bg-primary/10",
       action: () => setLocation("/estoque"),
     },
   ];
@@ -137,7 +137,7 @@ export default function Dashboard() {
             <Users className="h-4 w-4 mr-2" />
             Novo Paciente
           </Button>
-          <Button size="sm" onClick={() => setLocation("/agenda")} className="bg-primary hover:bg-primary/90">
+          <Button size="sm" variant="premium" onClick={() => setLocation("/agenda")}>
             <CalendarDays className="h-4 w-4 mr-2" />
             Nova Consulta
           </Button>

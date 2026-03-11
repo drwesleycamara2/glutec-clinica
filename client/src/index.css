@@ -53,31 +53,31 @@
   --card-foreground: oklch(0.16 0.01 75);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.16 0.01 75);
-  /* Primary: Dourado metálico */
-  --primary: oklch(0.58 0.12 75);
-  --primary-foreground: oklch(0.99 0 0);
-  /* Secondary: Cinza elegante */
-  --secondary: oklch(0.94 0.005 75);
-  --secondary-foreground: oklch(0.30 0.01 75);
-  --muted: oklch(0.95 0.003 75);
-  --muted-foreground: oklch(0.50 0.01 75);
-  /* Accent: Dourado suave */
-  --accent: oklch(0.92 0.04 75);
-  --accent-foreground: oklch(0.30 0.08 75);
-  --destructive: oklch(0.55 0.22 25);
-  --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.90 0.008 75);
-  --input: oklch(0.90 0.008 75);
-  --ring: oklch(0.58 0.12 75);
+  /* Primary: Dourado Metálico Premium (Baseado na imagem) */
+  --primary: #d4a853;
+  --primary-foreground: #ffffff;
+  /* Secondary: Cinza Sofisticado */
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  /* Accent: Dourado Suave */
+  --accent: #fafaf9;
+  --accent-foreground: #d4a853;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #e4e4e7;
+  --input: #e4e4e7;
+  --ring: #d4a853;
   /* Charts: Tons de dourado e cinza */
-  --chart-1: oklch(0.58 0.12 75);
-  --chart-2: oklch(0.50 0.08 60);
-  --chart-3: oklch(0.65 0.10 85);
-  --chart-4: oklch(0.45 0.06 50);
-  --chart-5: oklch(0.70 0.08 90);
+  --chart-1: #d4a853;
+  --chart-2: #a1a1aa;
+  --chart-3: #eab308;
+  --chart-4: #52525b;
+  --chart-5: #fde047;
   /* Dourado para destaques */
-  --gold: oklch(0.72 0.14 75);
-  --gold-foreground: oklch(0.20 0.05 75);
+  --gold: #d4a853;
+  --gold-foreground: #ffffff;
   /* Sidebar escura com toque dourado */
   --sidebar: oklch(0.16 0.01 75);
   --sidebar-foreground: oklch(0.92 0.005 75);
@@ -165,28 +165,62 @@
     min-width: 0;
   }
 
-  /* Botão com degradê dourado metálico */
-  .btn-gold-gradient {
-    background: linear-gradient(135deg, #d4a853 0%, #c9943a 50%, #b8860b 100%);
-    color: white;
-    font-weight: 600;
+  /* Botão Glossy Gold (Dourado Total com Brilho) */
+  .btn-glossy-gold {
+    background: linear-gradient(180deg, #f9e29b 0%, #d4a853 45%, #b8860b 55%, #f9e29b 100%);
+    color: #000000;
+    font-weight: 700;
     font-family: "Montserrat", sans-serif;
-    border: none;
-    border-radius: 0.625rem;
-    padding: 0.5rem 1rem;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 8px rgba(212, 168, 83, 0.3);
+    border: 2px solid #f9e29b;
+    border-radius: 9999px;
+    box-shadow: 0 4px 15px rgba(184, 134, 11, 0.4), inset 0 1px 2px rgba(255, 255, 255, 0.8);
+    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
   }
 
-  .btn-gold-gradient:hover:not(:disabled) {
-    background: linear-gradient(135deg, #e0b86f 0%, #d4a853 50%, #c9943a 100%);
-    box-shadow: 0 4px 12px rgba(212, 168, 83, 0.5);
-    transform: translateY(-2px);
+  .btn-glossy-gold::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 50%;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0) 100%);
+    pointer-events: none;
   }
 
-  .btn-gold-gradient:active:not(:disabled) {
-    transform: translateY(0);
-    box-shadow: 0 2px 4px rgba(212, 168, 83, 0.3);
+  .btn-glossy-gold:hover:not(:disabled) {
+    transform: scale(1.02) translateY(-1px);
+    box-shadow: 0 6px 20px rgba(184, 134, 11, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.9);
+    filter: brightness(1.1);
+  }
+
+  /* Botão Glossy Black (Preto com Borda Dourada) */
+  .btn-glossy-black {
+    background: linear-gradient(180deg, #333333 0%, #000000 50%, #000000 100%);
+    color: #d4a853;
+    font-weight: 700;
+    font-family: "Montserrat", sans-serif;
+    border: 2px solid #d4a853;
+    border-radius: 9999px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-glossy-black::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 50%;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 100%);
+    pointer-events: none;
+  }
+
+  .btn-glossy-black:hover:not(:disabled) {
+    transform: scale(1.02) translateY(-1px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+    border-color: #f9e29b;
+    color: #f9e29b;
   }
 
   .btn-gold-gradient:disabled {

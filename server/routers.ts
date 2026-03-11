@@ -306,15 +306,70 @@ const medicalRecordsRouter = router({
     }),
 
   update: doctorProcedure
-    .input(z.object({ id: z.number(), data: z.record(z.string(), z.any()) }))
+    .input(z.object({ 
+      id: z.number(), 
+      data: z.record(z.string(), z.any()),
+      justification: z.string().optional()
+    }))
     .mutation(async ({ input, ctx }) => {
       const record = await db.getMedicalRecordById(input.id);
       if (!record) throw new TRPCError({ code: "NOT_FOUND" });
-      if (record.doctorId !== ctx.user.id && ctx.user.role !== "admin") {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Somente o médico responsável pode editar este prontuário." });
+      
+      // Bloqueio Jurídico: Se estiver bloqueado, exige justificativa e muda status para 'alterado'
+      if (record.isLocked) {
+        if (!input.justification) {
+          throw new TRPCError({ 
+            code: "BAD_REQUEST", 
+            message: "Este prontuário está encerrado. Uma justificativa é obrigatória para qualquer alteração." 
+          });
+        }
+        
+        // Auditoria Completa: Registrar valor anterior e novo valor
+        await db.createAuditLog({
+          userId: ctx.user.id,
+          action: "CORRECTION_AFTER_LOCK",
+          resourceType: "medical_record",
+          resourceId: input.id,
+          patientId: record.patientId,
+          details: { justification: input.justification },
+          dataBefore: record,
+          dataAfter: { ...record, ...input.data },
+          ipAddress: (ctx.req as any)?.ip,
+          userAgent: (ctx.req as any)?.headers?.["user-agent"]
+        });
+
+        // Atualiza com status 'alterado' e salva a justificativa no registro
+        await db.updateMedicalRecord(input.id, { 
+          ...input.data, 
+          status: "alterado",
+          lastChangeJustification: input.justification 
+        });
+      } else {
+        // Fluxo normal para rascunho/salvo
+        if (record.doctorId !== ctx.user.id && ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Somente o médico responsável pode editar este prontuário." });
+        }
+        await db.updateMedicalRecord(input.id, input.data);
+        await audit(ctx.user.id, "UPDATE_MEDICAL_RECORD", "medical_record", input.id, record.patientId, {}, ctx.req as any);
       }
-      await db.updateMedicalRecord(input.id, input.data);
-      await audit(ctx.user.id, "UPDATE_MEDICAL_RECORD", "medical_record", input.id, record.patientId, {}, ctx.req as any);
+      
+      return { success: true };
+    }),
+
+  lock: doctorProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const record = await db.getMedicalRecordById(input.id);
+      if (!record) throw new TRPCError({ code: "NOT_FOUND" });
+      
+      await db.updateMedicalRecord(input.id, { 
+        isLocked: true, 
+        lockedAt: new Date(), 
+        lockedByUserId: ctx.user.id,
+        status: "encerrado"
+      });
+      
+      await audit(ctx.user.id, "LOCK_MEDICAL_RECORD", "medical_record", input.id, record.patientId, {}, ctx.req as any);
       return { success: true };
     }),
 
@@ -329,6 +384,51 @@ const medicalRecordsRouter = router({
   getChaperones: medicalProcedure
     .input(z.object({ medicalRecordId: z.number() }))
     .query(async ({ input }) => db.getChaperonesByRecord(input.medicalRecordId)),
+
+  exportReport: medicalProcedure
+    .input(z.object({
+      patientId: z.number(),
+      include: z.object({
+        cadastro: z.boolean().default(true),
+        anamnese: z.boolean().default(true),
+        evolucao: z.boolean().default(true),
+        prescricoes: z.boolean().default(true),
+        exames: z.boolean().default(true),
+        fotos: z.boolean().default(true),
+        documentos: z.boolean().default(true),
+        auditoria: z.boolean().default(false),
+      })
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const patient = await db.getPatientById(input.patientId);
+      if (!patient) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const reportData: any = { patient };
+
+      if (input.include.anamnese || input.include.evolucao) {
+        reportData.medicalRecords = await db.getMedicalRecordsByPatient(input.patientId);
+      }
+      if (input.include.prescricoes) {
+        reportData.prescriptions = await db.getPrescriptionsByPatient(input.patientId);
+      }
+      if (input.include.exames) {
+        reportData.examRequests = await db.getExamRequestsByPatient(input.patientId);
+      }
+      if (input.include.fotos) {
+        reportData.photos = await db.getPatientPhotos(input.patientId);
+      }
+      if (input.include.documentos) {
+        reportData.documents = await db.getPatientDocuments(input.patientId);
+      }
+      if (input.include.auditoria) {
+        reportData.auditLogs = await db.getAuditLogsByPatient(input.patientId);
+      }
+
+      await audit(ctx.user.id, "EXPORT_PATIENT_REPORT", "patient", input.patientId, input.patientId, { include: input.include }, ctx.req as any);
+      
+      // Retorna os dados para o frontend gerar o PDF (usando jspdf/react-pdf já instalados)
+      return reportData;
+    }),
 });
 
 // ─── Patient Photos Router ───────────────────────────────────────────────────
@@ -440,12 +540,27 @@ const prescriptionsRouter = router({
         frequency: z.string(),
         duration: z.string().optional(),
         instructions: z.string().optional(),
-      })),
+      })).optional(),
+      content: z.string().optional(),
       observations: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       await db.createPrescription({ ...input, doctorId: ctx.user.id });
       await audit(ctx.user.id, "CREATE_PRESCRIPTION", "prescription", undefined, input.patientId, {}, ctx.req as any);
+      return { success: true };
+    }),
+
+  listTemplates: medicalProcedure.query(async () => db.listPrescriptionTemplates()),
+
+  createTemplate: doctorProcedure
+    .input(z.object({
+      name: z.string(),
+      content: z.string(),
+      type: z.enum(["simples", "especial_azul", "especial_amarelo", "antimicrobiano"]),
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await db.createPrescriptionTemplate({ ...input, createdBy: ctx.user.id });
       return { success: true };
     }),
 
@@ -475,13 +590,28 @@ const examRequestsRouter = router({
         code: z.string().optional(),
         instructions: z.string().optional(),
         urgency: z.enum(["rotina", "urgente", "emergencia"]).optional(),
-      })),
+      })).optional(),
+      content: z.string().optional(),
       clinicalIndication: z.string().optional(),
       observations: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       await db.createExamRequest({ ...input, doctorId: ctx.user.id });
       await audit(ctx.user.id, "CREATE_EXAM_REQUEST", "exam_request", undefined, input.patientId, {}, ctx.req as any);
+      return { success: true };
+    }),
+
+  listTemplates: medicalProcedure.query(async () => db.listExamRequestTemplates()),
+
+  createTemplate: doctorProcedure
+    .input(z.object({
+      name: z.string(),
+      content: z.string(),
+      specialty: z.string().optional(),
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await db.createExamRequestTemplate({ ...input, createdBy: ctx.user.id });
       return { success: true };
     }),
 
@@ -1009,29 +1139,45 @@ const D4SIGN_API = process.env.D4SIGN_BASE_URL || "https://secure.d4sign.com.br/
 const signaturesRouter = router({
   sendForSignature: doctorProcedure
     .input(z.object({
-      resourceType: z.enum(["prescription", "exam_request", "medical_record", "budget"]),
+      resourceType: z.enum(["prescription", "exam_request", "medical_record", "budget", "nfe"]),
       resourceId: z.number(),
       documentBase64: z.string(),
       documentName: z.string(),
       signerEmail: z.string(),
       signerName: z.string(),
+      certificateType: z.enum(["eletronica", "icp_brasil_a1", "icp_brasil_a3"]).default("eletronica"),
     }))
     .mutation(async ({ input, ctx }) => {
       const tokenAPI = process.env.D4SIGN_TOKEN_API;
       const cryptKey = process.env.D4SIGN_CRYPT_KEY;
-      const safeKey = process.env.D4SIGN_SAFE_KEY;
+      
+      // Lógica de Seleção de Cofre (Múltiplos Certificados)
+      let safeKey = process.env.D4SIGN_SAFE_KEY; // Default
+      
+      const clinic = await db.getClinicSettings();
+      const doctor = await db.getUserById(ctx.user.id);
 
-      if (!tokenAPI || !cryptKey) {
+      if (input.resourceType === "nfe") {
+        safeKey = clinic?.d4signSafeKeyNfe || safeKey;
+      } else if (doctor?.d4signSafeKey) {
+        // Se o médico tiver um cofre individual configurado
+        safeKey = doctor.d4signSafeKey;
+      } else if (clinic?.d4signSafeKeyClinical) {
+        // Fallback para o cofre clínico da empresa
+        safeKey = clinic.d4signSafeKeyClinical;
+      }
+
+      if (!tokenAPI || !cryptKey || !safeKey) {
         const sig = await db.createDocumentSignature({
-          resourceType: input.resourceType,
+          resourceType: input.resourceType === "nfe" ? "budget" : input.resourceType as any, // fallback enum
           resourceId: input.resourceId,
           doctorId: ctx.user.id,
           d4signDocumentKey: `simulated-${nanoid(12)}`,
           status: "enviado",
-          signatureType: "eletronica",
+          signatureType: input.certificateType,
         });
-        await audit(ctx.user.id, "SEND_FOR_SIGNATURE_SIMULATED", input.resourceType, input.resourceId, undefined, {}, ctx.req as any);
-        return { success: true, simulated: true, message: "Documento enviado para assinatura (modo simulado - configure as credenciais D4Sign)." };
+        await audit(ctx.user.id, "SEND_FOR_SIGNATURE_SIMULATED", input.resourceType, input.resourceId, undefined, { safeKey }, ctx.req as any);
+        return { success: true, simulated: true, message: "Modo simulado: Cofre não configurado ou credenciais ausentes." };
       }
 
       try {
@@ -1042,9 +1188,23 @@ const signaturesRouter = router({
         );
         const documentKey = uploadRes.data?.uuid;
 
+        // Configuração do signatário com base no tipo de certificado
+        const isICP = input.certificateType.startsWith("icp_brasil");
         await axios.post(
           `${D4SIGN_API}/documents/${documentKey}/createlist`,
-          { signers: [{ email: input.signerEmail, act: "1", foreign: "0", certificadoicpbr: "0", assinatura_presencial: "0", docauth: "0", docauthandselfie: "0", embed_methodauth: "email", embed_smsnumber: "" }] },
+          { 
+            signers: [{ 
+              email: input.signerEmail, 
+              act: "1", 
+              foreign: "0", 
+              certificadoicpbr: isICP ? "1" : "0", 
+              assinatura_presencial: "0", 
+              docauth: "0", 
+              docauthandselfie: "0", 
+              embed_methodauth: "email", 
+              embed_smsnumber: "" 
+            }] 
+          },
           { params: { tokenAPI, cryptKey } }
         );
 
@@ -1055,16 +1215,16 @@ const signaturesRouter = router({
         );
 
         await db.createDocumentSignature({
-          resourceType: input.resourceType,
+          resourceType: input.resourceType === "nfe" ? "budget" : input.resourceType as any,
           resourceId: input.resourceId,
           doctorId: ctx.user.id,
           d4signDocumentKey: documentKey,
           d4signSafeKey: safeKey,
           status: "enviado",
-          signatureType: "eletronica",
+          signatureType: input.certificateType,
         });
 
-        await audit(ctx.user.id, "SEND_FOR_SIGNATURE", input.resourceType, input.resourceId, undefined, { documentKey }, ctx.req as any);
+        await audit(ctx.user.id, "SEND_FOR_SIGNATURE", input.resourceType, input.resourceId, undefined, { documentKey, safeKey }, ctx.req as any);
         return { success: true, documentKey };
       } catch (err: any) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Erro ao enviar para D4Sign: ${err.message}` });

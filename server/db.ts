@@ -30,7 +30,11 @@ import {
   InsertAudioTranscription,
   InsertPermission,
   InsertUserSession,
+  InsertPrescriptionTemplate,
+  InsertExamRequestTemplate,
   auditLogs,
+  prescriptionTemplates,
+  examRequestTemplates,
   documentSignatures,
   examRequests,
   medicalRecords,
@@ -667,7 +671,47 @@ export async function updateExamRequest(id: number, data: Partial<InsertExamRequ
   await db.update(examRequests).set(data).where(eq(examRequests.id, id));
 }
 
-// ─── Budget Procedure Catalog ────────────────────────────────────────────────
+// ─── Prescription & Exam Templates ───────────────────────────────────────────
+
+export async function listPrescriptionTemplates() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(prescriptionTemplates).where(eq(prescriptionTemplates.active, true)).orderBy(prescriptionTemplates.name);
+}
+
+export async function createPrescriptionTemplate(data: InsertPrescriptionTemplate) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(prescriptionTemplates).values(data);
+  return result[0];
+}
+
+export async function updatePrescriptionTemplate(id: number, data: Partial<InsertPrescriptionTemplate>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(prescriptionTemplates).set(data).where(eq(prescriptionTemplates.id, id));
+}
+
+export async function listExamRequestTemplates() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(examRequestTemplates).where(eq(examRequestTemplates.active, true)).orderBy(examRequestTemplates.name);
+}
+
+export async function createExamRequestTemplate(data: InsertExamRequestTemplate) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(examRequestTemplates).values(data);
+  return result[0];
+}
+
+export async function updateExamRequestTemplate(id: number, data: Partial<InsertExamRequestTemplate>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(examRequestTemplates).set(data).where(eq(examRequestTemplates.id, id));
+}
+
+// ─── Inventory / Estoque ─────────────────────────────────────────────────────
 
 export async function createBudgetProcedure(data: InsertBudgetProcedureCatalog) {
   const db = await getDb();
@@ -949,8 +993,18 @@ export async function getAudioTranscriptionsByPatient(patientId: number) {
 export async function createAuditLog(data: InsertAuditLog) {
   const db = await getDb();
   if (!db) return;
+  
+  // Se houver dataBefore e dataAfter, garantir que sejam strings JSON se necessário
+  // (Drizzle lida com isso se o tipo for json, mas vamos garantir a consistência)
+  
   // Generate integrity hash (chain-based)
-  const payload = JSON.stringify({ ...data, timestamp: new Date().toISOString() });
+  const payload = JSON.stringify({ 
+    userId: data.userId,
+    action: data.action,
+    resourceType: data.resourceType,
+    resourceId: data.resourceId,
+    timestamp: new Date().toISOString() 
+  });
   const hash = crypto.createHash("sha256").update(payload).digest("hex");
   await db.insert(auditLogs).values({ ...data, integrityHash: hash });
 }

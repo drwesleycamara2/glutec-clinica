@@ -134,7 +134,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const ROLE_COLORS: Record<string, string> = {
-  admin: "bg-amber-500/20 text-amber-300",
+  admin: "bg-primary/20 text-primary",
   medico: "bg-blue-500/20 text-blue-300",
   recepcionista: "bg-green-500/20 text-green-300",
   enfermeiro: "bg-teal-500/20 text-teal-300",
@@ -151,18 +151,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
           <div className="flex flex-col items-center gap-4">
-            <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center shadow-lg">
-              <Stethoscope className="h-7 w-7 text-white" />
+            <div className="h-24 w-24 rounded-2xl bg-white p-2 flex items-center justify-center shadow-[0_4px_20px_rgba(212,168,83,0.4)] border border-primary/20">
+              <img src="/assets/logo.jpg" alt="Clínica Glutée" className="h-full w-full object-contain" />
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight text-center">Glutec</h1>
-            <p className="text-sm text-muted-foreground text-center max-w-sm">
+            <h1 className="text-3xl font-bold tracking-tight text-center text-primary uppercase tracking-widest">Glutec</h1>
+            <p className="text-sm text-muted-foreground text-center max-w-sm font-medium">
               Sistema de Gestão Clínica Glutée
             </p>
           </div>
           <Button
             onClick={() => { window.location.href = getLoginUrl(); }}
             size="lg"
-            className="w-full shadow-lg hover:shadow-xl transition-all bg-amber-600 hover:bg-amber-700"
+            variant="premium"
+            className="w-full py-7 text-lg uppercase tracking-widest"
           >
             Entrar no Sistema
           </Button>
@@ -215,11 +216,11 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             </button>
             {!isCollapsed && (
               <div className="flex items-center gap-2 min-w-0 overflow-hidden">
-                <div className="h-7 w-7 rounded-md bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center shrink-0">
-                  <Stethoscope className="h-3.5 w-3.5 text-white" />
+                <div className="h-8 w-8 rounded-md bg-white p-0.5 flex items-center justify-center shrink-0 shadow-sm border border-primary/10">
+                  <img src="/assets/logo.jpg" alt="Logo" className="h-full w-full object-contain" />
                 </div>
                 <div className="min-w-0 overflow-hidden">
-                  <p className="text-sm font-bold text-sidebar-foreground truncate leading-tight">Glutec</p>
+                  <p className="text-sm font-bold text-sidebar-foreground truncate leading-tight uppercase tracking-wider">Glutec</p>
                   <p className="text-[10px] text-sidebar-foreground/40 truncate leading-tight">Clínica Glutée</p>
                 </div>
               </div>
@@ -247,11 +248,11 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                         tooltip={item.label}
                         className={`h-8 transition-all rounded-md text-[13px] font-normal overflow-hidden ${
                           isActive
-                            ? "bg-amber-600/20 text-amber-400 hover:bg-amber-600/30 font-medium"
+                            ? "bg-primary/15 text-primary hover:bg-primary/25 font-medium"
                             : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
                         }`}
                       >
-                        <item.icon className={`h-4 w-4 shrink-0 ${isActive ? "text-amber-400" : ""}`} />
+                        <item.icon className={`h-4 w-4 shrink-0 ${isActive ? "text-primary" : ""}`} />
                         <span className="truncate">{item.label}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -268,7 +269,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-sidebar-accent transition-colors w-full text-left focus:outline-none overflow-hidden">
                 <Avatar className="h-7 w-7 shrink-0">
-                  <AvatarFallback className="text-[10px] font-bold bg-gradient-to-br from-amber-500 to-amber-700 text-white">
+                  <AvatarFallback className="text-[10px] font-bold bg-primary text-white">
                     {user?.name?.charAt(0).toUpperCase() ?? "U"}
                   </AvatarFallback>
                 </Avatar>
@@ -309,12 +310,12 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
         <div className="flex border-b h-14 items-center justify-between bg-background/95 px-4 md:px-6 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
           <div className="flex items-center gap-3">
             {isMobile && <SidebarTrigger className="h-8 w-8 rounded-md" />}
-            <div className="flex items-center gap-2 text-sm">
-              <Activity className="h-4 w-4 text-amber-500" />
+              <div className="flex items-center gap-2 text-sm">
+              <Activity className="h-4 w-4 text-primary" />
               <span className="font-medium text-foreground">{activeItem?.label ?? "Dashboard"}</span>
             </div>
           </div>
-          <Badge variant="outline" className="text-[10px] font-normal border-amber-500/30 text-amber-400">
+          <Badge variant="outline" className="text-[10px] font-normal border-primary/30 text-primary">
             {ROLE_LABELS[userRole] ?? "Usuário"}
           </Badge>
         </div>

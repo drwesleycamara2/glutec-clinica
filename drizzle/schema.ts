@@ -23,6 +23,7 @@ export const users = mysqlTable("users", {
   role: mysqlEnum("role", ["admin", "medico", "recepcionista", "enfermeiro", "user"]).default("user").notNull(),
   specialty: varchar("specialty", { length: 128 }),
   crm: varchar("crm", { length: 32 }),
+  d4signSafeKey: varchar("d4signSafeKey", { length: 256 }), // Cofre individual do médico
   phone: varchar("phone", { length: 20 }),
   active: boolean("active").default(true).notNull(),
   // Auth local
@@ -97,6 +98,8 @@ export const clinicSettings = mysqlTable("clinic_settings", {
   d4signCryptKey: varchar("d4signCryptKey", { length: 256 }),
   d4signSafeKey: varchar("d4signSafeKey", { length: 256 }),
   nfeConfig: json("nfeConfig"), // NF-e config data
+  d4signSafeKeyNfe: varchar("d4signSafeKeyNfe", { length: 256 }), // Cofre para Notas Fiscais (CNPJ)
+  d4signSafeKeyClinical: varchar("d4signSafeKeyClinical", { length: 256 }), // Cofre para Prontuários (Profissional)
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -224,9 +227,14 @@ export const medicalRecords = mysqlTable("medical_records", {
   icdCode: varchar("icdCode", { length: 16 }),
   clinicalEvolution: text("clinicalEvolution"),
   treatmentPlan: text("treatmentPlan"),
-  // Controle
+  // Controle e Segurança Jurídica
+  status: mysqlEnum("status", ["rascunho", "salvo", "encerrado", "assinado", "alterado"]).default("rascunho").notNull(),
+  isLocked: boolean("isLocked").default(false).notNull(),
+  lockedAt: timestamp("lockedAt"),
+  lockedByUserId: int("lockedByUserId"),
   signedAt: timestamp("signedAt"),
   signedByDoctorId: int("signedByDoctorId"),
+  lastChangeJustification: text("lastChangeJustification"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -355,7 +363,8 @@ export const prescriptions = mysqlTable("prescriptions", {
   medicalRecordId: int("medicalRecordId"),
   appointmentId: int("appointmentId"),
   type: mysqlEnum("type", ["simples", "especial_azul", "especial_amarelo", "antimicrobiano"]).default("simples").notNull(),
-  items: json("items").notNull(),
+  items: json("items"), // Mantido para compatibilidade, mas opcional agora
+  content: text("content"), // Novo campo de texto livre
   observations: text("observations"),
   pdfUrl: text("pdfUrl"),
   pdfKey: varchar("pdfKey", { length: 256 }),
@@ -379,7 +388,8 @@ export const examRequests = mysqlTable("exam_requests", {
   medicalRecordId: int("medicalRecordId"),
   appointmentId: int("appointmentId"),
   specialty: varchar("specialty", { length: 128 }),
-  exams: json("exams").notNull(),
+  exams: json("exams"), // Mantido para compatibilidade, mas opcional agora
+  content: text("content"), // Novo campo de texto livre
   clinicalIndication: text("clinicalIndication"),
   observations: text("observations"),
   pdfUrl: text("pdfUrl"),
@@ -394,6 +404,38 @@ export const examRequests = mysqlTable("exam_requests", {
 
 export type ExamRequest = typeof examRequests.$inferSelect;
 export type InsertExamRequest = typeof examRequests.$inferInsert;
+
+// ─── Prescription & Exam Templates (Ajuste Visual/Funcional) ──────────────────
+
+export const prescriptionTemplates = mysqlTable("prescription_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 256 }).notNull(),
+  description: text("description"),
+  content: text("content").notNull(), // Texto livre com o modelo
+  type: mysqlEnum("type", ["simples", "especial_azul", "especial_amarelo", "antimicrobiano"]).default("simples").notNull(),
+  active: boolean("active").default(true).notNull(),
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PrescriptionTemplate = typeof prescriptionTemplates.$inferSelect;
+export type InsertPrescriptionTemplate = typeof prescriptionTemplates.$inferInsert;
+
+export const examRequestTemplates = mysqlTable("exam_request_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 256 }).notNull(),
+  description: text("description"),
+  content: text("content").notNull(), // Texto livre com a lista de exames/instruções
+  specialty: varchar("specialty", { length: 128 }),
+  active: boolean("active").default(true).notNull(),
+  createdBy: int("createdBy").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ExamRequestTemplate = typeof examRequestTemplates.$inferSelect;
+export type InsertExamRequestTemplate = typeof examRequestTemplates.$inferInsert;
 
 // ─── Budget Procedure Catalog (Motor de Orçamentos - Fase 12) ───────────────
 

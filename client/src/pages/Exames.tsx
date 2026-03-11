@@ -209,65 +209,42 @@ export default function Exames() {
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <Label>Exames Solicitados</Label>
+                <Label>Exames Solicitados *</Label>
                 <div className="flex gap-2">
-                  <Button type="button" size="sm" variant="outline" onClick={() => setShowTemplates(!showTemplates)}>Templates</Button>
-                  <Button type="button" size="sm" variant="outline" onClick={addExam}><Plus className="h-3 w-3 mr-1" />Adicionar</Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => setShowTemplates(!showTemplates)}>Modelos</Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => {
+                    if (!form.content) return toast.error("Digite os exames para salvar como modelo.");
+                    const name = prompt("Nome do modelo:");
+                    if (name) saveTemplateMutation.mutate({ name, content: form.content, specialty: form.specialty });
+                  }}>Salvar como Modelo</Button>
                 </div>
               </div>
 
               {showTemplates && (
                 <div className="mb-3 p-3 rounded-lg border bg-muted/20">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">Clique para adicionar:</p>
-                  <div className="space-y-2">
-                    {Object.entries(EXAM_TEMPLATES).map(([group, exams]) => (
-                      <div key={group}>
-                        <p className="text-xs font-semibold text-muted-foreground mb-1">{group}</p>
-                        <div className="flex flex-wrap gap-1">
-                          {exams.map((exam) => (
-                            <button key={exam.code} type="button"
-                              className="text-xs px-2 py-1 rounded bg-background border hover:border-primary hover:text-primary transition-colors"
-                              onClick={() => addFromTemplate(exam)}>
-                              {exam.name}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Selecione um modelo:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {templates?.map((t) => (
+                      <Button key={t.id} variant="secondary" size="sm" onClick={() => {
+                        setForm({ ...form, content: t.content, specialty: t.specialty || form.specialty });
+                        setShowTemplates(false);
+                      }}>{t.name}</Button>
                     ))}
+                    {templates?.length === 0 && <p className="text-xs text-muted-foreground">Nenhum modelo salvo.</p>}
                   </div>
                 </div>
               )}
 
-              <div className="space-y-2">
-                {form.exams.map((exam, idx) => (
-                  <div key={idx} className="p-3 rounded-lg border bg-muted/20 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-muted-foreground">Exame {idx + 1}</span>
-                      {form.exams.length > 1 && (
-                        <Button type="button" size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500" onClick={() => removeExam(idx)}>×</Button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="col-span-2">
-                        <Input value={exam.name} onChange={(e) => updateExam(idx, "name", e.target.value)} placeholder="Nome do exame" className="text-sm" />
-                      </div>
-                      <Select value={exam.urgency} onValueChange={(v) => updateExam(idx, "urgency", v)}>
-                        <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="rotina">Rotina</SelectItem>
-                          <SelectItem value="urgente">Urgente</SelectItem>
-                          <SelectItem value="emergencia">Emergência</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Input value={exam.instructions} onChange={(e) => updateExam(idx, "instructions", e.target.value)} placeholder="Instruções especiais (jejum, preparo, etc.)" className="text-sm" />
-                  </div>
-                ))}
-              </div>
+              <Textarea 
+                value={form.content} 
+                onChange={(e) => setForm({ ...form, content: e.target.value })} 
+                placeholder="Liste os exames e instruções aqui..." 
+                className="mt-1 min-h-[200px] font-mono text-sm" 
+              />
             </div>
 
             <div>
-              <Label>Observações</Label>
+              <Label>Observações Internas</Label>
               <Textarea value={form.observations} onChange={(e) => setForm({ ...form, observations: e.target.value })} placeholder="Observações adicionais..." className="mt-1 resize-none" rows={2} />
             </div>
           </div>
@@ -275,18 +252,13 @@ export default function Exames() {
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
             <Button onClick={() => {
               if (!form.patientId) return toast.error("Selecione o paciente.");
-              if (!form.exams[0]?.name) return toast.error("Adicione ao menos um exame.");
+              if (!form.content) return toast.error("O conteúdo do pedido é obrigatório.");
               createMutation.mutate({
                 patientId: parseInt(form.patientId),
                 specialty: form.specialty || undefined,
                 clinicalIndication: form.clinicalIndication || undefined,
+                content: form.content,
                 observations: form.observations || undefined,
-                exams: form.exams.filter((e) => e.name).map((e) => ({
-                  name: e.name,
-                  code: e.code || undefined,
-                  instructions: e.instructions || undefined,
-                  urgency: e.urgency as any,
-                })),
               });
             }} disabled={createMutation.isPending}>
               {createMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Criar Pedido

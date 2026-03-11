@@ -25,6 +25,7 @@ import { ExportProntuarioButton } from "@/components/ExportProntuario";
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function AnamneseTab({ patientId }: { patientId: number }) {
+  const { data: templates } = trpc.medicalRecords.listTemplates.useQuery();
   const [questions, setQuestions] = useState<Array<{
     id: string; text: string; type: "text" | "radio" | "checkbox" | "select"; options: string[]; answer: string;
   }>>([
@@ -39,6 +40,23 @@ function AnamneseTab({ patientId }: { patientId: number }) {
     { id: "9", text: "Etilismo", type: "radio", options: ["Nunca", "Social", "Frequente"], answer: "" },
     { id: "10", text: "Hipercromia (Exame Físico Genital Feminino)", type: "radio", options: ["Severa", "Moderada", "Leve", "Sem hipercromia"], answer: "" },
   ]);
+
+  const applyTemplate = (templateId: number) => {
+    const template = templates?.find(t => t.id === templateId);
+    if (!template) return;
+    
+    const sections = template.sections as any[];
+    const newQuestions = sections.map((s, idx) => ({
+      id: `temp-${idx}-${Date.now()}`,
+      text: s.title,
+      type: s.type || "text",
+      options: s.options || [],
+      answer: s.defaultValue || ""
+    }));
+    
+    setQuestions(newQuestions);
+    toast.success(`Modelo "${template.name}" aplicado!`);
+  };
   const [newQ, setNewQ] = useState({ text: "", type: "radio" as const, options: "" });
   const [showAddQ, setShowAddQ] = useState(false);
   const [showLink, setShowLink] = useState(false);
@@ -84,7 +102,22 @@ function AnamneseTab({ patientId }: { patientId: number }) {
         </CardContent>
       </Card>
 
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 flex-wrap items-center">
+        <div className="flex items-center gap-2 mr-2">
+          <Label className="text-xs font-medium text-muted-foreground">Modelo:</Label>
+          <Select onValueChange={(v) => applyTemplate(parseInt(v))}>
+            <SelectTrigger className="h-8 w-[200px] text-xs">
+              <SelectValue placeholder="Selecionar modelo..." />
+            </SelectTrigger>
+            <SelectContent>
+              {templates?.map((t) => (
+                <SelectItem key={t.id} value={t.id.toString()}>{t.name}</SelectItem>
+              ))}
+              {templates?.length === 0 && <SelectItem value="0" disabled>Nenhum modelo cadastrado</SelectItem>}
+            </SelectContent>
+          </Select>
+        </div>
+
         <Button size="sm" variant="outline" onClick={() => setShowAddQ(true)} className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10">
           <Plus className="h-3.5 w-3.5 mr-1.5" />Adicionar Pergunta
         </Button>
@@ -231,7 +264,14 @@ function AtestadosTab({ patientId, patientName }: { patientId: number; patientNa
 function PrescricoesTab({ patientId }: { patientId: number }) {
   const [modo, setModo] = useState<"memed" | "livre">("livre");
   const [texto, setTexto] = useState("");
-  const modelos = [
+  const { data: templates } = trpc.prescriptions.listTemplates.useQuery();
+  
+  const saveTemplateMutation = trpc.prescriptions.createTemplate.useMutation({
+    onSuccess: () => toast.success("Modelo salvo!"),
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const staticModelos = [
     { nome: "Analgésico Padrão", texto: "1) Dipirona 500mg - Tomar 1 comprimido de 6/6 horas se dor.\n2) Paracetamol 750mg - Tomar 1 comprimido de 8/8 horas se dor persistir." },
     { nome: "Anti-inflamatório Pós-Procedimento", texto: "1) Nimesulida 100mg - Tomar 1 comprimido de 12/12 horas por 5 dias.\n2) Dipirona 1g - Tomar 1 comprimido de 6/6 horas se dor.\n3) Amoxicilina 500mg - Tomar 1 comprimido de 8/8 horas por 7 dias." },
     { nome: "Cuidados Pós-Lipo", texto: "1) Cefalexina 500mg - Tomar 1 comprimido de 6/6 horas por 7 dias.\n2) Tramadol 50mg - Tomar 1 comprimido de 8/8 horas se dor intensa.\n3) Bromoprida 10mg - Tomar 1 comprimido de 8/8 horas se náuseas.\n4) Enoxaparina 40mg - Aplicar 1 ampola SC 1x/dia por 7 dias." },
@@ -259,10 +299,22 @@ function PrescricoesTab({ patientId }: { patientId: number }) {
       ) : (
         <>
           <Card className="border-border/50">
-            <CardHeader className="pb-2"><CardTitle className="text-sm">Modelos de Prescrição</CardTitle></CardHeader>
-            <CardContent className="space-y-2">
-              {modelos.map((m, i) => (
-                <button key={i} onClick={() => setTexto(m.texto)} className="w-full text-left p-2.5 rounded-md border border-border/50 hover:border-amber-500/30 hover:bg-amber-500/5 transition-all text-xs">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm">Modelos de Prescrição</CardTitle>
+              <Button size="xs" variant="ghost" onClick={() => {
+                if (!texto) return toast.error("Digite a prescrição para salvar.");
+                const name = prompt("Nome do modelo:");
+                if (name) saveTemplateMutation.mutate({ name, content: texto, type: "simples" });
+              }} className="h-6 text-[10px]">Salvar Atual como Modelo</Button>
+            </CardHeader>
+            <CardContent className="space-y-2 max-h-40 overflow-y-auto">
+              {templates?.map((t) => (
+                <button key={t.id} onClick={() => setTexto(t.content)} className="w-full text-left p-2.5 rounded-md border border-border/50 hover:border-amber-500/30 hover:bg-amber-500/5 transition-all text-xs">
+                  <span className="font-medium">{t.name}</span>
+                </button>
+              ))}
+              {staticModelos.map((m, i) => (
+                <button key={`static-${i}`} onClick={() => setTexto(m.texto)} className="w-full text-left p-2.5 rounded-md border border-border/50 hover:border-amber-500/30 hover:bg-amber-500/5 transition-all text-xs">
                   <span className="font-medium">{m.nome}</span>
                 </button>
               ))}
@@ -327,6 +379,12 @@ function ExamesTab({ patientId }: { patientId: number }) {
   const [searchTuss, setSearchTuss] = useState("");
   const [selectedExams, setSelectedExams] = useState<Array<{ code: string; name: string; urgency: string }>>([]);
   const [indicacao, setIndicacao] = useState("");
+  const { data: templates } = trpc.examRequests.listTemplates.useQuery();
+
+  const saveTemplateMutation = trpc.examRequests.createTemplate.useMutation({
+    onSuccess: () => toast.success("Modelo salvo!"),
+    onError: (err: any) => toast.error(err.message),
+  });
 
   const examesTuss = [
     { code: "40301630", name: "Hemograma completo" },
@@ -417,15 +475,35 @@ function ExamesTab({ patientId }: { patientId: number }) {
           </div>
         </div>
       ) : (
-        <Card className="border-border/50">
-          <CardContent className="p-4">
-            <Textarea value={textoLivre} onChange={(e) => setTextoLivre(e.target.value)} className="min-h-[200px] font-mono text-sm" placeholder="Solicito os seguintes exames laboratoriais..." />
-            <div className="flex gap-2 mt-3">
-              <Button size="sm" className="bg-amber-600 hover:bg-amber-700"><Save className="h-3.5 w-3.5 mr-1.5" />Salvar</Button>
-              <Button size="sm" variant="outline"><FileDown className="h-3.5 w-3.5 mr-1.5" />Imprimir / PDF</Button>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="space-y-4">
+          <Card className="border-border/50">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm">Modelos de Exames</CardTitle>
+              <Button size="xs" variant="ghost" onClick={() => {
+                if (!textoLivre) return toast.error("Digite os exames para salvar.");
+                const name = prompt("Nome do modelo:");
+                if (name) saveTemplateMutation.mutate({ name, content: textoLivre });
+              }} className="h-6 text-[10px]">Salvar Atual como Modelo</Button>
+            </CardHeader>
+            <CardContent className="space-y-2 max-h-40 overflow-y-auto">
+              {templates?.map((t) => (
+                <button key={t.id} onClick={() => setTextoLivre(t.content)} className="w-full text-left p-2.5 rounded-md border border-border/50 hover:border-amber-500/30 hover:bg-amber-500/5 transition-all text-xs">
+                  <span className="font-medium">{t.name}</span>
+                </button>
+              ))}
+              {templates?.length === 0 && <p className="text-[10px] text-muted-foreground text-center">Nenhum modelo salvo.</p>}
+            </CardContent>
+          </Card>
+          <Card className="border-border/50">
+            <CardContent className="p-4">
+              <Textarea value={textoLivre} onChange={(e) => setTextoLivre(e.target.value)} className="min-h-[200px] font-mono text-sm" placeholder="Solicito os seguintes exames laboratoriais..." />
+              <div className="flex gap-2 mt-3">
+                <Button size="sm" className="bg-amber-600 hover:bg-amber-700"><Save className="h-3.5 w-3.5 mr-1.5" />Salvar</Button>
+                <Button size="sm" variant="outline"><FileDown className="h-3.5 w-3.5 mr-1.5" />Imprimir / PDF</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   );
@@ -566,22 +644,22 @@ export default function ProntuarioDetalhe() {
       {/* Tabs */}
       <Tabs defaultValue="anamnese" className="w-full">
         <TabsList className="w-full justify-start flex-wrap bg-muted/50 h-auto p-1 gap-0.5">
-          <TabsTrigger value="anamnese" className="text-xs gap-1 data-[state=active]:bg-amber-600 data-[state=active]:text-white">
+          <TabsTrigger value="anamnese" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
             <ClipboardList className="h-3.5 w-3.5" />Anamnese
           </TabsTrigger>
-          <TabsTrigger value="atestados" className="text-xs gap-1 data-[state=active]:bg-amber-600 data-[state=active]:text-white">
+          <TabsTrigger value="atestados" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
             <FileText className="h-3.5 w-3.5" />Atestados / Docs
           </TabsTrigger>
-          <TabsTrigger value="prescricoes" className="text-xs gap-1 data-[state=active]:bg-amber-600 data-[state=active]:text-white">
+          <TabsTrigger value="prescricoes" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
             <Stethoscope className="h-3.5 w-3.5" />Prescrições
           </TabsTrigger>
-          <TabsTrigger value="anexos" className="text-xs gap-1 data-[state=active]:bg-amber-600 data-[state=active]:text-white">
+          <TabsTrigger value="anexos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
             <Paperclip className="h-3.5 w-3.5" />Anexos
           </TabsTrigger>
-          <TabsTrigger value="exames" className="text-xs gap-1 data-[state=active]:bg-amber-600 data-[state=active]:text-white">
+          <TabsTrigger value="exames" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
             <FlaskConical className="h-3.5 w-3.5" />Exames
           </TabsTrigger>
-          <TabsTrigger value="procedimentos" className="text-xs gap-1 data-[state=active]:bg-amber-600 data-[state=active]:text-white">
+          <TabsTrigger value="procedimentos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
             <Package className="h-3.5 w-3.5" />Procedimentos
           </TabsTrigger>
         </TabsList>

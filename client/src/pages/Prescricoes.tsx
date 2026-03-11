@@ -26,29 +26,30 @@ const D4SIGN_STATUS = {
   cancelado: { label: "Cancelado", icon: XCircle, color: "bg-red-100 text-red-800" },
 };
 
-const defaultMedItem = { medication: "", dosage: "", frequency: "", duration: "", instructions: "" };
-const defaultForm = { patientId: "", type: "simples" as const, observations: "", items: [{ ...defaultMedItem }] };
+const defaultForm = { patientId: "", type: "simples" as const, observations: "", content: "" };
 
 export default function Prescricoes() {
   const { user } = useAuth();
   const userRole = (user as any)?.role ?? "user";
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState(defaultForm);
+  const [showTemplates, setShowTemplates] = useState(false);
 
   const { data: patients } = trpc.patients.list.useQuery({ limit: 200 });
+  const { data: templates } = trpc.prescriptions.listTemplates.useQuery();
   const [filterPatientId, setFilterPatientId] = useState<number | null>(null);
-  const { data: patientPrescriptions } = trpc.prescriptions.getByPatient.useQuery(
-    { patientId: filterPatientId ?? 0 },
-    { enabled: !!filterPatientId }
-  );
-  // Use all patients' prescriptions by querying a known patient list
+  
   const { data: allPrescriptions, refetch: refetchAll } = trpc.prescriptions.getByPatient.useQuery(
-    { patientId: 0 },
-    { enabled: false }
+    { patientId: filterPatientId ?? 0 }
   );
 
   const createMutation = trpc.prescriptions.create.useMutation({
     onSuccess: () => { toast.success("Prescrição criada!"); setShowCreate(false); setForm(defaultForm); refetchAll(); },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const saveTemplateMutation = trpc.prescriptions.createTemplate.useMutation({
+    onSuccess: () => { toast.success("Modelo salvo!"); setShowTemplates(false); },
     onError: (err: any) => toast.error(err.message),
   });
 
@@ -184,32 +185,42 @@ export default function Prescricoes() {
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <Label>Medicamentos</Label>
-                <Button type="button" size="sm" variant="outline" onClick={addItem}><Plus className="h-3 w-3 mr-1" />Adicionar</Button>
+                <Label>Conteúdo da Prescrição *</Label>
+                <div className="flex gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => setShowTemplates(!showTemplates)}>Modelos</Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => {
+                    if (!form.content) return toast.error("Digite o conteúdo para salvar como modelo.");
+                    const name = prompt("Nome do modelo:");
+                    if (name) saveTemplateMutation.mutate({ name, content: form.content, type: form.type });
+                  }}>Salvar como Modelo</Button>
+                </div>
               </div>
-              <div className="space-y-3">
-                {form.items.map((item, idx) => (
-                  <div key={idx} className="p-3 rounded-lg border bg-muted/20 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-muted-foreground">Medicamento {idx + 1}</span>
-                      {form.items.length > 1 && (
-                        <Button type="button" size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500" onClick={() => removeItem(idx)}>×</Button>
-                      )}
-                    </div>
-                    <Input value={item.medication} onChange={(e) => updateItem(idx, "medication", e.target.value)} placeholder="Nome do medicamento" className="text-sm" />
-                    <div className="grid grid-cols-3 gap-2">
-                      <Input value={item.dosage} onChange={(e) => updateItem(idx, "dosage", e.target.value)} placeholder="Dose (ex: 500mg)" className="text-sm" />
-                      <Input value={item.frequency} onChange={(e) => updateItem(idx, "frequency", e.target.value)} placeholder="Frequência" className="text-sm" />
-                      <Input value={item.duration} onChange={(e) => updateItem(idx, "duration", e.target.value)} placeholder="Duração" className="text-sm" />
-                    </div>
-                    <Input value={item.instructions} onChange={(e) => updateItem(idx, "instructions", e.target.value)} placeholder="Instruções especiais (opcional)" className="text-sm" />
+              
+              {showTemplates && (
+                <div className="mb-3 p-3 rounded-lg border bg-muted/20">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Selecione um modelo:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {templates?.filter(t => t.type === form.type).map((t) => (
+                      <Button key={t.id} variant="secondary" size="sm" onClick={() => {
+                        setForm({ ...form, content: t.content });
+                        setShowTemplates(false);
+                      }}>{t.name}</Button>
+                    ))}
+                    {templates?.filter(t => t.type === form.type).length === 0 && <p className="text-xs text-muted-foreground">Nenhum modelo para este tipo.</p>}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
+
+              <Textarea 
+                value={form.content} 
+                onChange={(e) => setForm({ ...form, content: e.target.value })} 
+                placeholder="Digite a prescrição aqui..." 
+                className="mt-1 min-h-[200px] font-mono text-sm" 
+              />
             </div>
 
             <div>
-              <Label>Observações</Label>
+              <Label>Observações Internas</Label>
               <Textarea value={form.observations} onChange={(e) => setForm({ ...form, observations: e.target.value })} placeholder="Observações adicionais..." className="mt-1 resize-none" rows={2} />
             </div>
           </div>
@@ -217,11 +228,11 @@ export default function Prescricoes() {
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
             <Button onClick={() => {
               if (!form.patientId) return toast.error("Selecione o paciente.");
-              if (!form.items[0]?.medication) return toast.error("Adicione ao menos um medicamento.");
+              if (!form.content) return toast.error("O conteúdo da prescrição é obrigatório.");
               createMutation.mutate({
                 patientId: parseInt(form.patientId),
                 type: form.type,
-                items: form.items.filter((i) => i.medication),
+                content: form.content,
                 observations: form.observations || undefined,
               });
             }} disabled={createMutation.isPending}>
