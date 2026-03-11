@@ -1004,7 +1004,7 @@ const anamnesisRouter = router({
 
 // ─── D4Sign / Signatures Router ───────────────────────────────────────────────
 
-const D4SIGN_API = "https://sandbox.d4sign.com.br/api/v1";
+const D4SIGN_API = process.env.D4SIGN_BASE_URL || "https://secure.d4sign.com.br/api/v1";
 
 const signaturesRouter = router({
   sendForSignature: doctorProcedure
@@ -1075,6 +1075,65 @@ const signaturesRouter = router({
     .input(z.object({ resourceType: z.string(), resourceId: z.number() }))
     .query(async ({ input }) => {
       return db.getDocumentSignatureByResource(input.resourceType, input.resourceId);
+    }),
+
+  listSafes: doctorProcedure.query(async () => {
+    const tokenAPI = process.env.D4SIGN_TOKEN_API;
+    const cryptKey = process.env.D4SIGN_CRYPT_KEY;
+    if (!tokenAPI || !cryptKey) return { safes: [], configured: false };
+    try {
+      const res = await axios.get(`${D4SIGN_API}/safes`, { params: { tokenAPI, cryptKey } });
+      return { safes: res.data, configured: true };
+    } catch (err: any) {
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Erro ao listar cofres D4Sign: ${err.message}` });
+    }
+  }),
+
+  listDocuments: doctorProcedure
+    .input(z.object({ safeUuid: z.string() }))
+    .query(async ({ input }) => {
+      const tokenAPI = process.env.D4SIGN_TOKEN_API;
+      const cryptKey = process.env.D4SIGN_CRYPT_KEY;
+      if (!tokenAPI || !cryptKey) return { documents: [], configured: false };
+      try {
+        const res = await axios.get(`${D4SIGN_API}/documents/${input.safeUuid}/list`, { params: { tokenAPI, cryptKey } });
+        return { documents: res.data, configured: true };
+      } catch (err: any) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Erro ao listar documentos D4Sign: ${err.message}` });
+      }
+    }),
+
+  getDocumentStatus: doctorProcedure
+    .input(z.object({ documentUuid: z.string() }))
+    .query(async ({ input }) => {
+      const tokenAPI = process.env.D4SIGN_TOKEN_API;
+      const cryptKey = process.env.D4SIGN_CRYPT_KEY;
+      if (!tokenAPI || !cryptKey) return { status: "not_configured" };
+      try {
+        const res = await axios.get(`${D4SIGN_API}/documents/${input.documentUuid}`, { params: { tokenAPI, cryptKey } });
+        return res.data;
+      } catch (err: any) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Erro ao consultar status D4Sign: ${err.message}` });
+      }
+    }),
+
+  cancelDocument: doctorProcedure
+    .input(z.object({ documentUuid: z.string(), comment: z.string().optional() }))
+    .mutation(async ({ input, ctx }) => {
+      const tokenAPI = process.env.D4SIGN_TOKEN_API;
+      const cryptKey = process.env.D4SIGN_CRYPT_KEY;
+      if (!tokenAPI || !cryptKey) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "D4Sign n\u00e3o configurado" });
+      try {
+        const res = await axios.post(
+          `${D4SIGN_API}/documents/${input.documentUuid}/cancel`,
+          { comment: input.comment || "Cancelado pelo sistema" },
+          { params: { tokenAPI, cryptKey } }
+        );
+        await audit(ctx.user.id, "CANCEL_D4SIGN_DOCUMENT", "document_signature", undefined, undefined, { documentUuid: input.documentUuid }, ctx.req as any);
+        return { success: true, data: res.data };
+      } catch (err: any) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Erro ao cancelar documento D4Sign: ${err.message}` });
+      }
     }),
 });
 
