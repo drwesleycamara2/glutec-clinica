@@ -71,6 +71,7 @@ if __name__ == "__main__":
     try:
         client = D4SignClient()
         print("Cliente D4Sign inicializado com sucesso.")
-        # print(client.list_safes()) # Descomente para testar a listagem de cofres
+        print("Listando cofres (safes):")
+        print(client.list_safes())
     except Exception as e:
         print(f"Erro ao inicializar cliente: {e}")
