@@ -152,7 +152,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
           <div className="flex flex-col items-center gap-4">
             <div className="h-24 w-24 rounded-2xl bg-white p-2 flex items-center justify-center shadow-[0_4px_20px_rgba(212,168,83,0.4)] border border-primary/20">
-              <img src="/assets/logo.jpg" alt="Clínica Glutée" className="h-full w-full object-contain" />
+              <img src="/glutee-logo.png" alt="Clínica Glutée" className="h-full w-full object-contain" />
             </div>
             <h1 className="text-3xl font-bold tracking-tight text-center text-primary uppercase tracking-widest">Glutec</h1>
             <p className="text-sm text-muted-foreground text-center max-w-sm font-medium">
@@ -217,7 +217,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             {!isCollapsed && (
               <div className="flex items-center gap-2 min-w-0 overflow-hidden">
                 <div className="h-8 w-8 rounded-md bg-white p-0.5 flex items-center justify-center shrink-0 shadow-sm border border-primary/10">
-                  <img src="/assets/logo.jpg" alt="Logo" className="h-full w-full object-contain" />
+                  <img src="/glutee-logo.png" alt="Logo" className="h-full w-full object-contain" />
                 </div>
                 <div className="min-w-0 overflow-hidden">
                   <p className="text-sm font-bold text-sidebar-foreground truncate leading-tight uppercase tracking-wider">Glutec</p>
