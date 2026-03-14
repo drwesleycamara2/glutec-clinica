@@ -9,14 +9,14 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import { toast } from "sonner";
 import { Plus, FileText, Loader2, Pill, Send, CheckCircle, XCircle, Clock } from "lucide-react";
 
 const PRESCRIPTION_TYPES = [
-  { value: "simples", label: "Receituário Simples", color: "bg-blue-100 text-blue-800" },
-  { value: "especial_azul", label: "Receituário Especial Azul", color: "bg-indigo-100 text-indigo-800" },
-  { value: "especial_amarelo", label: "Receituário Especial Amarelo", color: "bg-yellow-100 text-yellow-800" },
-  { value: "antimicrobiano", label: "Antimicrobiano", color: "bg-green-100 text-green-800" },
+  { value: "simples", label: "Receituário Simples (1 via)", color: "bg-blue-100 text-blue-800" },
+  { value: "antimicrobiano", label: "Antimicrobiano (2 vias)", color: "bg-green-100 text-green-800" },
+  { value: "controle_especial", label: "Controle Especial (2 vias)", color: "bg-purple-100 text-purple-800" },
 ];
 
 const D4SIGN_STATUS = {
@@ -211,11 +211,11 @@ export default function Prescricoes() {
                 </div>
               )}
 
-              <Textarea 
-                value={form.content} 
-                onChange={(e) => setForm({ ...form, content: e.target.value })} 
-                placeholder="Digite a prescrição aqui..." 
-                className="mt-1 min-h-[200px] font-mono text-sm" 
+              <RichTextEditor
+                value={form.content}
+                onChange={(content) => setForm({ ...form, content })}
+                placeholder="Digite a prescrição aqui..."
+                minHeight="250px"
               />
             </div>
 

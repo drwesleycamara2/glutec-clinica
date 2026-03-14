@@ -35,6 +35,7 @@ const Permissoes = lazy(() => import("./pages/Permissoes"));
 const Documentos = lazy(() => import("./pages/Documentos"));
 const NfseEmissao = lazy(() => import("./pages/NfseEmissao"));
 const ConfiguracoesFiscais = lazy(() => import("./pages/ConfiguracoesFiscaisPage"));
+const Configuracoes = lazy(() => import("./pages/Configuracoes"));
 
 function PageLoader() {
   return (
@@ -79,6 +80,7 @@ function AppRoutes() {
           <Route path="/permissoes" component={Permissoes} />
           <Route path="/documentos" component={Documentos} />
           <Route path="/nfse" component={NfseEmissao} />
+          <Route path="/configuracoes" component={Configuracoes} />
           <Route path="/configuracoes-fiscais" component={ConfiguracoesFiscais} />
 
           <Route path="/404" component={NotFound} />
@@ -92,7 +94,7 @@ function AppRoutes() {
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider defaultTheme="light">
+      <ThemeProvider defaultTheme="light" switchable={true}>
         <TooltipProvider>
           <Toaster />
           <AppRoutes />

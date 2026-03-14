@@ -51,12 +51,15 @@ import {
   HeartPulse,
   MessageSquare,
   Gauge,
+  Moon,
+  Sun,
   FileText as DocumentIcon,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
+import { useTheme } from "@/contexts/ThemeContext";
 
 type MenuItem = {
   icon: React.ElementType;
@@ -120,7 +123,8 @@ const menuGroups: MenuGroup[] = [
       { icon: BarChart3, label: "Relatórios", path: "/relatorios", roles: ["admin"] },
       { icon: UserCog, label: "Usuários", path: "/usuarios", roles: ["admin"] },
       { icon: ShieldCheck, label: "Auditoria", path: "/auditoria", roles: ["admin"] },
-      { icon: Settings, label: "Config. Fiscais", path: "/configuracoes-fiscais", roles: ["admin"] },
+      { icon: Settings, label: "Configurações", path: "/configuracoes", roles: ["admin"] },
+      { icon: Receipt, label: "Config. Fiscais", path: "/configuracoes-fiscais", roles: ["admin"] },
     ],
   },
 ];
@@ -142,6 +146,24 @@ const ROLE_COLORS: Record<string, string> = {
   enfermeiro: "bg-teal-500/20 text-teal-300",
   user: "bg-gray-500/20 text-gray-300",
 };
+
+function ThemeToggleButton() {
+  const { theme, toggleTheme, switchable } = useTheme();
+
+  if (!switchable || !toggleTheme) return null;
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={toggleTheme}
+      className="h-8 w-8 rounded-md text-muted-foreground hover:text-primary transition-colors"
+      title={theme === "light" ? "Mudar para modo escuro" : "Mudar para modo claro"}
+    >
+      {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+    </Button>
+  );
+}
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { loading, user } = useAuth();
@@ -317,9 +339,12 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
               <span className="font-medium text-foreground">{activeItem?.label ?? "Dashboard"}</span>
             </div>
           </div>
-          <Badge variant="outline" className="text-[10px] font-normal border-primary/30 text-primary">
-            {ROLE_LABELS[userRole] ?? "Usuário"}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <ThemeToggleButton />
+            <Badge variant="outline" className="text-[10px] font-normal border-primary/30 text-primary">
+              {ROLE_LABELS[userRole] ?? "Usuário"}
+            </Badge>
+          </div>
         </div>
 
         <main className="flex-1 p-4 md:p-6">{children}</main>

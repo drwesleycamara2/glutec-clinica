@@ -125,10 +125,10 @@ export default function Dashboard() {
       {/* Saudação */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">
-            {getGreeting()}, {user?.name?.split(" ")[0] ?? "Usuário"}
+          <h1 className="text-3xl font-light text-foreground tracking-tight">
+            {getGreeting()}, <span className="font-semibold text-primary">{user?.name?.split(" ")[0] ?? "Usuário"}</span>
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-sm text-muted-foreground/60 font-medium mt-1 uppercase tracking-widest">
             {today.toLocaleDateString("pt-BR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
           </p>
         </div>
@@ -166,17 +166,18 @@ export default function Dashboard() {
         {statCards.map((card) => (
           <Card
             key={card.title}
-            className={`border shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 ${card.action ? "cursor-pointer" : ""}`}
+            className={`border-primary/10 bg-card/50 backdrop-blur-sm shadow-sm transition-all hover:shadow-md hover:-translate-y-1 hover:border-primary/30 ${card.action ? "cursor-pointer" : ""}`}
             onClick={card.action}
           >
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <div className={`h-8 w-8 rounded-lg ${card.bg} flex items-center justify-center shrink-0`}>
-                  <card.icon className={`h-4 w-4 ${card.color}`} />
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div className={`h-10 w-10 rounded-xl ${card.bg} flex items-center justify-center shrink-0 shadow-inner`}>
+                  <card.icon className={`h-5 w-5 ${card.color}`} />
                 </div>
+                <div className="h-1.5 w-1.5 rounded-full bg-primary/20" />
               </div>
-              <p className="text-2xl font-bold text-foreground">{card.value}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{card.title}</p>
+              <p className="text-3xl font-light text-foreground tracking-tight">{card.value}</p>
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-widest mt-1">{card.title}</p>
             </CardContent>
           </Card>
         ))}
