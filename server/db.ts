@@ -63,6 +63,10 @@ import {
   chatMessages,
   anamnesisLinks,
   audioTranscriptions,
+  nfseEmissions,
+  InsertNfseEmission,
+  fiscalSettings,
+  InsertFiscalSettings,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import crypto from "crypto";
@@ -1106,4 +1110,68 @@ export async function getAppointmentStatsByDoctor(from: Date, to: Date) {
     .from(appointments)
     .where(and(gte(appointments.scheduledAt, from), lte(appointments.scheduledAt, to)))
     .groupBy(appointments.doctorId, appointments.status);
+}
+
+// ─── NFS-e Emissions ─────────────────────────────────────────────────────────
+
+export async function createNfseEmission(data: InsertNfseEmission) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(nfseEmissions).values(data);
+  return result[0];
+}
+
+export async function getNfseEmissionById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(nfseEmissions).where(eq(nfseEmissions.id, id)).limit(1);
+  return result[0];
+}
+
+export async function listNfseEmissions(filters?: { status?: string; ambiente?: string; patientId?: number }, limit: number = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions: any[] = [];
+  if (filters?.status) conditions.push(eq(nfseEmissions.status, filters.status as any));
+  if (filters?.ambiente) conditions.push(eq(nfseEmissions.ambiente, filters.ambiente as any));
+  if (filters?.patientId) conditions.push(eq(nfseEmissions.patientId, filters.patientId));
+  
+  if (conditions.length > 0) {
+    return db.select().from(nfseEmissions).where(and(...conditions)).orderBy(desc(nfseEmissions.createdAt)).limit(limit);
+  }
+  return db.select().from(nfseEmissions).orderBy(desc(nfseEmissions.createdAt)).limit(limit);
+}
+
+export async function updateNfseEmission(id: number, data: Partial<InsertNfseEmission>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(nfseEmissions).set(data).where(eq(nfseEmissions.id, id));
+}
+
+export async function getNfseByPatient(patientId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(nfseEmissions).where(eq(nfseEmissions.patientId, patientId)).orderBy(desc(nfseEmissions.createdAt));
+}
+
+// ─── Fiscal Settings ─────────────────────────────────────────────────────────
+
+export async function getFiscalSettings() {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(fiscalSettings).limit(1);
+  return result[0];
+}
+
+export async function upsertFiscalSettings(data: InsertFiscalSettings) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const existing = await db.select().from(fiscalSettings).limit(1);
+  if (existing.length > 0) {
+    await db.update(fiscalSettings).set(data).where(eq(fiscalSettings.id, existing[0].id));
+    return existing[0].id;
+  } else {
+    const result = await db.insert(fiscalSettings).values(data);
+    return result[0].insertId;
+  }
 }

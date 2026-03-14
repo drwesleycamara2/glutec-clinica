@@ -9,6 +9,7 @@ import { createAuditLog } from "./db";
 import { storagePut } from "./storage";
 import { nanoid } from "nanoid";
 import axios from "axios";
+import { createD4SignService, selectSafe, SAFE_MAP } from "./d4sign";
 
 // ─── Role Middleware ──────────────────────────────────────────────────────────
 
@@ -1134,42 +1135,30 @@ const anamnesisRouter = router({
 
 // ─── D4Sign / Signatures Router ───────────────────────────────────────────────
 
-const D4SIGN_API = process.env.D4SIGN_BASE_URL || "https://secure.d4sign.com.br/api/v1";
-
 const signaturesRouter = router({
   sendForSignature: doctorProcedure
     .input(z.object({
-      resourceType: z.enum(["prescription", "exam_request", "medical_record", "budget", "nfe"]),
+      resourceType: z.enum(["prescription", "exam_request", "medical_record", "budget", "nfe", "termo", "contrato"]),
       resourceId: z.number(),
       documentBase64: z.string(),
       documentName: z.string(),
       signerEmail: z.string(),
       signerName: z.string(),
       certificateType: z.enum(["eletronica", "icp_brasil_a1", "icp_brasil_a3"]).default("eletronica"),
+      safeOverride: z.string().optional(), // UUID do cofre específico (opcional)
     }))
     .mutation(async ({ input, ctx }) => {
-      const tokenAPI = process.env.D4SIGN_TOKEN_API;
-      const cryptKey = process.env.D4SIGN_CRYPT_KEY;
-      
-      // Lógica de Seleção de Cofre (Múltiplos Certificados)
-      let safeKey = process.env.D4SIGN_SAFE_KEY; // Default
-      
+      const d4sign = await createD4SignService();
       const clinic = await db.getClinicSettings();
       const doctor = await db.getUserById(ctx.user.id);
 
-      if (input.resourceType === "nfe") {
-        safeKey = clinic?.d4signSafeKeyNfe || safeKey;
-      } else if (doctor?.d4signSafeKey) {
-        // Se o médico tiver um cofre individual configurado
-        safeKey = doctor.d4signSafeKey;
-      } else if (clinic?.d4signSafeKeyClinical) {
-        // Fallback para o cofre clínico da empresa
-        safeKey = clinic.d4signSafeKeyClinical;
-      }
+      // Selecionar cofre automaticamente ou usar override
+      const safeKey = input.safeOverride || selectSafe(input.resourceType, clinic, doctor);
 
-      if (!tokenAPI || !cryptKey || !safeKey) {
-        const sig = await db.createDocumentSignature({
-          resourceType: input.resourceType === "nfe" ? "budget" : input.resourceType as any, // fallback enum
+      if (!d4sign) {
+        // Modo simulado quando D4Sign não está configurado
+        await db.createDocumentSignature({
+          resourceType: ["nfe", "termo", "contrato"].includes(input.resourceType) ? "budget" : input.resourceType as any,
           resourceId: input.resourceId,
           doctorId: ctx.user.id,
           d4signDocumentKey: `simulated-${nanoid(12)}`,
@@ -1177,55 +1166,33 @@ const signaturesRouter = router({
           signatureType: input.certificateType,
         });
         await audit(ctx.user.id, "SEND_FOR_SIGNATURE_SIMULATED", input.resourceType, input.resourceId, undefined, { safeKey }, ctx.req as any);
-        return { success: true, simulated: true, message: "Modo simulado: Cofre não configurado ou credenciais ausentes." };
+        return { success: true, simulated: true, message: "Modo simulado: credenciais D4Sign ausentes." };
       }
 
       try {
-        const uploadRes = await axios.post(
-          `${D4SIGN_API}/documents/${safeKey}/upload`,
-          { base64_binary_file: input.documentBase64, mime_type: "application/pdf", name: input.documentName },
-          { params: { tokenAPI, cryptKey } }
-        );
-        const documentKey = uploadRes.data?.uuid;
-
-        // Configuração do signatário com base no tipo de certificado
         const isICP = input.certificateType.startsWith("icp_brasil");
-        await axios.post(
-          `${D4SIGN_API}/documents/${documentKey}/createlist`,
-          { 
-            signers: [{ 
-              email: input.signerEmail, 
-              act: "1", 
-              foreign: "0", 
-              certificadoicpbr: isICP ? "1" : "0", 
-              assinatura_presencial: "0", 
-              docauth: "0", 
-              docauthandselfie: "0", 
-              embed_methodauth: "email", 
-              embed_smsnumber: "" 
-            }] 
-          },
-          { params: { tokenAPI, cryptKey } }
-        );
-
-        await axios.post(
-          `${D4SIGN_API}/documents/${documentKey}/sendtosigner`,
-          { message: `Por favor, assine o documento: ${input.documentName}`, workflow: "0" },
-          { params: { tokenAPI, cryptKey } }
-        );
+        const result = await d4sign.sendDocumentForSignature({
+          safeUuid: safeKey,
+          base64Content: input.documentBase64,
+          fileName: input.documentName,
+          signerEmail: input.signerEmail,
+          signerName: input.signerName,
+          message: `Clínica Glutée - Por favor, assine o documento: ${input.documentName}`,
+          useIcpBrasil: isICP,
+        });
 
         await db.createDocumentSignature({
-          resourceType: input.resourceType === "nfe" ? "budget" : input.resourceType as any,
+          resourceType: ["nfe", "termo", "contrato"].includes(input.resourceType) ? "budget" : input.resourceType as any,
           resourceId: input.resourceId,
           doctorId: ctx.user.id,
-          d4signDocumentKey: documentKey,
+          d4signDocumentKey: result.documentUuid,
           d4signSafeKey: safeKey,
           status: "enviado",
           signatureType: input.certificateType,
         });
 
-        await audit(ctx.user.id, "SEND_FOR_SIGNATURE", input.resourceType, input.resourceId, undefined, { documentKey, safeKey }, ctx.req as any);
-        return { success: true, documentKey };
+        await audit(ctx.user.id, "SEND_FOR_SIGNATURE", input.resourceType, input.resourceId, undefined, { documentKey: result.documentUuid, safeKey }, ctx.req as any);
+        return { success: true, documentKey: result.documentUuid };
       } catch (err: any) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Erro ao enviar para D4Sign: ${err.message}` });
       }
@@ -1238,12 +1205,11 @@ const signaturesRouter = router({
     }),
 
   listSafes: doctorProcedure.query(async () => {
-    const tokenAPI = process.env.D4SIGN_TOKEN_API;
-    const cryptKey = process.env.D4SIGN_CRYPT_KEY;
-    if (!tokenAPI || !cryptKey) return { safes: [], configured: false };
     try {
-      const res = await axios.get(`${D4SIGN_API}/safes`, { params: { tokenAPI, cryptKey } });
-      return { safes: res.data, configured: true };
+      const d4sign = await createD4SignService();
+      if (!d4sign) return { safes: [], configured: false };
+      const safes = await d4sign.listSafes();
+      return { safes, configured: true };
     } catch (err: any) {
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Erro ao listar cofres D4Sign: ${err.message}` });
     }
@@ -1252,12 +1218,11 @@ const signaturesRouter = router({
   listDocuments: doctorProcedure
     .input(z.object({ safeUuid: z.string() }))
     .query(async ({ input }) => {
-      const tokenAPI = process.env.D4SIGN_TOKEN_API;
-      const cryptKey = process.env.D4SIGN_CRYPT_KEY;
-      if (!tokenAPI || !cryptKey) return { documents: [], configured: false };
       try {
-        const res = await axios.get(`${D4SIGN_API}/documents/${input.safeUuid}/list`, { params: { tokenAPI, cryptKey } });
-        return { documents: res.data, configured: true };
+        const d4sign = await createD4SignService();
+        if (!d4sign) return { documents: [], configured: false };
+        const documents = await d4sign.listDocuments(input.safeUuid);
+        return { documents, configured: true };
       } catch (err: any) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Erro ao listar documentos D4Sign: ${err.message}` });
       }
@@ -1266,12 +1231,10 @@ const signaturesRouter = router({
   getDocumentStatus: doctorProcedure
     .input(z.object({ documentUuid: z.string() }))
     .query(async ({ input }) => {
-      const tokenAPI = process.env.D4SIGN_TOKEN_API;
-      const cryptKey = process.env.D4SIGN_CRYPT_KEY;
-      if (!tokenAPI || !cryptKey) return { status: "not_configured" };
       try {
-        const res = await axios.get(`${D4SIGN_API}/documents/${input.documentUuid}`, { params: { tokenAPI, cryptKey } });
-        return res.data;
+        const d4sign = await createD4SignService();
+        if (!d4sign) return { status: "not_configured" };
+        return await d4sign.getDocumentStatus(input.documentUuid);
       } catch (err: any) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Erro ao consultar status D4Sign: ${err.message}` });
       }
@@ -1280,20 +1243,261 @@ const signaturesRouter = router({
   cancelDocument: doctorProcedure
     .input(z.object({ documentUuid: z.string(), comment: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
-      const tokenAPI = process.env.D4SIGN_TOKEN_API;
-      const cryptKey = process.env.D4SIGN_CRYPT_KEY;
-      if (!tokenAPI || !cryptKey) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "D4Sign n\u00e3o configurado" });
       try {
-        const res = await axios.post(
-          `${D4SIGN_API}/documents/${input.documentUuid}/cancel`,
-          { comment: input.comment || "Cancelado pelo sistema" },
-          { params: { tokenAPI, cryptKey } }
-        );
+        const d4sign = await createD4SignService();
+        if (!d4sign) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "D4Sign não configurado" });
+        const data = await d4sign.cancelDocument(input.documentUuid, input.comment || "Cancelado pelo sistema");
         await audit(ctx.user.id, "CANCEL_D4SIGN_DOCUMENT", "document_signature", undefined, undefined, { documentUuid: input.documentUuid }, ctx.req as any);
-        return { success: true, data: res.data };
+        return { success: true, data };
       } catch (err: any) {
+        if (err instanceof TRPCError) throw err;
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Erro ao cancelar documento D4Sign: ${err.message}` });
       }
+    }),
+
+  downloadDocument: doctorProcedure
+    .input(z.object({ documentUuid: z.string() }))
+    .query(async ({ input }) => {
+      try {
+        const d4sign = await createD4SignService();
+        if (!d4sign) return { url: null, configured: false };
+        const data = await d4sign.downloadDocument(input.documentUuid);
+        return { url: data?.url || null, configured: true, data };
+      } catch (err: any) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Erro ao baixar documento D4Sign: ${err.message}` });
+      }
+    }),
+
+  getSafeMap: protectedProcedure.query(() => {
+    return Object.entries(SAFE_MAP).map(([key, uuid]) => ({ key, uuid }));
+  }),
+});
+
+// ─── NFS-e Router ────────────────────────────────────────────────────────────
+
+const nfseRouter = router({
+  list: financialProcedure
+    .input(z.object({
+      status: z.string().optional(),
+      ambiente: z.string().optional(),
+      patientId: z.number().optional(),
+      limit: z.number().optional(),
+    }))
+    .query(async ({ input }) => {
+      return db.listNfseEmissions(
+        { status: input.status, ambiente: input.ambiente, patientId: input.patientId },
+        input.limit ?? 50
+      );
+    }),
+
+  getById: financialProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const nfse = await db.getNfseEmissionById(input.id);
+      if (!nfse) throw new TRPCError({ code: "NOT_FOUND" });
+      return nfse;
+    }),
+
+  getByPatient: financialProcedure
+    .input(z.object({ patientId: z.number() }))
+    .query(async ({ input }) => db.getNfseByPatient(input.patientId)),
+
+  create: adminProcedure
+    .input(z.object({
+      // Tomador
+      tomadorDocumento: z.string().min(1),
+      tomadorTipoDocumento: z.enum(["cpf", "cnpj"]).default("cpf"),
+      tomadorNome: z.string().min(1),
+      tomadorEmail: z.string().optional(),
+      tomadorTelefone: z.string().optional(),
+      tomadorCep: z.string().optional(),
+      tomadorMunicipio: z.string().optional(),
+      tomadorUf: z.string().optional(),
+      tomadorBairro: z.string().optional(),
+      tomadorLogradouro: z.string().optional(),
+      tomadorNumero: z.string().optional(),
+      tomadorComplemento: z.string().optional(),
+      // Vínculos
+      patientId: z.number().optional(),
+      budgetId: z.number().optional(),
+      appointmentId: z.number().optional(),
+      // Serviço
+      descricaoServico: z.string().default("Procedimentos Médicos Ambulatoriais"),
+      complementoDescricao: z.string().optional(),
+      // Valores
+      valorServico: z.number().min(1), // Em centavos
+      valorDeducao: z.number().optional(),
+      valorDescontoIncondicionado: z.number().optional(),
+      // Pagamento
+      formaPagamento: z.enum(["pix", "dinheiro", "cartao_credito", "cartao_debito", "boleto", "transferencia", "financiamento", "outro"]).default("pix"),
+      detalhesPagamento: z.string().optional(),
+      // Data
+      dataCompetencia: z.string().optional(), // ISO date string
+      // Ambiente
+      ambiente: z.enum(["homologacao", "producao"]).default("homologacao"),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      // Buscar configurações fiscais
+      const fiscal = await db.getFiscalSettings();
+      if (!fiscal) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure os dados fiscais antes de emitir NFS-e." });
+
+      const valorServico = input.valorServico;
+      const deducao = input.valorDeducao ?? 0;
+      const descontoInc = input.valorDescontoIncondicionado ?? 0;
+      const valorLiquido = valorServico - deducao - descontoInc;
+
+      // Montar descrição completa
+      const descricaoCompleta = [
+        input.descricaoServico || fiscal.descricaoServicoPadrao || "Procedimentos Médicos Ambulatoriais",
+        input.complementoDescricao ? `\n${input.complementoDescricao}` : "",
+        `\n\n${fiscal.textoLegalFixo || "NÃO SUJEITO A RETENCAO A SEGURIDADE SOCIAL, CONFORME ART-31 DA LEI-8.212/91, OS/INSS-209/99, IN/INSS-DC-100/03 E IN 971/09 ART.120 INCISO III. OS SERVICOS ACIMA DESCRITOS FORAM PRESTADOS PESSOALMENTE PELO(S) SOCIO(S) E SEM O CONCURSO DE EMPREGADOS OU OUTROS CONTRIBUINTES INDIVIDUAIS"}`,
+      ].join("");
+
+      const dataCompStr = input.dataCompetencia || new Date().toISOString().split("T")[0];
+      const dataComp = new Date(dataCompStr + "T12:00:00");
+
+      const result = await db.createNfseEmission({
+        emitenteCnpj: fiscal.cnpj,
+        emitenteRazaoSocial: fiscal.razaoSocial,
+        tomadorDocumento: input.tomadorDocumento,
+        tomadorTipoDocumento: input.tomadorTipoDocumento,
+        tomadorNome: input.tomadorNome,
+        tomadorEmail: input.tomadorEmail,
+        tomadorTelefone: input.tomadorTelefone,
+        tomadorCep: input.tomadorCep,
+        tomadorMunicipio: input.tomadorMunicipio,
+        tomadorUf: input.tomadorUf,
+        tomadorBairro: input.tomadorBairro,
+        tomadorLogradouro: input.tomadorLogradouro,
+        tomadorNumero: input.tomadorNumero,
+        tomadorComplemento: input.tomadorComplemento,
+        patientId: input.patientId,
+        budgetId: input.budgetId,
+        appointmentId: input.appointmentId,
+        codigoTributacaoNacional: fiscal.codigoTributacaoNacional || "04.03.03",
+        descricaoServico: descricaoCompleta,
+        complementoDescricao: input.complementoDescricao,
+        textoLegalFixo: fiscal.textoLegalFixo,
+        itemNbs: fiscal.itemNbs || "123012100",
+        municipioIncidencia: fiscal.municipioIncidencia || "Mogi Guaçu",
+        ufIncidencia: fiscal.ufIncidencia || "SP",
+        valorServico,
+        valorDeducao: deducao,
+        valorDescontoIncondicionado: descontoInc,
+        valorLiquido,
+        tributacaoIssqn: "tributavel",
+        aliquotaSimplesNacional: fiscal.aliquotaSimplesNacional || "18.63",
+        formaPagamento: input.formaPagamento,
+        detalhesPagamento: input.detalhesPagamento,
+        dataCompetencia: dataComp,
+        ambiente: input.ambiente,
+        status: "rascunho",
+        emitidaPor: ctx.user.id,
+      });
+
+      await audit(ctx.user.id, "CREATE_NFSE", "nfse", undefined, input.patientId, {
+        valorServico,
+        ambiente: input.ambiente,
+        tomador: input.tomadorNome,
+      }, ctx.req as any);
+
+      return { success: true, id: result?.insertId };
+    }),
+
+  emit: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const nfse = await db.getNfseEmissionById(input.id);
+      if (!nfse) throw new TRPCError({ code: "NOT_FOUND" });
+      if (nfse.status !== "rascunho") throw new TRPCError({ code: "BAD_REQUEST", message: "NFS-e já foi emitida ou cancelada." });
+
+      // Gerar número simulado (integração real com portal nacional seria aqui)
+      const numeroNfse = String(Date.now()).slice(-8);
+      const chaveAcesso = `3524${new Date().getFullYear()}${Math.random().toString(36).slice(2, 18)}`;
+      const codigoVerificacao = Math.random().toString(36).slice(2, 10).toUpperCase();
+
+      await db.updateNfseEmission(input.id, {
+        status: "emitida",
+        numeroNfse,
+        chaveAcesso,
+        codigoVerificacao,
+        protocoloAutorizacao: `PROT-${numeroNfse}`,
+      } as any);
+
+      await audit(ctx.user.id, "EMIT_NFSE", "nfse", input.id, nfse.patientId ?? undefined, {
+        numero: numeroNfse,
+        ambiente: nfse.ambiente,
+        valor: nfse.valorServico,
+      }, ctx.req as any);
+
+      return { success: true, numero: numeroNfse, chaveAcesso, codigoVerificacao };
+    }),
+
+  cancel: adminProcedure
+    .input(z.object({ id: z.number(), motivo: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const nfse = await db.getNfseEmissionById(input.id);
+      if (!nfse) throw new TRPCError({ code: "NOT_FOUND" });
+      if (nfse.status !== "emitida") throw new TRPCError({ code: "BAD_REQUEST", message: "Apenas NFS-e emitidas podem ser canceladas." });
+
+      await db.updateNfseEmission(input.id, {
+        status: "cancelada",
+        motivoCancelamento: input.motivo,
+        canceladaEm: new Date(),
+      } as any);
+
+      await audit(ctx.user.id, "CANCEL_NFSE", "nfse", input.id, nfse.patientId ?? undefined, {
+        motivo: input.motivo,
+      }, ctx.req as any);
+
+      return { success: true };
+    }),
+
+  update: adminProcedure
+    .input(z.object({ id: z.number(), data: z.record(z.string(), z.any()) }))
+    .mutation(async ({ input }) => {
+      await db.updateNfseEmission(input.id, input.data);
+      return { success: true };
+    }),
+});
+
+// ─── Fiscal Settings Router ──────────────────────────────────────────────────
+
+const fiscalRouter2 = router({
+  get: protectedProcedure.query(async () => db.getFiscalSettings()),
+
+  upsert: adminProcedure
+    .input(z.object({
+      cnpj: z.string().min(1),
+      razaoSocial: z.string().min(1),
+      nomeFantasia: z.string().optional(),
+      telefone: z.string().optional(),
+      email: z.string().optional(),
+      cep: z.string().optional(),
+      municipio: z.string().optional(),
+      uf: z.string().optional(),
+      bairro: z.string().optional(),
+      logradouro: z.string().optional(),
+      numero: z.string().optional(),
+      complemento: z.string().optional(),
+      optanteSimplesNacional: z.boolean().optional(),
+      regimeApuracao: z.string().optional(),
+      codigoTributacaoNacional: z.string().optional(),
+      descricaoTributacao: z.string().optional(),
+      itemNbs: z.string().optional(),
+      descricaoNbs: z.string().optional(),
+      aliquotaSimplesNacional: z.string().optional(),
+      aliquotaIss: z.string().optional(),
+      municipioIncidencia: z.string().optional(),
+      ufIncidencia: z.string().optional(),
+      descricaoServicoPadrao: z.string().optional(),
+      textoLegalFixo: z.string().optional(),
+      ambiente: z.enum(["homologacao", "producao"]).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await db.upsertFiscalSettings({ ...input, updatedBy: ctx.user.id } as any);
+      await audit(ctx.user.id, "UPDATE_FISCAL_SETTINGS", "fiscal_settings", undefined, undefined, {}, ctx.req as any);
+      return { success: true };
     }),
 });
 
@@ -1397,6 +1601,8 @@ export const appRouter = router({
   clinic: clinicRouter,
   anamnesis: anamnesisRouter,
   signatures: signaturesRouter,
+  nfse: nfseRouter,
+  fiscal: fiscalRouter2,
   admin: adminRouter,
 });
 

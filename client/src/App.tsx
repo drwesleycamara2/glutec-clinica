@@ -33,6 +33,8 @@ const Chat = lazy(() => import("./pages/Chat"));
 const Fotos = lazy(() => import("./pages/Fotos"));
 const Permissoes = lazy(() => import("./pages/Permissoes"));
 const Documentos = lazy(() => import("./pages/Documentos"));
+const NfseEmissao = lazy(() => import("./pages/NfseEmissao"));
+const ConfiguracoesFiscais = lazy(() => import("./pages/ConfiguracoesFiscaisPage"));
 
 function PageLoader() {
   return (
@@ -76,6 +78,8 @@ function AppRoutes() {
           <Route path="/fotos" component={Fotos} />
           <Route path="/permissoes" component={Permissoes} />
           <Route path="/documentos" component={Documentos} />
+          <Route path="/nfse" component={NfseEmissao} />
+          <Route path="/configuracoes-fiscais" component={ConfiguracoesFiscais} />
 
           <Route path="/404" component={NotFound} />
           <Route component={NotFound} />

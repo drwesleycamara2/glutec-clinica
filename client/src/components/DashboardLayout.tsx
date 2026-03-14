@@ -100,6 +100,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { icon: Receipt, label: "Orçamentos", path: "/orcamentos", roles: ["admin", "medico", "recepcionista"] },
       { icon: Gauge, label: "Financeiro", path: "/financeiro", roles: ["admin"] },
+      { icon: CreditCard, label: "NFS-e", path: "/nfse", roles: ["admin"] },
     ],
   },
   {
@@ -119,6 +120,7 @@ const menuGroups: MenuGroup[] = [
       { icon: BarChart3, label: "Relatórios", path: "/relatorios", roles: ["admin"] },
       { icon: UserCog, label: "Usuários", path: "/usuarios", roles: ["admin"] },
       { icon: ShieldCheck, label: "Auditoria", path: "/auditoria", roles: ["admin"] },
+      { icon: Settings, label: "Config. Fiscais", path: "/configuracoes-fiscais", roles: ["admin"] },
     ],
   },
 ];

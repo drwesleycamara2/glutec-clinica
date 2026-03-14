@@ -658,3 +658,125 @@ export const audioTranscriptions = mysqlTable("audio_transcriptions", {
 
 export type AudioTranscription = typeof audioTranscriptions.$inferSelect;
 export type InsertAudioTranscription = typeof audioTranscriptions.$inferInsert;
+
+// ─── NFS-e / Notas Fiscais de Serviço Eletrônicas ──────────────────────────
+
+export const nfseEmissions = mysqlTable("nfse_emissions", {
+  id: int("id").autoincrement().primaryKey(),
+  // Dados do Emitente (fixos da clínica)
+  emitenteCnpj: varchar("emitenteCnpj", { length: 18 }).notNull(),
+  emitenteRazaoSocial: varchar("emitenteRazaoSocial", { length: 256 }).notNull(),
+  // Dados do Tomador
+  tomadorDocumento: varchar("tomadorDocumento", { length: 18 }).notNull(), // CPF ou CNPJ
+  tomadorTipoDocumento: mysqlEnum("tomadorTipoDocumento", ["cpf", "cnpj"]).default("cpf").notNull(),
+  tomadorNome: varchar("tomadorNome", { length: 256 }).notNull(),
+  tomadorEmail: varchar("tomadorEmail", { length: 320 }),
+  tomadorTelefone: varchar("tomadorTelefone", { length: 20 }),
+  tomadorCep: varchar("tomadorCep", { length: 9 }),
+  tomadorMunicipio: varchar("tomadorMunicipio", { length: 128 }),
+  tomadorUf: varchar("tomadorUf", { length: 2 }),
+  tomadorBairro: varchar("tomadorBairro", { length: 128 }),
+  tomadorLogradouro: varchar("tomadorLogradouro", { length: 256 }),
+  tomadorNumero: varchar("tomadorNumero", { length: 20 }),
+  tomadorComplemento: varchar("tomadorComplemento", { length: 128 }),
+  // Vínculo com paciente/orçamento
+  patientId: int("patientId"),
+  budgetId: int("budgetId"),
+  appointmentId: int("appointmentId"),
+  // Dados do Serviço
+  codigoTributacaoNacional: varchar("codigoTributacaoNacional", { length: 32 }).default("04.03.03"),
+  descricaoServico: text("descricaoServico").notNull(),
+  complementoDescricao: text("complementoDescricao"), // Forma de pagamento, parcelas, etc.
+  textoLegalFixo: text("textoLegalFixo"), // Texto obrigatório de não retenção
+  itemNbs: varchar("itemNbs", { length: 32 }).default("123012100"),
+  municipioIncidencia: varchar("municipioIncidencia", { length: 128 }).default("Mogi Guaçu"),
+  ufIncidencia: varchar("ufIncidencia", { length: 2 }).default("SP"),
+  // Valores
+  valorServico: int("valorServico").notNull(), // Em centavos
+  valorDeducao: int("valorDeducao").default(0),
+  valorDescontoIncondicionado: int("valorDescontoIncondicionado").default(0),
+  valorDescontoCondicionado: int("valorDescontoCondicionado").default(0),
+  valorLiquido: int("valorLiquido").notNull(), // Em centavos
+  // Tributação Municipal
+  tributacaoIssqn: mysqlEnum("tributacaoIssqn", ["tributavel", "isenta", "imune", "nao_incidente"]).default("tributavel"),
+  regimeEspecialTributacao: varchar("regimeEspecialTributacao", { length: 64 }).default("nenhum"),
+  aliquotaIss: decimal("aliquotaIss", { precision: 5, scale: 2 }),
+  baseCalculoIss: int("baseCalculoIss"), // Em centavos
+  valorIss: int("valorIss"), // Em centavos
+  issRetido: boolean("issRetido").default(false),
+  // Tributação Federal
+  aliquotaSimplesNacional: decimal("aliquotaSimplesNacional", { precision: 5, scale: 2 }).default("18.63"),
+  pisCofinsRetido: boolean("pisCofinsRetido").default(false),
+  irrfRetido: int("irrfRetido").default(0),
+  contribuicaoSocialRetida: int("contribuicaoSocialRetida").default(0),
+  contribuicaoPrevidenciariaRetida: int("contribuicaoPrevidenciariaRetida").default(0),
+  // Forma de Pagamento
+  formaPagamento: mysqlEnum("formaPagamento", ["pix", "dinheiro", "cartao_credito", "cartao_debito", "boleto", "transferencia", "financiamento", "outro"]).default("pix"),
+  detalhesPagamento: text("detalhesPagamento"), // Parcelas, financiadora, etc.
+  // Dados da NFS-e emitida
+  dataCompetencia: date("dataCompetencia").notNull(),
+  numeroNfse: varchar("numeroNfse", { length: 32 }),
+  serieNfse: varchar("serieNfse", { length: 8 }).default("1"),
+  chaveAcesso: varchar("chaveAcesso", { length: 64 }),
+  codigoVerificacao: varchar("codigoVerificacao", { length: 32 }),
+  protocoloAutorizacao: varchar("protocoloAutorizacao", { length: 64 }),
+  linkVisualizacao: text("linkVisualizacao"),
+  pdfUrl: text("pdfUrl"),
+  xmlUrl: text("xmlUrl"),
+  // Controle
+  ambiente: mysqlEnum("ambiente", ["homologacao", "producao"]).default("homologacao").notNull(),
+  status: mysqlEnum("status", ["rascunho", "emitida", "cancelada", "substituida", "erro"]).default("rascunho").notNull(),
+  motivoCancelamento: text("motivoCancelamento"),
+  canceladaEm: timestamp("canceladaEm"),
+  erroMensagem: text("erroMensagem"),
+  // Auditoria
+  emitidaPor: int("emitidaPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type NfseEmission = typeof nfseEmissions.$inferSelect;
+export type InsertNfseEmission = typeof nfseEmissions.$inferInsert;
+
+// ─── Configurações Fiscais ─────────────────────────────────────────────────
+
+export const fiscalSettings = mysqlTable("fiscal_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  // Dados do Emitente
+  cnpj: varchar("cnpj", { length: 18 }).notNull(),
+  razaoSocial: varchar("razaoSocial", { length: 256 }).notNull(),
+  nomeFantasia: varchar("nomeFantasia", { length: 256 }),
+  telefone: varchar("telefone", { length: 20 }),
+  email: varchar("email", { length: 320 }),
+  // Endereço
+  cep: varchar("cep", { length: 9 }),
+  municipio: varchar("municipio", { length: 128 }).default("Mogi Guaçu"),
+  uf: varchar("uf", { length: 2 }).default("SP"),
+  bairro: varchar("bairro", { length: 128 }),
+  logradouro: varchar("logradouro", { length: 256 }),
+  numero: varchar("numero", { length: 20 }),
+  complemento: varchar("complemento", { length: 128 }),
+  // Tributação
+  optanteSimplesNacional: boolean("optanteSimplesNacional").default(true),
+  regimeApuracao: varchar("regimeApuracao", { length: 128 }).default("Simples Nacional"),
+  codigoTributacaoNacional: varchar("codigoTributacaoNacional", { length: 32 }).default("04.03.03"),
+  descricaoTributacao: varchar("descricaoTributacao", { length: 256 }).default("Clínicas, sanatórios, manicômios, casas de saúde, prontos-socorros, ambulatórios e congêneres"),
+  itemNbs: varchar("itemNbs", { length: 32 }).default("123012100"),
+  descricaoNbs: varchar("descricaoNbs", { length: 256 }).default("Serviços de clínica médica"),
+  aliquotaSimplesNacional: decimal("aliquotaSimplesNacional", { precision: 5, scale: 2 }).default("18.63"),
+  aliquotaIss: decimal("aliquotaIss", { precision: 5, scale: 2 }),
+  municipioIncidencia: varchar("municipioIncidencia", { length: 128 }).default("Mogi Guaçu"),
+  ufIncidencia: varchar("ufIncidencia", { length: 2 }).default("SP"),
+  // Descrição padrão do serviço
+  descricaoServicoPadrao: text("descricaoServicoPadrao").default("Procedimentos Médicos Ambulatoriais"),
+  textoLegalFixo: text("textoLegalFixo").default("NÃO SUJEITO A RETENCAO A SEGURIDADE SOCIAL, CONFORME ART-31 DA LEI-8.212/91, OS/INSS-209/99, IN/INSS-DC-100/03 E IN 971/09 ART.120 INCISO III. OS SERVICOS ACIMA DESCRITOS FORAM PRESTADOS PESSOALMENTE PELO(S) SOCIO(S) E SEM O CONCURSO DE EMPREGADOS OU OUTROS CONTRIBUINTES INDIVIDUAIS"),
+  // Ambiente
+  ambiente: mysqlEnum("ambiente", ["homologacao", "producao"]).default("homologacao").notNull(),
+  // Auditoria
+  updatedBy: int("updatedBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type FiscalSettings = typeof fiscalSettings.$inferSelect;
+export type InsertFiscalSettings = typeof fiscalSettings.$inferInsert;
