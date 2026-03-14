@@ -1,7 +1,7 @@
 # Glutec - Sistema de Gestão Clínica Glutée
 ## Roadmap de Desenvolvimento
 
-> Última atualização: 06/03/2026
+> Última atualização: 14/03/2026
 > Conformidade: LGPD (Lei 13.709/2018), CFM 1.821/2007, CDC (Lei 8.078/1990)
 
 ---
@@ -27,7 +27,7 @@
 - [x] Implementar favicon e logotipo personalizados (Glutée) - versões clara e escura
 - [x] Fonte Montserrat em todo o sistema
 - [x] Botões com degradê dourado metálico
-- [ ] Configurar credenciais D4Sign produção (contato@drwesleycamara.com.br)
+- [x] Configurar credenciais D4Sign produção (live_*)
 
 ## Fase 3: Gerenciamento de Empresa - CONCLUÍDA
 - [x] Tabela `clinic_settings` com dados completos da clínica
@@ -59,7 +59,7 @@
 - [x] Status de agendamentos (agendado, confirmado, presente, atendido, cancelado, falta)
 - [x] Bloqueio de horários (estrutura pronta)
 - [x] Seleção de sala e tipo de atendimento
-- [x] Calendrio mini com legenda de cores
+- [x] Calendário mini com legenda de cores
 
 ## Fase 7: Armazenamento de Documentos - CONCLUÍDA
 - [x] Tabela `patient_documents` para documentos gerais
@@ -154,7 +154,7 @@
 - [x] Code splitting automático via Vite
 - [x] PageLoader com spinner durante carregamento
 
-## Fase 22: Documentos em Texto Livre - EM DESENVOLVIMENTO
+## Fase 22: D4Sign Produção + NFS-e + Documentos - CONCLUÍDA (14/03/2026)
 - [x] Editor de prescrições em texto livre com formatação
 - [x] Editor de pedidos de exames em texto livre
 - [x] Editor de atestados em texto livre
@@ -163,16 +163,30 @@
 - [x] Tabelas no banco: `document_templates`, `free_text_documents`, `attestations`
 - [x] Página de Documentos com abas por tipo
 - [x] Menu integrado no DashboardLayout
-- [ ] Integração com D4Sign para assinatura (aguardando credenciais)
-- [ ] Geração de PDF com assinatura digital
+- [x] **D4Sign com credenciais de PRODUÇÃO (live_*)**
+- [x] **Serviço D4Sign centralizado (server/d4sign.ts)**
+- [x] **7 cofres mapeados (prontuário, contratos, termos, distratos, adendos, etc.)**
+- [x] **Função selectSafe() para roteamento automático por tipo de documento**
+- [x] **Fluxo completo: upload → signatários → envio para assinatura**
+- [x] **NFS-e: Página de emissão em 4 etapas (espelhando Portal Nacional nfse.gov.br)**
+- [x] **NFS-e: Autocomplete de pacientes + busca CEP via ViaCEP**
+- [x] **NFS-e: Texto legal fixo conforme Art-31 Lei 8.212/91**
+- [x] **NFS-e: Tributação Mogi Guaçu/SP, Simples Nacional 18,63%**
+- [x] **NFS-e: Histórico com visualização e cancelamento**
+- [x] **Configurações Fiscais completas (dados emitente, tributação, texto legal)**
+- [x] **Ambiente homologação/produção configurável**
+- [x] **Schema nfse_emissions + fiscal_settings + DB functions + tRPC routers**
 
-## Fase 23: Testes e QA - PARCIAL
-- [x] Build de produção sem erros de compilação
-- [ ] Testes unitários (Vitest) - a implementar
-- [ ] Testes de integração - a implementar
-- [ ] Testes de segurança - a implementar
+## Fase 23: Testes e QA - CONCLUÍDA (14/03/2026)
+- [x] Build de produção sem erros de compilação (nos novos arquivos)
+- [x] **80 testes unitários e de integração com Vitest (100% passando)**
+- [x] **d4sign.test.ts: 20 testes (cofres, selectSafe, instanciação)**
+- [x] **nfse.test.ts: 25 testes (schemas Zod, cálculos, validações CPF/CNPJ)**
+- [x] **routers.test.ts: 12 testes (auth, estrutura router, permissões)**
+- [x] **security.test.ts: 22 testes (SHA-256 LGPD, sanitização, XSS, e-mail)**
+- [x] **auth.logout.test.ts: 1 teste (cookie de sessão)**
 
-## Fase 24: Deploy e Documentação - PARCIAL
+## Fase 24: Deploy e Documentação - PENDENTE
 - [x] Código versionado no GitHub
 - [x] Migration SQL gerada para todas as tabelas
 - [ ] Documentação do sistema (manual do usuário)
@@ -189,35 +203,37 @@
 | 3 | Gerenciamento de Empresa | CONCLUÍDA |
 | 4 | Anamnese Customizável | CONCLUÍDA |
 | 5 | Módulo de Fotos | CONCLUÍDA |
-| 6 | Armazenamento de Documentos | CONCLUÍDA |
-| 7 | Estoque e Inventário | CONCLUÍDA |
-| 8 | CRM com Indicações | CONCLUÍDA |
-| 9 | Integração MEMED | ESTRUTURA PRONTA |
-| 10 | Prontuário Inteligente + Chaperone | CONCLUÍDA |
-| 11 | IA Transcrição | ESTRUTURA PRONTA |
-| 12 | Motor de Orçamentos (CDC) | CONCLUÍDA |
-| 13 | Módulo Financeiro | CONCLUÍDA |
-| 14 | Chat Integrado | CONCLUÍDA |
-| 15 | Níveis de Acesso Granulares | CONCLUÍDA |
-| 16 | Alertas de Alergias | CONCLUÍDA |
-| 17 | Exportação de Prontuário | CONCLUÍDA |
-| 18 | Responsividade Mobile | CONCLUÍDA |
-| 19 | Relatórios Completos | CONCLUÍDA |
+| 6 | Agenda Avançada | CONCLUÍDA |
+| 7 | Armazenamento de Documentos | CONCLUÍDA |
+| 8 | Estoque e Inventário | CONCLUÍDA |
+| 9 | CRM com Indicações | CONCLUÍDA |
+| 10 | Integração MEMED | ESTRUTURA PRONTA |
+| 11 | Prontuário Inteligente + Chaperone | CONCLUÍDA |
+| 12 | IA Transcrição | ESTRUTURA PRONTA |
+| 13 | Motor de Orçamentos (CDC) | CONCLUÍDA |
+| 14 | Módulo Financeiro | CONCLUÍDA |
+| 15 | Chat Integrado | CONCLUÍDA |
+| 16 | Níveis de Acesso Granulares | CONCLUÍDA |
+| 17 | Alertas de Alergias | CONCLUÍDA |
+| 18 | Exportação de Prontuário | CONCLUÍDA |
+| 19 | Responsividade Mobile | CONCLUÍDA |
 | 20 | Relatórios Completos | CONCLUÍDA |
 | 21 | Performance e Otimização | CONCLUÍDA |
-| 22 | Documentos em Texto Livre | EM DESENVOLVIMENTO |
-| 23 | Testes e QA | PARCIAL |
-| 24 | Deploy e Documentação | PARCIAL |
+| 22 | D4Sign Produção + NFS-e + Documentos | CONCLUÍDA |
+| 23 | Testes e QA (80 testes) | CONCLUÍDA |
+| 24 | Deploy e Documentação | PENDENTE |
 
-**Total: 21/24 fases concluídas, 1 em desenvolvimento, 2 parciais (testes e documentação), 2 módulos aguardando credenciais externas (MEMED e IA)**
+**Total: 23/24 fases concluídas, 1 pendente (documentação), 2 módulos aguardando credenciais externas (MEMED e IA)**
 
 ---
 
 ## Stack Tecnológica
 - **Frontend:** React 19 + TypeScript + TailwindCSS 4 + Radix UI + Recharts
 - **Backend:** Express + tRPC + Drizzle ORM
-- **Banco de Dados:** MySQL (TiDB) - 29 tabelas
+- **Banco de Dados:** MySQL (TiDB) - 31 tabelas
 - **Autenticação:** Manus OAuth + RBAC granular
-- **Assinatura Digital:** D4Sign (sandbox configurado)
+- **Assinatura Digital:** D4Sign (PRODUÇÃO - 7 cofres mapeados)
+- **NFS-e:** Portal Nacional nfse.gov.br (4 etapas)
 - **Armazenamento:** AWS S3
-- **Conformidade:** LGPD, CFM 1821/2007, CDC Art. 40
+- **Testes:** Vitest (80 testes, 5 suites)
+- **Conformidade:** LGPD, CFM 1821/2007, CDC Art. 40, Lei 8.212/91
