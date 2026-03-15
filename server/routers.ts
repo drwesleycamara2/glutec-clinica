@@ -10,6 +10,7 @@ import { storagePut } from "./storage";
 import { nanoid } from "nanoid";
 import axios from "axios";
 import { createD4SignService, selectSafe, SAFE_MAP } from "./d4sign";
+import { createWhatsAppService } from "./whatsapp";
 
 // ─── Role Middleware ──────────────────────────────────────────────────────────
 
@@ -1069,6 +1070,11 @@ const clinicRouter = router({
       neighborhood: z.string().optional(),
       specialties: z.array(z.string()).optional(),
       openingHours: z.array(z.object({ day: z.string(), open: z.string(), close: z.string() })).optional(),
+      whatsappAccessToken: z.string().optional(),
+      whatsappPhoneNumberId: z.string().optional(),
+      whatsappBusinessAccountId: z.string().optional(),
+      whatsappVerifyToken: z.string().optional(),
+      whatsappWebhookUrl: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       await db.upsertClinicSettings(input as any);
@@ -1572,6 +1578,52 @@ const adminRouter = router({
     }),
 });
 
+// ─── WhatsApp Router ──────────────────────────────────────────────────────────
+
+const whatsappRouter = router({
+  getConfig: adminProcedure.query(async () => {
+    const clinic = await db.getClinicSettings();
+    return {
+      accessToken: clinic?.whatsappAccessToken,
+      phoneNumberId: clinic?.whatsappPhoneNumberId,
+      businessAccountId: clinic?.whatsappBusinessAccountId,
+      verifyToken: clinic?.whatsappVerifyToken,
+      webhookUrl: clinic?.whatsappWebhookUrl,
+      isConfigured: !!(clinic?.whatsappAccessToken && clinic?.whatsappPhoneNumberId),
+    };
+  }),
+
+  sendMessage: protectedProcedure
+    .input(z.object({
+      to: z.string(),
+      text: z.string(),
+      templateName: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const whatsapp = await createWhatsAppService();
+      if (!whatsapp) {
+        // Modo simulado quando WhatsApp não está configurado
+        console.log(`[SIMULADO WHATSAPP] Para: ${input.to}, Mensagem: ${input.text}`);
+        return { success: true, simulated: true, message: "Modo simulado: credenciais WhatsApp ausentes." };
+      }
+
+      try {
+        if (input.templateName) {
+          // Envio via template (ex: para iniciar conversa)
+          await whatsapp.sendTemplateMessage(input.to, input.templateName);
+        } else {
+          // Envio de texto livre
+          await whatsapp.sendTextMessage(input.to, input.text);
+        }
+        
+        await audit(ctx.user.id, "SEND_WHATSAPP", "whatsapp", undefined, undefined, { to: input.to, text: input.text }, ctx.req as any);
+        return { success: true };
+      } catch (err: any) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Erro ao enviar WhatsApp: ${err.message}` });
+      }
+    }),
+});
+
 // ─── App Router ───────────────────────────────────────────────────────────────
 
 export const appRouter = router({
@@ -1604,6 +1656,7 @@ export const appRouter = router({
   nfse: nfseRouter,
   fiscal: fiscalRouter2,
   admin: adminRouter,
+  whatsapp: whatsappRouter,
 });
 
 export type AppRouter = typeof appRouter;

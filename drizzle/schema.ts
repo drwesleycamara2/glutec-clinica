@@ -100,6 +100,12 @@ export const clinicSettings = mysqlTable("clinic_settings", {
   nfeConfig: json("nfeConfig"), // NF-e config data
   d4signSafeKeyNfe: varchar("d4signSafeKeyNfe", { length: 256 }), // Cofre para Notas Fiscais (CNPJ)
   d4signSafeKeyClinical: varchar("d4signSafeKeyClinical", { length: 256 }), // Cofre para Prontuários (Profissional)
+  // WhatsApp Meta API (Fase 25)
+  whatsappAccessToken: text("whatsappAccessToken"),
+  whatsappPhoneNumberId: varchar("whatsappPhoneNumberId", { length: 64 }),
+  whatsappBusinessAccountId: varchar("whatsappBusinessAccountId", { length: 64 }),
+  whatsappVerifyToken: varchar("whatsappVerifyToken", { length: 128 }),
+  whatsappWebhookUrl: text("whatsappWebhookUrl"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

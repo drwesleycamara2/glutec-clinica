@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { MessageCircle, Send, CheckCircle2, AlertCircle, Clock } from "lucide-react";
+import { trpc } from "@/lib/trpc";
 
 interface WhatsAppMessage {
   id: number;
@@ -32,32 +33,56 @@ export function WhatsAppIntegration() {
     customMessage: "",
   });
 
-  const handleSendReminder = () => {
+  const sendMessageMutation = trpc.whatsapp.sendMessage.useMutation({
+    onSuccess: (data) => {
+      if (data.simulated) {
+        toast.info("Simulação: " + data.message);
+      } else {
+        toast.success("Mensagem enviada com sucesso!");
+      }
+    },
+    onError: (error) => {
+      toast.error("Erro ao enviar mensagem: " + error.message);
+    },
+  });
+
+  const handleSendReminder = async () => {
     if (!reminderForm.patientPhone || !reminderForm.appointmentDate) {
       toast.error("Preencha todos os campos obrigatórios");
       return;
     }
 
-    const message: WhatsAppMessage = {
-      id: messages.length + 1,
-      patientPhone: reminderForm.patientPhone,
-      patientName: reminderForm.patientName,
-      appointmentDate: reminderForm.appointmentDate,
-      messageType: "lembrete",
-      status: "enviado",
-      sentAt: new Date().toLocaleString("pt-BR"),
-    };
+    const messageText = reminderForm.customMessage || 
+      `Olá ${reminderForm.patientName}, confirmamos seu agendamento para o dia ${new Date(reminderForm.appointmentDate).toLocaleDateString("pt-BR")} às ${reminderForm.appointmentTime}.`;
 
-    setMessages([...messages, message]);
-    setReminderForm({
-      patientPhone: "",
-      patientName: "",
-      appointmentDate: "",
-      appointmentTime: "",
-      customMessage: "",
-    });
-    setShowSendReminder(false);
-    toast.success("Lembrete enviado via WhatsApp!");
+    try {
+      await sendMessageMutation.mutateAsync({
+        to: reminderForm.patientPhone,
+        text: messageText,
+      });
+
+      const message: WhatsAppMessage = {
+        id: messages.length + 1,
+        patientPhone: reminderForm.patientPhone,
+        patientName: reminderForm.patientName,
+        appointmentDate: reminderForm.appointmentDate,
+        messageType: "lembrete",
+        status: "enviado",
+        sentAt: new Date().toLocaleString("pt-BR"),
+      };
+
+      setMessages([...messages, message]);
+      setReminderForm({
+        patientPhone: "",
+        patientName: "",
+        appointmentDate: "",
+        appointmentTime: "",
+        customMessage: "",
+      });
+      setShowSendReminder(false);
+    } catch (error) {
+      // Erro já tratado no onError da mutation
+    }
   };
 
   const handleSendBulkReminders = () => {
