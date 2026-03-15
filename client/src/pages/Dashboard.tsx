@@ -44,6 +44,28 @@ function getGreeting() {
   return "Boa noite";
 }
 
+function formatUserGreeting(user: any) {
+  if (!user?.name) return "Usuário";
+  
+  const nameParts = user.name.trim().split(/\s+/);
+  const firstName = nameParts[0];
+  const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
+  
+  // Determinar o título baseado no cargo/profissão
+  let title = "";
+  const role = (user?.role ?? "").toLowerCase();
+  const profession = (user?.profession ?? "").toLowerCase();
+  
+  // Se for o Dr. Wésley ou se a profissão indicar médico
+  if (role.includes("doctor") || role.includes("admin") || profession.includes("médico") || profession.includes("médica") || user.name.includes("Wésley")) {
+    // Verificar se é mulher (doutora)
+    const isFemale = profession.includes("médica") || profession.includes("doutora");
+    title = isFemale ? "Dra." : "Dr.";
+  }
+  
+  return `${title} ${firstName} ${lastName}`.trim().replace(/\s+/g, " ");
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -126,7 +148,7 @@ export default function Dashboard() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-light text-foreground tracking-tight">
-            {getGreeting()}, <span className="font-semibold text-primary">{user?.name?.split(" ")[0] ?? "Usuário"}</span>
+            {getGreeting()}, <span className="font-semibold text-primary">{formatUserGreeting(user)}</span>
           </h1>
           <p className="text-sm text-muted-foreground/60 font-medium mt-1 uppercase tracking-widest">
             {today.toLocaleDateString("pt-BR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
