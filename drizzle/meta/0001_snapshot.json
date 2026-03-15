@@ -1,11 +1,11 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "c3dc0b62-dac8-40af-a39b-5c400c5095c9",
-  "prevId": "b064c871-3da0-467e-8e2a-6b0dd9fbacac",
+  "id": "9e79d649-0cad-4b54-a2d2-c1887b3c43d5",
+  "prevId": "3e14e995-6a80-4e57-bc0a-894315bcc7fb",
   "tables": {
-    "appointments": {
-      "name": "appointments",
+    "audio_transcriptions": {
+      "name": "audio_transcriptions",
       "columns": {
         "id": {
           "name": "id",
@@ -14,71 +14,56 @@
           "notNull": true,
           "autoincrement": true
         },
-        "patientId": {
-          "name": "patientId",
+        "medicalRecordId": {
+          "name": "medicalRecordId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "userId": {
+          "name": "userId",
           "type": "int",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "doctorId": {
-          "name": "doctorId",
-          "type": "int",
+        "audioUrl": {
+          "name": "audioUrl",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "scheduledAt": {
-          "name": "scheduledAt",
-          "type": "datetime",
+        "audioKey": {
+          "name": "audioKey",
+          "type": "varchar(256)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "durationMinutes": {
-          "name": "durationMinutes",
-          "type": "int",
+        "transcription": {
+          "name": "transcription",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "language": {
+          "name": "language",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false,
-          "default": 30
-        },
-        "type": {
-          "name": "type",
-          "type": "enum('consulta','retorno','exame','procedimento','teleconsulta')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'consulta'"
+          "default": "'pt'"
         },
         "status": {
           "name": "status",
-          "type": "enum('agendada','confirmada','em_atendimento','concluida','cancelada','falta')",
+          "type": "enum('pending','completed','failed')",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'agendada'"
-        },
-        "notes": {
-          "name": "notes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "cancellationReason": {
-          "name": "cancellationReason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdBy": {
-          "name": "createdBy",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
+          "default": "'pending'"
         },
         "createdAt": {
           "name": "createdAt",
@@ -101,8 +86,8 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {
-        "appointments_id": {
-          "name": "appointments_id",
+        "audio_transcriptions_id": {
+          "name": "audio_transcriptions_id",
           "columns": [
             "id"
           ]
@@ -111,8 +96,68 @@
       "uniqueConstraints": {},
       "checkConstraint": {}
     },
-    "audit_logs": {
-      "name": "audit_logs",
+    "icd10_codes": {
+      "name": "icd10_codes",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "code": {
+          "name": "code",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "descriptionAbbrev": {
+          "name": "descriptionAbbrev",
+          "type": "varchar(256)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "icd10_codes_id": {
+          "name": "icd10_codes_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {
+        "icd10_codes_code_unique": {
+          "name": "icd10_codes_code_unique",
+          "columns": [
+            "code"
+          ]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "user_favorite_icds": {
+      "name": "user_favorite_icds",
       "columns": {
         "id": {
           "name": "id",
@@ -128,53 +173,11 @@
           "notNull": true,
           "autoincrement": false
         },
-        "action": {
-          "name": "action",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "resourceType": {
-          "name": "resourceType",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "resourceId": {
-          "name": "resourceId",
+        "icd10CodeId": {
+          "name": "icd10CodeId",
           "type": "int",
           "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "patientId": {
-          "name": "patientId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "details": {
-          "name": "details",
-          "type": "json",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "ipAddress": {
-          "name": "ipAddress",
-          "type": "varchar(45)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "userAgent": {
-          "name": "userAgent",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "createdAt": {
@@ -189,834 +192,8 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {
-        "audit_logs_id": {
-          "name": "audit_logs_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraint": {}
-    },
-    "document_signatures": {
-      "name": "document_signatures",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "resourceType": {
-          "name": "resourceType",
-          "type": "enum('prescription','exam_request','medical_record')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "resourceId": {
-          "name": "resourceId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "doctorId": {
-          "name": "doctorId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "d4signDocumentKey": {
-          "name": "d4signDocumentKey",
-          "type": "varchar(128)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "d4signSafeKey": {
-          "name": "d4signSafeKey",
-          "type": "varchar(128)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "status": {
-          "name": "status",
-          "type": "enum('pendente','enviado','assinado','cancelado','erro')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'pendente'"
-        },
-        "signatureType": {
-          "name": "signatureType",
-          "type": "enum('eletronica','icp_brasil_a1','icp_brasil_a3')",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": "'eletronica'"
-        },
-        "signedAt": {
-          "name": "signedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "signedDocumentUrl": {
-          "name": "signedDocumentUrl",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "webhookData": {
-          "name": "webhookData",
-          "type": "json",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "onUpdate": true,
-          "default": "(now())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "document_signatures_id": {
-          "name": "document_signatures_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraint": {}
-    },
-    "exam_requests": {
-      "name": "exam_requests",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "patientId": {
-          "name": "patientId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "doctorId": {
-          "name": "doctorId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "medicalRecordId": {
-          "name": "medicalRecordId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "appointmentId": {
-          "name": "appointmentId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "specialty": {
-          "name": "specialty",
-          "type": "varchar(128)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "exams": {
-          "name": "exams",
-          "type": "json",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "clinicalIndication": {
-          "name": "clinicalIndication",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "observations": {
-          "name": "observations",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "pdfUrl": {
-          "name": "pdfUrl",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "pdfKey": {
-          "name": "pdfKey",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "d4signDocumentKey": {
-          "name": "d4signDocumentKey",
-          "type": "varchar(128)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "d4signStatus": {
-          "name": "d4signStatus",
-          "type": "enum('pendente','enviado','assinado','cancelado')",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": "'pendente'"
-        },
-        "signedAt": {
-          "name": "signedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "signedPdfUrl": {
-          "name": "signedPdfUrl",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "onUpdate": true,
-          "default": "(now())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "exam_requests_id": {
-          "name": "exam_requests_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraint": {}
-    },
-    "medical_records": {
-      "name": "medical_records",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "patientId": {
-          "name": "patientId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "appointmentId": {
-          "name": "appointmentId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "doctorId": {
-          "name": "doctorId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "chiefComplaint": {
-          "name": "chiefComplaint",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "historyOfPresentIllness": {
-          "name": "historyOfPresentIllness",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "pastMedicalHistory": {
-          "name": "pastMedicalHistory",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "familyHistory": {
-          "name": "familyHistory",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "socialHistory": {
-          "name": "socialHistory",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "currentMedications": {
-          "name": "currentMedications",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "allergies": {
-          "name": "allergies",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "physicalExam": {
-          "name": "physicalExam",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "vitalSigns": {
-          "name": "vitalSigns",
-          "type": "json",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "diagnosis": {
-          "name": "diagnosis",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "icdCode": {
-          "name": "icdCode",
-          "type": "varchar(16)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "clinicalEvolution": {
-          "name": "clinicalEvolution",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "treatmentPlan": {
-          "name": "treatmentPlan",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "signedAt": {
-          "name": "signedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "signedByDoctorId": {
-          "name": "signedByDoctorId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "onUpdate": true,
-          "default": "(now())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "medical_records_id": {
-          "name": "medical_records_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraint": {}
-    },
-    "patients": {
-      "name": "patients",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "fullName": {
-          "name": "fullName",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "birthDate": {
-          "name": "birthDate",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "gender": {
-          "name": "gender",
-          "type": "enum('masculino','feminino','outro','nao_informado')",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": "'nao_informado'"
-        },
-        "cpf": {
-          "name": "cpf",
-          "type": "varchar(14)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "rg": {
-          "name": "rg",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "phone": {
-          "name": "phone",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "email": {
-          "name": "email",
-          "type": "varchar(320)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "address": {
-          "name": "address",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "city": {
-          "name": "city",
-          "type": "varchar(128)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "state": {
-          "name": "state",
-          "type": "varchar(2)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "zipCode": {
-          "name": "zipCode",
-          "type": "varchar(9)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "insuranceName": {
-          "name": "insuranceName",
-          "type": "varchar(128)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "insuranceNumber": {
-          "name": "insuranceNumber",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "photoUrl": {
-          "name": "photoUrl",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "photoKey": {
-          "name": "photoKey",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "bloodType": {
-          "name": "bloodType",
-          "type": "enum('A+','A-','B+','B-','AB+','AB-','O+','O-','desconhecido')",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": "'desconhecido'"
-        },
-        "allergies": {
-          "name": "allergies",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "chronicConditions": {
-          "name": "chronicConditions",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "emergencyContactName": {
-          "name": "emergencyContactName",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "emergencyContactPhone": {
-          "name": "emergencyContactPhone",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "active": {
-          "name": "active",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": true
-        },
-        "createdBy": {
-          "name": "createdBy",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "onUpdate": true,
-          "default": "(now())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "patients_id": {
-          "name": "patients_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {
-        "patients_cpf_unique": {
-          "name": "patients_cpf_unique",
-          "columns": [
-            "cpf"
-          ]
-        }
-      },
-      "checkConstraint": {}
-    },
-    "prescriptions": {
-      "name": "prescriptions",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "patientId": {
-          "name": "patientId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "doctorId": {
-          "name": "doctorId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "medicalRecordId": {
-          "name": "medicalRecordId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "appointmentId": {
-          "name": "appointmentId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "type": {
-          "name": "type",
-          "type": "enum('simples','especial_azul','especial_amarelo','antimicrobiano')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'simples'"
-        },
-        "items": {
-          "name": "items",
-          "type": "json",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "observations": {
-          "name": "observations",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "pdfUrl": {
-          "name": "pdfUrl",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "pdfKey": {
-          "name": "pdfKey",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "d4signDocumentKey": {
-          "name": "d4signDocumentKey",
-          "type": "varchar(128)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "d4signStatus": {
-          "name": "d4signStatus",
-          "type": "enum('pendente','enviado','assinado','cancelado')",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": "'pendente'"
-        },
-        "signedAt": {
-          "name": "signedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "signedPdfUrl": {
-          "name": "signedPdfUrl",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "onUpdate": true,
-          "default": "(now())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "prescriptions_id": {
-          "name": "prescriptions_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraint": {}
-    },
-    "schedule_blocks": {
-      "name": "schedule_blocks",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "doctorId": {
-          "name": "doctorId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "startAt": {
-          "name": "startAt",
-          "type": "datetime",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "endAt": {
-          "name": "endAt",
-          "type": "datetime",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "reason": {
-          "name": "reason",
-          "type": "varchar(256)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdBy": {
-          "name": "createdBy",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "schedule_blocks_id": {
-          "name": "schedule_blocks_id",
+        "user_favorite_icds_id": {
+          "name": "user_favorite_icds_id",
           "columns": [
             "id"
           ]
@@ -1065,40 +242,11 @@
         },
         "role": {
           "name": "role",
-          "type": "enum('admin','medico','recepcionista','enfermeiro','user')",
+          "type": "enum('user','admin')",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
           "default": "'user'"
-        },
-        "specialty": {
-          "name": "specialty",
-          "type": "varchar(128)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "crm": {
-          "name": "crm",
-          "type": "varchar(32)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "phone": {
-          "name": "phone",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "active": {
-          "name": "active",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": true
         },
         "createdAt": {
           "name": "createdAt",
