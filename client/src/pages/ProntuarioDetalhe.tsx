@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { AllergyAlert } from "@/components/AllergyAlert";
 import { ExportProntuarioButton } from "@/components/ExportProntuario";
+import { EvolucaoClinicaTab } from "@/components/EvolucaoClinicaTab";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    ANAMNESE TAB
@@ -647,6 +648,9 @@ export default function ProntuarioDetalhe() {
           <TabsTrigger value="anamnese" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
             <ClipboardList className="h-3.5 w-3.5" />Anamnese
           </TabsTrigger>
+          <TabsTrigger value="evolucao" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+            <Activity className="h-3.5 w-3.5" />Evolução
+          </TabsTrigger>
           <TabsTrigger value="atestados" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
             <FileText className="h-3.5 w-3.5" />Atestados / Docs
           </TabsTrigger>
@@ -665,6 +669,7 @@ export default function ProntuarioDetalhe() {
         </TabsList>
 
         <TabsContent value="anamnese" className="mt-4"><AnamneseTab patientId={patientId} /></TabsContent>
+        <TabsContent value="evolucao" className="mt-4"><EvolucaoClinicaTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
         <TabsContent value="atestados" className="mt-4"><AtestadosTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
         <TabsContent value="prescricoes" className="mt-4"><PrescricoesTab patientId={patientId} /></TabsContent>
         <TabsContent value="anexos" className="mt-4"><AnexosTab patientId={patientId} /></TabsContent>
