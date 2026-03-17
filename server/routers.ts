@@ -82,6 +82,52 @@ export const appRouter = router({
 
   clinicalEvolution: clinicalEvolutionRouter,
 
+  admin: router({
+    getUsers: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+      return db.getAllUsers();
+    }),
+    inviteUser: protectedProcedure
+      .input(z.object({
+        email: z.string().email(),
+        name: z.string(),
+        role: z.enum(['user', 'admin']),
+        permissions: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+        await db.inviteUser(input);
+        return { success: true };
+      }),
+    updateUserStatus: protectedProcedure
+      .input(z.object({
+        userId: z.number(),
+        status: z.enum(['active', 'inactive', 'pending_password_change']),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+        await db.updateUserStatus(input.userId, input.status);
+        return { success: true };
+      }),
+    updateUserPermissions: protectedProcedure
+      .input(z.object({
+        userId: z.number(),
+        permissions: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+        await db.updateUserPermissions(input.userId, input.permissions);
+        return { success: true };
+      }),
+    deleteUser: protectedProcedure
+      .input(z.object({ userId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+        await db.deleteUser(input.userId);
+        return { success: true };
+      }),
+  }),
+
   // TODO: add feature routers here, e.g.
   // todo: router({
   //   list: protectedProcedure.query(({ ctx }) =>

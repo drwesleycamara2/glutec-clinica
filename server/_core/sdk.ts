@@ -292,8 +292,16 @@ class SDKServer {
       throw ForbiddenError("User not found");
     }
 
+    // Access Control: Check if user is active
+    const SUPER_ADMIN_EMAIL = "contato@drwesleycamara.com.br";
+    if (user.email !== SUPER_ADMIN_EMAIL && user.status === 'inactive') {
+      throw ForbiddenError("Seu acesso foi revogado pelo administrador.");
+    }
+
+    // Sync user data
     await db.upsertUser({
       openId: user.openId,
+      email: user.email,
       lastSignedIn: signedInAt,
     });
 

@@ -30,6 +30,18 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   }
 
   try {
+    const db = await getDb();
+    if (!db) return;
+
+    // Check if there's an invited user with this email
+    if (user.email) {
+      const invitedUser = await db.select().from(users).where(eq(users.email, user.email)).limit(1);
+      if (invitedUser.length > 0 && invitedUser[0].openId.startsWith('invited_')) {
+        // Sync the invited user with the real openId
+        await db.update(users).set({ openId: user.openId }).where(eq(users.id, invitedUser[0].id));
+      }
+    }
+
     const values: InsertUser = {
       openId: user.openId,
     };
@@ -52,12 +64,19 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       values.lastSignedIn = user.lastSignedIn;
       updateSet.lastSignedIn = user.lastSignedIn;
     }
-    if (user.role !== undefined) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
+    // Super Admin Enforcement: Only the specific email can be admin
+    const SUPER_ADMIN_EMAIL = "contato@drwesleycamara.com.br";
+    
+    if (user.email === SUPER_ADMIN_EMAIL) {
       values.role = 'admin';
       updateSet.role = 'admin';
+    } else if (user.role !== undefined) {
+      // For other users, respect the role passed but ensure they aren't promoted to admin unless explicitly set
+      values.role = user.role;
+      updateSet.role = user.role;
+    } else {
+      values.role = 'user';
+      updateSet.role = 'user';
     }
 
     if (!values.lastSignedIn) {
@@ -174,4 +193,51 @@ export async function getAudioTranscriptionsByRecord(medicalRecordId: number) {
   return db.select().from(audioTranscriptions).where(eq(audioTranscriptions.medicalRecordId, medicalRecordId));
 }
 
-// TODO: add feature queries here as your schema grows.
+// ─── User Management ─────────────────────────────────────────────────────────
+
+export async function getAllUsers() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(users);
+}
+
+export async function updateUserStatus(userId: number, status: 'active' | 'inactive' | 'pending_password_change') {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ status }).where(eq(users.id, userId));
+}
+
+export async function updateUserPermissions(userId: number, permissions: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ permissions }).where(eq(users.id, userId));
+}
+
+export async function deleteUser(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(users).where(eq(users.id, userId));
+}
+
+export async function inviteUser(data: { email: string, name: string, role: 'user' | 'admin', permissions: string }) {
+  const db = await getDb();
+  if (!db) return;
+  
+  // Create a placeholder user that will be synced on first login
+  // Since we use OAuth, we don't know the openId yet, but we can pre-authorize the email
+  // We'll use a special flag or just check the email during upsert
+  await db.insert(users).values({
+    email: data.email,
+    name: data.name,
+    role: data.role,
+    permissions: data.permissions,
+    status: 'active',
+    openId: `invited_${data.email}`, // Temporary openId
+  }).onDuplicateKeyUpdate({
+    set: {
+      role: data.role,
+      permissions: data.permissions,
+      status: 'active'
+    }
+  });
+}
