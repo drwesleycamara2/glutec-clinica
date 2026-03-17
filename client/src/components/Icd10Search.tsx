@@ -25,7 +25,17 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
     { enabled: query.length > 0 }
   );
 
-  const { data: favorites } = trpc.icd10.getFavorites.useQuery();
+  const { data: serverFavorites } = trpc.icd10.getFavorites.useQuery();
+  const defaultFavorites = [
+    { id: -1, code: "M79", description: "Outros transtornos dos tecidos moles, não classificados em outra parte" },
+    { id: -2, code: "M62.5", description: "Atrofia e fadiga muscular, não classificadas em outra parte" },
+    { id: -3, code: "M21", description: "Outras deformidades adquiridas dos membros" },
+    { id: -4, code: "E88.1", description: "Lipodistrofia, não classificada em outra parte" },
+    { id: -5, code: "R23.4", description: "Alterações da textura da pele" },
+    { id: -6, code: "M62.8", description: "Outros transtornos musculares especificados" },
+    { id: -7, code: "Z76.0", description: "Emissão de prescrição de repetição" },
+  ];
+  const favorites = serverFavorites && serverFavorites.length > 0 ? serverFavorites : defaultFavorites;
   const { mutate: toggleFavorite } = trpc.icd10.addFavorite.useMutation();
   const { mutate: removeFavorite } = trpc.icd10.removeFavorite.useMutation();
 
@@ -185,7 +195,7 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
                     <p className="text-xs text-muted-foreground mt-0.5">{item.descriptionAbbrev}</p>
                   )}
                 </div>
-                {showFavorites && (
+                {showFavorites && item.id > 0 && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -203,6 +213,12 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
                       fill={favorites?.some((f) => f.id === item.id) ? "currentColor" : "none"}
                     />
                   </button>
+                )}
+                {showFavorites && item.id < 0 && (
+                  <Star
+                    className="h-4 w-4 mt-1 text-amber-500"
+                    fill="currentColor"
+                  />
                 )}
               </div>
             </button>
