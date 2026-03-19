@@ -1,269 +1,200 @@
-# Resumo de Implementação - Evolução Clínica e Assinatura Digital
+# Resumo de Implementações - Glutec Clínica
 
-## Data de Implementação
-15 de março de 2026
+## Data: 19 de Março de 2026
 
-## Objetivo
-Integrar a aba de Evolução Clínica ao prontuário existente e implementar assinatura digital do profissional no sistema Glutec Clínica.
+### ✅ Implementado
 
----
+#### 1. **Todas as Rotas tRPC Necessárias**
 
-## 1. Integração da Aba de Evolução Clínica
+**Módulos Implementados:**
 
-### 1.1 Novo Componente Frontend
-**Arquivo:** `client/src/components/EvolucaoClinicaTab.tsx`
+- **Admin**: Dashboard stats, gestão de usuários, auditoria, permissões
+- **Patients**: CRUD de pacientes com busca inteligente
+- **Appointments**: Agendamentos com suporte a retroativo
+- **Prescriptions**: Prescrições e templates
+- **Exams**: Pedidos de exames e templates
+- **Financial**: Transações financeiras e resumos
+- **Catalog**: Catálogo de procedimentos, áreas, preços, planos de pagamento
+- **Inventory**: Produtos, movimentações, estoque baixo
+- **Photos**: Upload, organização em pastas, comparação
+- **Chat**: Mensagens em canais
+- **Clinic**: Configurações da clínica
+- **Fiscal**: Configurações fiscais
+- **NFSE**: Emissão de NF-se
+- **Budgets**: Orçamentos
+- **CRM**: Indicações
+- **Signatures**: Assinaturas D4Sign
+- **Templates**: Templates de prontuários
+- **Medical Records**: Prontuários
+- **WhatsApp**: Integração WhatsApp
+- **AI**: Chat com IA
 
-Componente React completo que fornece:
-- **Formulário de Nova Evolução:**
-  - Busca e seleção de CID-10
-  - Gravação e transcrição de áudio
-  - Editor de notas clínicas
-  - Campos de data e profissional
-  - Resumo da evolução antes de salvar
+#### 2. **Funcionalidades Especiais Solicitadas**
 
-- **Histórico de Evoluções:**
-  - Lista de todas as evoluções do paciente
-  - Status de assinatura (Pendente/Assinado)
-  - Exibição de notas clínicas e transcrição
-  - Informações de data, profissional e assinante
-  - Ações: Assinar Digitalmente, Exportar PDF, Deletar
+##### A. **Atendimento Retroativo**
+- ✅ Criação de agendamentos em datas passadas
+- ✅ Justificativa obrigatória (mínimo 10 caracteres)
+- ✅ Registro automático da data de criação vs data do atendimento
+- ✅ Log de auditoria completo
+- ✅ Aparece em relatórios e impressões como "Retroativo"
 
-- **Diálogo de Assinatura Digital:**
-  - Confirmação de assinatura com senha
-  - Aviso de irreversibilidade
-  - Registro em log de auditoria
+**Rotas:**
+```
+POST /api/trpc/retroactiveAppointments.create
+GET /api/trpc/retroactiveAppointments.list
+```
 
-### 1.2 Integração ao Prontuário Principal
-**Arquivo:** `client/src/pages/ProntuarioDetalhe.tsx`
+##### B. **Galeria de Fotos Avançada**
+- ✅ Organização em pastas nomeadas
+- ✅ Comparação de até 4 imagens lado a lado
+- ✅ Comparação de fotos de pastas diferentes
+- ✅ Datas e descrições para cada foto
+- ✅ Thumbnails automáticas
 
-Alterações realizadas:
-- Importação do novo componente `EvolucaoClinicaTab`
-- Adição da aba "Evolução" ao menu de abas do prontuário
-- Posicionamento estratégico entre Anamnese e Atestados
-- Ícone representativo (Activity icon do Lucide)
+**Rotas:**
+```
+POST /api/trpc/photoGallery.createFolder
+GET /api/trpc/photoGallery.getFolders
+PUT /api/trpc/photoGallery.updateFolder
+DELETE /api/trpc/photoGallery.deleteFolder
+POST /api/trpc/photoGallery.uploadToFolder
+GET /api/trpc/photoGallery.getByFolder
+POST /api/trpc/photoGallery.createComparison
+```
 
----
+##### C. **Busca Inteligente de Pacientes**
+- ✅ Autocomplete em tempo real conforme digita
+- ✅ Busca por nome, CPF, email
+- ✅ Ordenação inteligente (exatos primeiro)
+- ✅ Limite configurável de resultados
 
-## 2. Implementação de Assinatura Digital
+**Rotas:**
+```
+GET /api/trpc/patientSearch.autocomplete?query=...&limit=20
+```
 
-### 2.1 Esquema de Banco de Dados
-**Arquivo:** `drizzle/schema-clinical-evolution.ts`
+##### D. **Permissões Completamente Customizáveis**
+- ✅ Sistema de matriz de permissões por usuário e módulo
+- ✅ Ações: Create, Read, Update, Delete
+- ✅ Verificação de permissão antes de cada ação
+- ✅ Cópia de permissões entre usuários
+- ✅ Auditoria completa de ações
 
-Duas tabelas principais:
+**Rotas:**
+```
+GET /api/trpc/permissions.checkPermission
+GET /api/trpc/permissions.getUserMatrix
+POST /api/trpc/permissions.setModulePermissions
+POST /api/trpc/permissions.copyPermissions
+GET /api/trpc/permissions.getUserAuditLog
+GET /api/trpc/permissions.getResourceAuditLog
+```
 
-#### Tabela: `clinical_evolutions`
-Armazena as evoluções clínicas com campos:
-- Informações clínicas (CID-10, notas, transcrição de áudio)
-- Status do documento (rascunho, finalizado, assinado, cancelado)
-- Integração D4Sign (chave do documento, status, URL do PDF assinado)
-- Rastreamento de assinatura (data, médico, hash)
-- Auditoria (criação, atualização, usuário responsável)
+### 📁 Arquivos Criados/Modificados
 
-#### Tabela: `signature_audit_log`
-Registro completo de todas as assinaturas:
-- Identificação do médico (ID, nome, CRM)
-- Tipo de ação (signed, unsigned, rejected, verified)
-- Método de assinatura (eletrônica, ICP-Brasil A1, ICP-Brasil A3)
-- Integração D4Sign (chaves, status)
-- Informações de auditoria (IP, User-Agent, timestamp)
+1. **server/routers.ts** - Arquivo principal com todas as rotas tRPC
+2. **server/db_complete.ts** - Funções de banco de dados para todas as rotas
+3. **server/features_special.ts** - Implementação das funcionalidades especiais
+4. **server/routers_complete.ts** - Backup/referência das rotas
 
-### 2.2 Funções de Banco de Dados
-**Arquivo:** `server/db_clinical_evolution.ts`
+### 🗄️ Tabelas de Banco de Dados Necessárias
 
-Operações implementadas:
+As seguintes tabelas já existem ou precisam ser criadas:
 
-**Gerenciamento de Evoluções:**
-- `createClinicalEvolution()` - Criar nova evolução
-- `getClinicalEvolutionById()` - Buscar por ID
-- `getClinicalEvolutionsByPatient()` - Listar por paciente
-- `updateClinicalEvolution()` - Atualizar evolução
-- `deleteClinicalEvolution()` - Deletar evolução
+```sql
+-- Existentes:
+- users
+- patients
+- appointments
+- prescriptions
+- exam_requests
+- medical_records
+- audit_logs
+- permissions
+- chat_messages
+- clinic_settings
+- inventory_products
+- inventory_movements
+- budget_procedure_catalog
+- budget_procedure_areas
+- budget_procedure_pricing
+- budget_payment_plans
+- budgets
+- crm_indications
+- financial_transactions
+- patient_photos
+- document_signatures
+- medical_record_templates
+- nfse (fiscal_nfse)
 
-**Gerenciamento de Assinatura:**
-- `signClinicalEvolution()` - Assinar evolução digitalmente
-- `getSignatureAuditLog()` - Histórico de assinaturas por evolução
-- `getSignatureAuditLogByDoctor()` - Histórico por médico
-- `verifySignature()` - Verificar autenticidade da assinatura
-- `getClinicalEvolutionsByDoctor()` - Evoluções por médico
-- `getPendingSignatures()` - Assinaturas pendentes
+-- Novas para funcionalidades especiais:
+- photo_folders (organização de fotos)
+- photo_comparisons (comparações de fotos)
+```
 
-### 2.3 Rotas TRPC (API Backend)
-**Arquivo:** `server/routers/clinical-evolution.ts`
+### 🔐 Segurança e Auditoria
 
-Endpoints implementados:
+- ✅ Verificação de permissões em cada rota
+- ✅ Logs de auditoria automáticos
+- ✅ Histórico de ações por usuário
+- ✅ Histórico de ações por recurso
+- ✅ Rastreamento de alterações retroativas
 
-| Endpoint | Método | Descrição |
-|----------|--------|-----------|
-| `clinicalEvolution.create` | POST | Criar nova evolução clínica |
-| `clinicalEvolution.getById` | GET | Buscar evolução por ID |
-| `clinicalEvolution.getByPatient` | GET | Listar evoluções do paciente |
-| `clinicalEvolution.update` | PUT | Atualizar evolução |
-| `clinicalEvolution.delete` | DELETE | Deletar evolução |
-| `clinicalEvolution.sign` | POST | Assinar digitalmente |
-| `clinicalEvolution.getSignatureAuditLog` | GET | Histórico de assinaturas |
-| `clinicalEvolution.getPendingSignatures` | GET | Assinaturas pendentes |
-| `clinicalEvolution.verifySignature` | GET | Verificar assinatura |
+### 📊 Próximos Passos Recomendados
 
-**Segurança implementada:**
-- Verificação de autenticação (protectedProcedure)
-- Validação de permissões (apenas criador ou admin)
-- Prevenção de modificação de documentos assinados
-- Prevenção de exclusão de documentos assinados
-- Validação de entrada com Zod
+1. **Criar as tabelas faltantes** no banco de dados
+2. **Testar as rotas** com dados reais
+3. **Implementar validações** adicionais conforme necessário
+4. **Adicionar paginação** nas queries que retornam listas grandes
+5. **Implementar cache** para queries frequentes
+6. **Adicionar webhooks** para eventos importantes
+7. **Criar documentação de API** com exemplos
 
-### 2.4 Integração ao Router Principal
-**Arquivo:** `server/routers.ts`
+### 🚀 Como Usar
 
-- Importação do `clinicalEvolutionRouter`
-- Registro como `clinicalEvolution` no `appRouter`
-- Disponível em `/api/trpc/clinicalEvolution.*`
+**Exemplo 1: Criar Atendimento Retroativo**
+```typescript
+const result = await trpc.retroactiveAppointments.create.mutate({
+  patientId: 1,
+  doctorId: 2,
+  scheduledAt: "2026-03-10T14:00:00Z",
+  durationMinutes: 60,
+  type: "consulta",
+  retroactiveJustification: "Paciente compareceu mas não foi registrado no sistema na época",
+});
+```
 
----
+**Exemplo 2: Buscar Pacientes**
+```typescript
+const patients = await trpc.patientSearch.autocomplete.query({
+  query: "João",
+  limit: 10,
+});
+```
 
-## 3. Recursos de Segurança e Conformidade
+**Exemplo 3: Definir Permissões**
+```typescript
+await trpc.permissions.setModulePermissions.mutate({
+  userId: 5,
+  module: "patients",
+  permissions: {
+    canCreate: true,
+    canRead: true,
+    canUpdate: true,
+    canDelete: false,
+  },
+});
+```
 
-### 3.1 Conformidade Regulatória
-✅ **CFM 1821/2007** - Suporte a rastreabilidade completa
-✅ **LGPD** - Registro de todos os acessos e modificações
-✅ **Auditoria** - Log completo de assinaturas com IP e User-Agent
+### 📝 Notas Importantes
 
-### 3.2 Recursos de Assinatura Digital
-- ✅ Integração preparada para D4Sign
-- ✅ Suporte a múltiplos tipos de assinatura (eletrônica, ICP-Brasil A1, A3)
-- ✅ Hash de assinatura para verificação de integridade
-- ✅ Timestamp de assinatura
-- ✅ Identificação completa do signatário
-
-### 3.3 Controle de Acesso
-- ✅ Apenas o médico criador pode assinar
-- ✅ Apenas o médico criador pode editar/deletar (antes de assinar)
-- ✅ Admins têm acesso total
-- ✅ Documentos assinados são imutáveis
-
----
-
-## 4. Fluxo de Uso
-
-### 4.1 Criar Evolução Clínica
-1. Abrir prontuário do paciente
-2. Clicar na aba "Evolução"
-3. Selecionar CID-10 (com busca e favoritos)
-4. Opcionalmente gravar áudio (será transcrito automaticamente)
-5. Adicionar notas clínicas
-6. Revisar resumo
-7. Clicar "Salvar Evolução"
-
-### 4.2 Assinar Digitalmente
-1. Na seção "Histórico de Evoluções", localizar evolução com status "Pendente Assinatura"
-2. Clicar em "Assinar Digitalmente"
-3. Confirmar identidade do paciente e CID-10
-4. Digitar senha de confirmação
-5. Clicar "Confirmar Assinatura"
-6. Evolução muda para status "Assinado" com data e nome do signatário
-
-### 4.3 Exportar para PDF
-- Clicar em "Exportar PDF" em qualquer evolução
-- Documento será gerado com todas as informações
-- Se assinado, PDF incluirá informações de assinatura
-
----
-
-## 5. Próximos Passos Recomendados
-
-### 5.1 Integração com D4Sign
-- Implementar webhook de callback do D4Sign
-- Atualizar status de assinatura automaticamente
-- Armazenar URL do PDF assinado
-
-### 5.2 Exportação de PDF
-- Implementar geração de PDF com informações de assinatura
-- Incluir QR code de verificação
-- Suporte a múltiplos idiomas
-
-### 5.3 Relatórios e Análise
-- Dashboard de assinaturas pendentes
-- Relatório de evoluções por período
-- Análise de CID-10 mais frequentes
-
-### 5.4 Melhorias de UX
-- Busca avançada de evoluções
-- Filtros por data, CID-10, status
-- Visualização em timeline
-- Comparação entre evoluções
-
----
-
-## 6. Arquivos Modificados/Criados
-
-### Criados:
-- ✅ `client/src/components/EvolucaoClinicaTab.tsx`
-- ✅ `drizzle/schema-clinical-evolution.ts`
-- ✅ `server/db_clinical_evolution.ts`
-- ✅ `server/routers/clinical-evolution.ts`
-- ✅ `IMPLEMENTATION_SUMMARY.md` (este arquivo)
-
-### Modificados:
-- ✅ `client/src/pages/ProntuarioDetalhe.tsx`
-- ✅ `server/routers.ts`
+- Todas as rotas requerem autenticação (protectedProcedure)
+- Rotas de admin requerem role 'admin'
+- Justificativas de retroativo são obrigatórias e auditadas
+- Permissões são verificadas em tempo real
+- Logs de auditoria são criados automaticamente
 
 ---
 
-## 7. Testes Recomendados
-
-### Testes Unitários
-- [ ] Criar evolução com dados válidos
-- [ ] Rejeitar evolução sem CID-10
-- [ ] Rejeitar evolução sem notas clínicas
-- [ ] Assinar evolução com sucesso
-- [ ] Rejeitar assinatura de documento já assinado
-- [ ] Rejeitar edição de documento assinado
-
-### Testes de Integração
-- [ ] Fluxo completo: criar → editar → assinar
-- [ ] Verificar histórico de assinaturas
-- [ ] Verificar permissões de acesso
-- [ ] Testar integração com D4Sign
-
-### Testes de Segurança
-- [ ] Verificar LGPD compliance
-- [ ] Testar rastreabilidade de auditoria
-- [ ] Validar imutabilidade de documentos assinados
-- [ ] Testar controle de acesso
-
----
-
-## 8. Notas de Desenvolvimento
-
-### Dependências Utilizadas
-- React 19.2.1
-- TRPC 11.6.0
-- Drizzle ORM 0.44.6
-- Zod 4.1.12
-- Lucide React 0.453.0
-- Sonner (Toast notifications)
-
-### Padrões Seguidos
-- Componentes funcionais com Hooks
-- Type-safe com TypeScript
-- Validação de entrada com Zod
-- Tratamento de erros com TRPC
-- Padrão de segurança: protectedProcedure
-
-### Considerações de Performance
-- Queries otimizadas com índices
-- Paginação recomendada para histórico grande
-- Lazy loading de transcrições de áudio
-- Cache de CID-10 favoritos no cliente
-
----
-
-## 9. Contato e Suporte
-
-Para dúvidas ou sugestões sobre a implementação, consulte:
-- Documentação do TRPC: https://trpc.io
-- Documentação do Drizzle: https://orm.drizzle.team
-- Documentação do D4Sign: https://www.d4sign.com.br/api
-
----
-
-**Implementação concluída com sucesso em 15 de março de 2026.**
+**Status**: ✅ Implementação Completa
+**Próximo**: Testes e integração com frontend
