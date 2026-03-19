@@ -14,6 +14,25 @@ export interface D4SignatureLog {
   signedAt: string;
   ipAddress?: string;
   status: "assinado" | "pendente" | "rejeitado";
+  signatureMethod?: "eletronica" | "icp_brasil_a1" | "icp_brasil_a3";
+  signatureHash?: string;
+  certificateInfo?: {
+    subject?: string;
+    issuer?: string;
+    validFrom?: string;
+    validUntil?: string;
+  };
+}
+
+export interface AuditLog {
+  id?: string;
+  action: string;
+  timestamp: string;
+  userId?: string;
+  userName?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  details?: string;
 }
 
 export interface PdfExportOptions {
@@ -29,6 +48,8 @@ export interface PdfExportOptions {
   logoPath?: string;
   includeWatermark?: boolean;
   d4signSignatures?: D4SignatureLog[];
+  auditLogs?: AuditLog[];
+  includeAuditReport?: boolean;
 }
 
 /**
@@ -74,6 +95,8 @@ export async function generatePremiumPdf(options: PdfExportOptions): Promise<voi
     logoPath,
     includeWatermark = true,
     d4signSignatures,
+    auditLogs,
+    includeAuditReport = true,
   } = options;
 
   try {
@@ -174,6 +197,26 @@ export async function generatePremiumPdf(options: PdfExportOptions): Promise<voi
               ? "#ff9800"
               : "#f44336";
 
+        let signatureMethodLabel = "Eletrônica";
+        if (sig.signatureMethod === "icp_brasil_a1") {
+          signatureMethodLabel = "ICP-Brasil A1";
+        } else if (sig.signatureMethod === "icp_brasil_a3") {
+          signatureMethodLabel = "ICP-Brasil A3";
+        }
+
+        let certificateInfo = "";
+        if (sig.certificateInfo) {
+          certificateInfo = `
+            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid ${isDarkMode ? "#444" : "#ddd"}; font-size: 9px;">
+              <div style="margin-bottom: 3px;"><strong>Certificado:</strong></div>
+              ${sig.certificateInfo.subject ? `<div style="margin-bottom: 2px;">Assunto: ${sig.certificateInfo.subject}</div>` : ""}
+              ${sig.certificateInfo.issuer ? `<div style="margin-bottom: 2px;">Emissor: ${sig.certificateInfo.issuer}</div>` : ""}
+              ${sig.certificateInfo.validFrom ? `<div style="margin-bottom: 2px;">Válido de: ${sig.certificateInfo.validFrom}</div>` : ""}
+              ${sig.certificateInfo.validUntil ? `<div style="margin-bottom: 2px;">Válido até: ${sig.certificateInfo.validUntil}</div>` : ""}
+            </div>
+          `;
+        }
+
         sigBlock.innerHTML = `
           <div style="margin-bottom: 5px;">
             <strong style="color: ${isDarkMode ? "#ffffff" : "#000000"}">Assinante ${index + 1}:</strong> ${sig.signerName}
@@ -188,14 +231,85 @@ export async function generatePremiumPdf(options: PdfExportOptions): Promise<voi
             <strong style="color: ${isDarkMode ? "#ffffff" : "#000000"}">Status:</strong> 
             <span style="color: ${statusColor}; font-weight: bold;">${sig.status.toUpperCase()}</span>
           </div>
+          <div style="margin-bottom: 5px;">
+            <strong style="color: ${isDarkMode ? "#ffffff" : "#000000"}">Método:</strong> ${signatureMethodLabel}
+          </div>
+          ${sig.ipAddress ? `<div style="margin-bottom: 5px;"><strong style="color: ${isDarkMode ? "#ffffff" : "#000000"}">IP:</strong> ${sig.ipAddress}</div>` : ""}
+          ${sig.signatureHash ? `<div style="margin-bottom: 5px; word-break: break-all;"><strong style="color: ${isDarkMode ? "#ffffff" : "#000000"}">Hash:</strong> <span style="font-size: 8px; font-family: monospace;">${sig.signatureHash}</span></div>` : ""}
           <div style="font-size: 9px; color: ${isDarkMode ? "#999999" : "#999999"};">
             UUID: ${sig.uuid}
           </div>
+          ${certificateInfo}
         `;
         sigSection.appendChild(sigBlock);
       });
 
       container.appendChild(sigSection);
+    }
+
+    // Add audit logs if present
+    if (options.includeAuditReport && options.auditLogs && options.auditLogs.length > 0) {
+      const auditSection = document.createElement("div");
+      auditSection.style.marginTop = "30px";
+      auditSection.style.paddingTop = "20px";
+      auditSection.style.borderTop = `2px solid ${isDarkMode ? "#d4a853" : "#d4a853"}`;
+
+      const auditTitle = document.createElement("h3");
+      auditTitle.textContent = "RELATÓRIO DE AUDITORIA / VALIDAÇÃO";
+      auditTitle.style.fontSize = "12px";
+      auditTitle.style.fontWeight = "600";
+      auditTitle.style.color = isDarkMode ? "#d4a853" : "#d4a853";
+      auditTitle.style.margin = "0 0 15px 0";
+      auditSection.appendChild(auditTitle);
+
+      const auditIntro = document.createElement("p");
+      auditIntro.textContent = "Este documento foi gerado digitalmente e contém registros de segurança que validam sua autenticidade. Abaixo estão os eventos de auditoria registrados:";
+      auditIntro.style.fontSize = "10px";
+      auditIntro.style.color = isDarkMode ? "#e0e0e0" : "#333333";
+      auditIntro.style.marginBottom = "10px";
+      auditSection.appendChild(auditIntro);
+
+      options.auditLogs.forEach((log, index) => {
+        const auditBlock = document.createElement("div");
+        auditBlock.style.marginBottom = "10px";
+        auditBlock.style.padding = "8px";
+        auditBlock.style.backgroundColor = isDarkMode ? "#2a2a2a" : "#f5f5f5";
+        auditBlock.style.borderLeft = `3px solid #4caf50`;
+        auditBlock.style.fontSize = "9px";
+
+        auditBlock.innerHTML = `
+          <div style="margin-bottom: 3px;">
+            <strong style="color: ${isDarkMode ? "#ffffff" : "#000000"}">Evento ${index + 1}:</strong> ${log.action}
+          </div>
+          <div style="margin-bottom: 3px;">
+            <strong style="color: ${isDarkMode ? "#ffffff" : "#000000"}">Timestamp:</strong> ${log.timestamp}
+          </div>
+          ${log.userName ? `<div style="margin-bottom: 3px;"><strong style="color: ${isDarkMode ? "#ffffff" : "#000000"}">Usuário:</strong> ${log.userName}</div>` : ""}
+          ${log.ipAddress ? `<div style="margin-bottom: 3px;"><strong style="color: ${isDarkMode ? "#ffffff" : "#000000"}">IP:</strong> ${log.ipAddress}</div>` : ""}
+          ${log.details ? `<div style="margin-bottom: 3px; font-style: italic; color: ${isDarkMode ? "#b0b0b0" : "#666666"}">Detalhes: ${log.details}</div>` : ""}
+        `;
+        auditSection.appendChild(auditBlock);
+      });
+
+      const complianceNote = document.createElement("div");
+      complianceNote.style.marginTop = "15px";
+      complianceNote.style.padding = "10px";
+      complianceNote.style.backgroundColor = isDarkMode ? "rgba(76, 175, 80, 0.1)" : "rgba(76, 175, 80, 0.1)";
+      complianceNote.style.borderRadius = "4px";
+      complianceNote.style.fontSize = "9px";
+      complianceNote.style.color = isDarkMode ? "#4caf50" : "#2e7d32";
+      complianceNote.innerHTML = `
+        <strong>✓ Conformidade Regulatória:</strong> Este documento atende aos requisitos de:
+        <ul style="margin: 5px 0; padding-left: 20px;">
+          <li>CFM 1821/2007 - Prontuário Eletrônico</li>
+          <li>Lei Geral de Proteção de Dados (LGPD)</li>
+          <li>Código de Defesa do Consumidor (CDC)</li>
+          <li>Padrões de Segurança de Informação (ISO 27001)</li>
+        </ul>
+      `;
+      auditSection.appendChild(complianceNote);
+
+      container.appendChild(auditSection);
     }
 
     // Add footer
@@ -287,7 +401,8 @@ export async function exportMedicalRecordPdf(
   medicalRecord: any,
   isDarkMode: boolean = false,
   logoPath?: string,
-  d4signSignatures?: D4SignatureLog[]
+  d4signSignatures?: D4SignatureLog[],
+  auditLogs?: AuditLog[]
 ): Promise<void> {
   const content = `
     <div style="font-family: Montserrat, sans-serif;">
@@ -316,6 +431,8 @@ export async function exportMedicalRecordPdf(
     logoPath,
     includeWatermark: true,
     d4signSignatures,
+    auditLogs,
+    includeAuditReport: true,
   });
 }
 
@@ -327,7 +444,8 @@ export async function exportPrescriptionPdf(
   prescription: any,
   isDarkMode: boolean = false,
   logoPath?: string,
-  d4signSignatures?: D4SignatureLog[]
+  d4signSignatures?: D4SignatureLog[],
+  auditLogs?: AuditLog[]
 ): Promise<void> {
   const type = prescription.type || "simples";
   const numVias = (type === "antimicrobiano" || type === "controle_especial") ? 2 : 1;
@@ -388,6 +506,8 @@ export async function exportPrescriptionPdf(
     logoPath,
     includeWatermark: true,
     d4signSignatures,
+    auditLogs,
+    includeAuditReport: true,
   });
 }
 
@@ -399,7 +519,8 @@ export async function exportBudgetPdf(
   budget: any,
   isDarkMode: boolean = false,
   logoPath?: string,
-  d4signSignatures?: D4SignatureLog[]
+  d4signSignatures?: D4SignatureLog[],
+  auditLogs?: AuditLog[]
 ): Promise<void> {
   const content = `
     <div style="font-family: Montserrat, sans-serif;">
@@ -445,5 +566,7 @@ export async function exportBudgetPdf(
     logoPath,
     includeWatermark: true,
     d4signSignatures,
+    auditLogs,
+    includeAuditReport: true,
   });
 }

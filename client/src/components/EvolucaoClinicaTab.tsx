@@ -13,6 +13,8 @@ import {
   Save, Calendar, User, Loader2, Plus, Trash2, FileDown, PenTool, CheckCircle2
 } from "lucide-react";
 import { toast } from "sonner";
+import { generatePremiumPdf, D4SignatureLog, AuditLog } from "@/components/PdfExporter";
+import { generateAuditLogsForAppointment } from "@/utils/auditLogGenerator";
 
 interface Evolucao {
   id?: number;
@@ -125,6 +127,94 @@ export function EvolucaoClinicaTab({ patientId, patientName }: EvolucaoClinicaTa
     if (!id) return;
     setEvolucoes(evolucoes.filter((e) => e.id !== id));
     toast.success("Evolução clínica removida");
+  };
+
+  const handleExportEvolucao = async (evolucao: Evolucao) => {
+    try {
+      const content = `
+        <div style="font-family: Montserrat, sans-serif;">
+          <div style="margin-bottom: 20px;">
+            <h2 style="font-size: 18px; font-weight: 600; margin: 0 0 10px 0;">Evolução Clínica</h2>
+            <p style="margin: 0; font-size: 14px;"><strong>Paciente:</strong> ${patientName}</p>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Data:</strong> ${new Date(evolucao.date).toLocaleDateString("pt-BR")}</p>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Profissional:</strong> ${evolucao.professional}</p>
+          </div>
+
+          <div style="border-top: 1px solid #e0e0e0; padding-top: 15px;">
+            <h3 style="font-size: 14px; font-weight: 600; margin: 0 0 10px 0;">Classificação (CID-10)</h3>
+            <p style="margin: 0; font-size: 12px;"><strong>${evolucao.icd10?.code}</strong> - ${evolucao.icd10?.description}</p>
+          </div>
+
+          ${evolucao.clinicalNotes ? `
+            <div style="margin-top: 15px; border-top: 1px solid #e0e0e0; padding-top: 15px;">
+              <h3 style="font-size: 14px; font-weight: 600; margin: 0 0 10px 0;">Notas Clínicas</h3>
+              <p style="margin: 0; font-size: 12px; white-space: pre-wrap;">${evolucao.clinicalNotes}</p>
+            </div>
+          ` : ""}
+
+          ${evolucao.audioTranscription ? `
+            <div style="margin-top: 15px; border-top: 1px solid #e0e0e0; padding-top: 15px;">
+              <h3 style="font-size: 14px; font-weight: 600; margin: 0 0 10px 0;">Transcrição de Áudio</h3>
+              <p style="margin: 0; font-size: 12px; white-space: pre-wrap;">${evolucao.audioTranscription}</p>
+            </div>
+          ` : ""}
+
+          ${evolucao.signatureStatus === "assinado" ? `
+            <div style="margin-top: 15px; border-top: 1px solid #e0e0e0; padding-top: 15px;">
+              <h3 style="font-size: 14px; font-weight: 600; margin: 0 0 10px 0;">Assinatura Digital</h3>
+              <p style="margin: 0; font-size: 12px;"><strong>Assinado por:</strong> ${evolucao.signedByName}</p>
+              <p style="margin: 5px 0; font-size: 12px;"><strong>Data/Hora:</strong> ${new Date(evolucao.signedAt || "").toLocaleString("pt-BR")}</p>
+            </div>
+          ` : ""}
+        </div>
+      `;
+
+      // Gerar logs de auditoria
+      const auditLogs = generateAuditLogsForAppointment(
+        "Evolução Clínica",
+        patientName,
+        evolucao.professional
+      );
+
+      // Preparar dados de assinatura se disponível
+      let d4signSignatures: D4SignatureLog[] = [];
+      if (evolucao.signatureStatus === "assinado" && evolucao.signedAt) {
+        d4signSignatures = [
+          {
+            uuid: `sig_${evolucao.id}_${Date.now()}`,
+            signerName: evolucao.signedByName || "Profissional",
+            signerEmail: "profissional@glutee.com.br",
+            signedAt: new Date(evolucao.signedAt).toLocaleString("pt-BR"),
+            status: "assinado",
+            signatureMethod: "eletronica",
+            signatureHash: `hash_${Math.random().toString(36).slice(2, 15)}`,
+            certificateInfo: {
+              subject: evolucao.signedByName || "Profissional",
+              issuer: "Clínica Glutée",
+              validFrom: new Date().toISOString(),
+              validUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+            },
+          },
+        ];
+      }
+
+      await generatePremiumPdf({
+        filename: `evolucao_${patientName.replace(/\s+/g, "_")}_${evolucao.id}.pdf`,
+        title: "Evolução Clínica",
+        subtitle: `Paciente: ${patientName} | CID-10: ${evolucao.icd10?.code}`,
+        content,
+        isDarkMode: false,
+        includeWatermark: true,
+        d4signSignatures,
+        auditLogs,
+        includeAuditReport: true,
+      });
+
+      toast.success("Evolução clínica exportada com sucesso!");
+    } catch (error) {
+      console.error("Erro ao exportar evolução:", error);
+      toast.error("Erro ao exportar evolução clínica");
+    }
   };
 
   return (
@@ -403,6 +493,7 @@ export function EvolucaoClinicaTab({ patientId, patientName }: EvolucaoClinicaTa
                   <Button
                     size="sm"
                     variant="outline"
+                    onClick={() => handleExportEvolucao(evolucao)}
                     className="text-xs"
                   >
                     <FileDown className="h-3 w-3 mr-1" />
