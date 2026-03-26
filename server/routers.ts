@@ -799,9 +799,6 @@ export const appRouter = router({
         return dbComplete.invokeAI(input.messages);
       }),
   }),
-});
-
-export type AppRouter = typeof appRouter;
 
   // ─── RETROACTIVE APPOINTMENTS ──────────────────────────────────────────
   retroactiveAppointments: router({

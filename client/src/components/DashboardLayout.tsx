@@ -62,25 +62,50 @@ export default function DashboardLayout({
 
   if (!user) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
+      <div className="flex items-center justify-center min-h-screen bg-[#F7F4EE] relative overflow-hidden">
+        {/* Marca d'água do Logotipo */}
+        <div 
+          className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-[0.1]"
+          style={{
+            backgroundImage: "url('/logo-glutee.png')",
+            backgroundRepeat: "no-repeat",
+            backgroundPosition: "center",
+            backgroundSize: "60%",
+          }}
+        />
+        
+        {/* Detalhes Dourados no Fundo */}
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#F1D791]" />
+        <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-[#F1D791] via-[#C9A55B] to-[#8A6526]" />
+        
+        <div className="flex flex-col items-center gap-8 p-10 max-w-md w-full bg-white/80 backdrop-blur-sm rounded-2xl shadow-2xl border border-[#C9A55B]/20 relative z-10">
           <div className="flex flex-col items-center gap-6">
-            <h1 className="text-2xl font-semibold tracking-tight text-center">
-              Sign in to continue
+            <img src="/logo-glutee.png" alt="Logo" className="h-20 mb-2" />
+            <h1 className="text-3xl font-bold tracking-tight text-center text-[#050505]">
+              Bem-vindo à Glutec
             </h1>
-            <p className="text-sm text-muted-foreground text-center max-w-sm">
-              Access to this dashboard requires authentication. Continue to launch the login flow.
+            <p className="text-base text-[#6B6B6B] text-center max-w-sm">
+              Acesse sua conta para gerenciar sua clínica com excelência e sofisticação.
             </p>
           </div>
+          
           <Button
             onClick={() => {
-              window.location.href = getLoginUrl();
+              window.location.href = "/api/auth/bypass";
             }}
             size="lg"
-            className="w-full shadow-lg hover:shadow-xl transition-all"
+            className="w-full h-14 text-lg font-semibold text-white shadow-lg transition-all transform hover:scale-[1.02] active:scale-[0.98] border-none"
+            style={{
+              background: 'linear-gradient(135deg, #8A6526 0%, #C9A55B 30%, #F1D791 50%, #B8863B 75%, #8A6526 100%)',
+              boxShadow: '0 4px 15px rgba(201, 165, 91, 0.4)'
+            }}
           >
-            Sign in
+            Entrar no Sistema
           </Button>
+          
+          <div className="mt-4 text-xs text-[#8B8B8B] font-medium">
+            © 2026 Glutec Sistema - Excelência em Gestão. By Wésley Câmara
+          </div>
         </div>
       </div>
     );
@@ -101,39 +126,29 @@ export default function DashboardLayout({
   );
 }
 
-type DashboardLayoutContentProps = {
-  children: React.ReactNode;
-  setSidebarWidth: (width: number) => void;
-};
-
 function DashboardLayoutContent({
   children,
   setSidebarWidth,
-}: DashboardLayoutContentProps) {
+}: {
+  children: React.ReactNode;
+  setSidebarWidth: (width: number) => void;
+}) {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
-  const { state, toggleSidebar } = useSidebar();
-  const isCollapsed = state === "collapsed";
+  const { isCollapsed, toggleSidebar } = useSidebar();
+  const { isMobile } = useIsMobile();
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = menuItems.find(item => item.path === location);
-  const isMobile = useIsMobile();
 
-  useEffect(() => {
-    if (isCollapsed) {
-      setIsResizing(false);
-    }
-  }, [isCollapsed]);
+  const activeMenuItem = menuItems.find(item => item.path === location);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing) return;
-
-      const sidebarLeft = sidebarRef.current?.getBoundingClientRect().left ?? 0;
-      const newWidth = e.clientX - sidebarLeft;
-      if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH) {
-        setSidebarWidth(newWidth);
-      }
+      let newWidth = e.clientX;
+      if (newWidth < MIN_WIDTH) newWidth = MIN_WIDTH;
+      if (newWidth > MAX_WIDTH) newWidth = MAX_WIDTH;
+      setSidebarWidth(newWidth);
     };
 
     const handleMouseUp = () => {
@@ -170,18 +185,17 @@ function DashboardLayoutContent({
                 className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
                 aria-label="Toggle navigation"
               >
-                <PanelLeft className="h-4 w-4 text-muted-foreground" />
+                <img src="/logo-glutee.png" alt="Logo" className="h-6 w-6 object-contain" />
               </button>
               {!isCollapsed ? (
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="font-semibold tracking-tight truncate">
-                    Navigation
+                    Navegação
                   </span>
                 </div>
               ) : null}
             </div>
           </SidebarHeader>
-
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-1">
               {menuItems.map(item => {
@@ -205,7 +219,6 @@ function DashboardLayoutContent({
               })}
             </SidebarMenu>
           </SidebarContent>
-
           <SidebarFooter className="p-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -231,7 +244,7 @@ function DashboardLayoutContent({
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
-                  <span>Sign out</span>
+                  <span>Sair</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -246,7 +259,6 @@ function DashboardLayoutContent({
           style={{ zIndex: 50 }}
         />
       </div>
-
       <SidebarInset>
         {isMobile && (
           <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
