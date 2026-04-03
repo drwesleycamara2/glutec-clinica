@@ -64,7 +64,7 @@ async function startServer() {
     await setupVite(app, server);
   } else {
     // Serve static files
-    const distPath = path.resolve(import.meta.dirname, "../..", "dist", "public");
+    const distPath = path.resolve(process.cwd(), "../..", "dist", "public");
     
     if (!fs.existsSync(distPath)) {
       console.error(
