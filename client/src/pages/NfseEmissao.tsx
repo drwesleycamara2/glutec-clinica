@@ -55,7 +55,8 @@ function formatCpfCnpj(value: string): string {
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
   rascunho: { label: "Rascunho", color: "bg-[#F1D791]/30 text-[#8A6526]" },
-  emitida: { label: "Emitida", color: "bg-[#C9A55B]/15 text-[#6B5B2A]" },
+  aguardando: { label: "Aguardando Emissão", color: "bg-[#C9A55B]/15 text-[#6B5B2A]" },
+  autorizada: { label: "Autorizada", color: "bg-[#C9A55B]/15 text-[#6B5B2A]" },
   cancelada: { label: "Cancelada", color: "bg-[#2F2F2F]/10 text-[#2F2F2F]" },
   substituida: { label: "Substituída", color: "bg-[#C9A55B]/10 text-[#8A6526]" },
   erro: { label: "Erro", color: "bg-[#2F2F2F]/10 text-[#2F2F2F]" },
@@ -149,7 +150,7 @@ export default function NfseEmissao() {
 
   const emitMutation = trpc.nfse.emit.useMutation({
     onSuccess: (data) => {
-      toast.success(`NFS-e emitida com sucesso! Número: ${data.numero}`);
+      toast.success(data.message || "NFS-e preparada para emissão manual no portal nacional.");
       refetch();
       setShowEmitir(false);
     },
@@ -187,7 +188,7 @@ export default function NfseEmissao() {
       tomadorMunicipio: patient.city || "",
       tomadorUf: patient.state || "",
       tomadorBairro: patient.neighborhood || "",
-      tomadorLogradouro: patient.address || "",
+      tomadorLogradouro: typeof patient.address === "string" ? patient.address : "",
       tomadorNumero: "",
       tomadorComplemento: "",
       patientId: patient.id,
@@ -859,12 +860,12 @@ export default function NfseEmissao() {
                             size="sm"
                             variant="ghost"
                             className="text-[#8A6526] hover:text-[#6B5B2A]"
-                            onClick={() => emitMutation.mutate({ id: nfse.id })}
+                            onClick={() => emitMutation.mutate({ nfseId: nfse.id })}
                           >
                             <Send className="h-4 w-4" />
                           </Button>
                         )}
-                        {nfse.status === "emitida" && (
+                        {(nfse.status === "aguardando" || nfse.status === "autorizada") && (
                           <Button
                             size="sm"
                             variant="ghost"
@@ -1018,13 +1019,13 @@ export default function NfseEmissao() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-muted-foreground">Emitente</p>
-                  <p className="text-sm font-medium">{selectedNfse.emitenteRazaoSocial}</p>
-                  <p className="text-xs text-muted-foreground">{formatCpfCnpj(selectedNfse.emitenteCnpj)}</p>
+                  <p className="text-sm font-medium">{fiscalSettings?.razaoSocial || "Emitente não configurado"}</p>
+                  <p className="text-xs text-muted-foreground">{fiscalSettings?.cnpj ? formatCpfCnpj(fiscalSettings.cnpj) : "-"}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Tomador</p>
                   <p className="text-sm font-medium">{selectedNfse.tomadorNome}</p>
-                  <p className="text-xs text-muted-foreground">{formatCpfCnpj(selectedNfse.tomadorDocumento)}</p>
+                  <p className="text-xs text-muted-foreground">{formatCpfCnpj(selectedNfse.tomadorDocumento || selectedNfse.tomadorCpfCnpj)}</p>
                 </div>
               </div>
 
@@ -1099,7 +1100,7 @@ export default function NfseEmissao() {
             <Button
               variant="destructive"
               disabled={!motivoCancelamento || cancelMutation.isPending}
-              onClick={() => selectedNfse && cancelMutation.mutate({ id: selectedNfse.id, motivo: motivoCancelamento })}
+              onClick={() => selectedNfse && cancelMutation.mutate({ nfseId: selectedNfse.id, reason: motivoCancelamento })}
             >
               {cancelMutation.isPending ? "Cancelando..." : "Confirmar Cancelamento"}
             </Button>

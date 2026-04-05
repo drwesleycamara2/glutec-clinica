@@ -27,7 +27,7 @@ import CRM from "./pages/CRM";
 import Relatorios from "./pages/Relatorios";
 import Chat from "./pages/Chat";
 import Perfil from "./pages/Perfil";
-import DashboardLayout from "./components/DashboardLayout";
+import DashboardLayout from "./components/DashboardLayoutPremium";
 
 function Router() {
   return (
