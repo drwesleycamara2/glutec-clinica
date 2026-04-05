@@ -14,16 +14,16 @@ import { toast } from "sonner";
 import { Plus, FileText, Loader2, Pill, Send, CheckCircle, XCircle, Clock } from "lucide-react";
 
 const PRESCRIPTION_TYPES = [
-  { value: "simples", label: "Receituário Simples (1 via)", color: "bg-blue-100 text-blue-800" },
-  { value: "antimicrobiano", label: "Antimicrobiano (2 vias)", color: "bg-green-100 text-green-800" },
-  { value: "controle_especial", label: "Controle Especial (2 vias)", color: "bg-purple-100 text-purple-800" },
+  { value: "simples", label: "Receituário Simples (1 via)", color: "bg-[#C9A55B]/10 text-[#8A6526]" },
+  { value: "antimicrobiano", label: "Antimicrobiano (2 vias)", color: "bg-[#C9A55B]/15 text-[#6B5B2A]" },
+  { value: "controle_especial", label: "Controle Especial (2 vias)", color: "bg-[#8A6526]/10 text-[#8A6526]" },
 ];
 
 const D4SIGN_STATUS = {
   pendente: { label: "Pendente", icon: Clock, color: "bg-gray-100 text-gray-700" },
-  enviado: { label: "Enviado p/ Assinatura", icon: Send, color: "bg-blue-100 text-blue-800" },
-  assinado: { label: "Assinado", icon: CheckCircle, color: "bg-green-100 text-green-800" },
-  cancelado: { label: "Cancelado", icon: XCircle, color: "bg-red-100 text-red-800" },
+  enviado: { label: "Enviado p/ Assinatura", icon: Send, color: "bg-[#C9A55B]/10 text-[#8A6526]" },
+  assinado: { label: "Assinado", icon: CheckCircle, color: "bg-[#C9A55B]/15 text-[#6B5B2A]" },
+  cancelado: { label: "Cancelado", icon: XCircle, color: "bg-[#2F2F2F]/10 text-[#2F2F2F]" },
 };
 
 const defaultForm = { patientId: "", type: "simples" as const, observations: "", content: "" };
@@ -125,14 +125,14 @@ export default function Prescricoes() {
                         </Button>
                       )}
                       {rx.d4signStatus === "pendente" && canCreate && (
-                        <Button size="sm" variant="outline" className="text-blue-700 border-blue-200 hover:bg-blue-50"
+                        <Button size="sm" variant="outline" className="text-[#8A6526] border-[#C9A55B]/25 hover:bg-[#C9A55B]/5"
                           onClick={() => toast.info("Configure as credenciais D4Sign para habilitar assinatura eletrônica.")}
                           disabled={sendToSignMutation.isPending}>
                           <Send className="h-3 w-3 mr-1" />Assinar
                         </Button>
                       )}
                       {rx.signedPdfUrl && (
-                        <Button size="sm" variant="outline" className="text-green-700 border-green-200 hover:bg-green-50" asChild>
+                        <Button size="sm" variant="outline" className="text-[#6B5B2A] border-[#C9A55B]/25 hover:bg-[#C9A55B]/5" asChild>
                           <a href={rx.signedPdfUrl} target="_blank" rel="noopener noreferrer">
                             <CheckCircle className="h-3 w-3 mr-1" />Assinado
                           </a>

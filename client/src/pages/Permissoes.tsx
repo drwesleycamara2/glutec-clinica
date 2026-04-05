@@ -143,7 +143,7 @@ export default function Permissoes() {
                           <button
                             onClick={() => togglePerm(mod.key, action)}
                             className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${
-                              enabled ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-red-50 text-red-300 hover:bg-red-100"
+                              enabled ? "bg-[#C9A55B]/15 text-[#6B5B2A] hover:bg-[#C9A55B]/15" : "bg-[#6B6B6B]/5 text-[#8B8B8B] hover:bg-[#6B6B6B]/10"
                             }`}
                           >
                             {enabled ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}

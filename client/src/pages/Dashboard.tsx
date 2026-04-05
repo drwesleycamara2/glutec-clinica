@@ -29,12 +29,12 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  agendada: "bg-blue-100 text-blue-800",
-  confirmada: "bg-green-100 text-green-800",
-  em_atendimento: "bg-yellow-100 text-yellow-800",
+  agendada: "bg-[#C9A55B]/10 text-[#8A6526]",
+  confirmada: "bg-[#C9A55B]/15 text-[#6B5B2A]",
+  em_atendimento: "bg-[#F1D791]/30 text-[#8A6526]",
   concluida: "bg-gray-100 text-gray-700",
-  cancelada: "bg-red-100 text-red-800",
-  falta: "bg-orange-100 text-orange-800",
+  cancelada: "bg-[#2F2F2F]/10 text-[#2F2F2F]",
+  falta: "bg-[#E8D29B]/30 text-[#8A6526]",
 };
 
 function getGreeting() {
@@ -136,8 +136,8 @@ export default function Dashboard() {
       title: "Estoque Baixo",
       value: statsLoading ? "..." : stats?.lowStockItems ?? 0,
       icon: Package,
-      color: (stats?.lowStockItems ?? 0) > 0 ? "text-red-500" : "text-primary",
-      bg: (stats?.lowStockItems ?? 0) > 0 ? "bg-red-500/10" : "bg-primary/10",
+      color: (stats?.lowStockItems ?? 0) > 0 ? "text-[#6B6B6B]" : "text-primary",
+      bg: (stats?.lowStockItems ?? 0) > 0 ? "bg-[#6B6B6B]/10" : "bg-primary/10",
       action: () => setLocation("/estoque"),
     },
   ];
@@ -168,10 +168,10 @@ export default function Dashboard() {
 
       {/* Alerta de estoque baixo */}
       {lowStock && lowStock.length > 0 && (
-        <div className="flex items-center gap-3 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl">
-          <AlertTriangle className="h-5 w-5 text-red-500 shrink-0" />
+        <div className="flex items-center gap-3 px-4 py-3 bg-[#6B6B6B]/10 border border-[#6B6B6B]/30 rounded-xl">
+          <AlertTriangle className="h-5 w-5 text-[#6B6B6B] shrink-0" />
           <div className="flex-1">
-            <p className="text-sm font-semibold text-red-500">Alerta de Estoque</p>
+            <p className="text-sm font-semibold text-[#6B6B6B]">Alerta de Estoque</p>
             <p className="text-xs text-muted-foreground">
               {lowStock.length} produto(s) abaixo do estoque mínimo: {lowStock.slice(0, 3).map((p: any) => p.name).join(", ")}
               {lowStock.length > 3 && ` e mais ${lowStock.length - 3}`}
@@ -272,11 +272,11 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent className="space-y-2">
               <Button variant="outline" className="w-full justify-start gap-3 h-10 text-sm" onClick={() => setLocation("/pacientes")}>
-                <Users className="h-4 w-4 text-blue-500" />
+                <Users className="h-4 w-4 text-[#C9A55B]" />
                 Cadastrar Paciente
               </Button>
               <Button variant="outline" className="w-full justify-start gap-3 h-10 text-sm" onClick={() => setLocation("/agenda")}>
-                <CalendarDays className="h-4 w-4 text-green-500" />
+                <CalendarDays className="h-4 w-4 text-[#C9A55B]" />
                 Agendar Consulta
               </Button>
               {["admin", "medico"].includes(userRole) && (
@@ -286,13 +286,13 @@ export default function Dashboard() {
                     Novo Orçamento
                   </Button>
                   <Button variant="outline" className="w-full justify-start gap-3 h-10 text-sm" onClick={() => setLocation("/prescricoes")}>
-                    <ClipboardList className="h-4 w-4 text-purple-500" />
+                    <ClipboardList className="h-4 w-4 text-[#8A6526]" />
                     Nova Prescrição
                   </Button>
                 </>
               )}
               <Button variant="outline" className="w-full justify-start gap-3 h-10 text-sm" onClick={() => setLocation("/chat")}>
-                <MessageSquare className="h-4 w-4 text-teal-500" />
+                <MessageSquare className="h-4 w-4 text-[#C9A55B]" />
                 Chat da Equipe
               </Button>
             </CardContent>

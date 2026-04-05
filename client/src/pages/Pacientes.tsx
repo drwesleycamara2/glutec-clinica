@@ -135,7 +135,7 @@ export default function Pacientes() {
           <h1 className="text-2xl font-semibold">Pacientes</h1>
           <p className="text-sm text-muted-foreground mt-1">{patients?.length ?? 0} paciente(s) encontrado(s)</p>
         </div>
-        <Button onClick={() => setShowCreate(true)} className="bg-amber-600 hover:bg-amber-700">
+        <Button onClick={() => setShowCreate(true)} className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]">
           <Plus className="h-4 w-4 mr-2" />Novo Paciente
         </Button>
       </div>
@@ -146,7 +146,7 @@ export default function Pacientes() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-amber-500" /></div>
+        <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-[#C9A55B]" /></div>
       ) : !patients || patients.length === 0 ? (
         <Card className="border border-border/50">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
@@ -158,19 +158,19 @@ export default function Pacientes() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {patients.map((patient) => (
-            <Card key={patient.id} className="border border-border/50 hover:border-amber-500/30 transition-all cursor-pointer group" onClick={() => setLocation(`/pacientes/${patient.id}`)}>
+            <Card key={patient.id} className="border border-border/50 hover:border-[#C9A55B]/30 transition-all cursor-pointer group" onClick={() => setLocation(`/pacientes/${patient.id}`)}>
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
                   <Avatar className="h-11 w-11 shrink-0">
                     {patient.photoUrl && <AvatarImage src={patient.photoUrl} alt={patient.fullName} />}
-                    <AvatarFallback className="bg-amber-500/10 text-amber-400 text-xs font-bold">
+                    <AvatarFallback className="bg-[#C9A55B]/10 text-[#C9A55B] text-xs font-bold">
                       {patient.fullName.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <p className="font-semibold text-sm truncate">{patient.fullName}</p>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground/30 shrink-0 group-hover:text-amber-400 transition-colors" />
+                      <ChevronRight className="h-4 w-4 text-muted-foreground/30 shrink-0 group-hover:text-[#C9A55B] transition-colors" />
                     </div>
                     <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-muted-foreground">
                       {patient.birthDate && <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{calcAge(patient.birthDate)}</span>}
@@ -191,30 +191,30 @@ export default function Pacientes() {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <User className="h-5 w-5 text-amber-500" />Cadastrar Novo Paciente
+              <User className="h-5 w-5 text-[#C9A55B]" />Cadastrar Novo Paciente
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-6 py-2">
             {/* Dados Pessoais - Obrigatórios */}
             <section>
-              <h3 className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <h3 className="text-xs font-semibold text-[#C9A55B] uppercase tracking-wider mb-3 flex items-center gap-2">
                 <span className="h-1 w-1 rounded-full bg-amber-400" />Dados Pessoais (obrigatórios)
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 <div className="sm:col-span-2 lg:col-span-3">
-                  <Label>Nome Completo <span className="text-red-400">*</span></Label>
+                  <Label>Nome Completo <span className="text-[#6B6B6B]">*</span></Label>
                   <Input value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} placeholder="Nome completo do paciente" className="mt-1" />
                 </div>
                 <div>
-                  <Label>CPF <span className="text-red-400">*</span></Label>
+                  <Label>CPF <span className="text-[#6B6B6B]">*</span></Label>
                   <Input value={form.cpf} onChange={(e) => setForm({ ...form, cpf: formatCPF(e.target.value) })} placeholder="000.000.000-00" className="mt-1" maxLength={14} />
                 </div>
                 <div>
-                  <Label>Data de Nascimento <span className="text-red-400">*</span></Label>
+                  <Label>Data de Nascimento <span className="text-[#6B6B6B]">*</span></Label>
                   <Input type="date" value={form.birthDate} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} className="mt-1" />
                 </div>
                 <div>
-                  <Label>Gênero <span className="text-red-400">*</span></Label>
+                  <Label>Gênero <span className="text-[#6B6B6B]">*</span></Label>
                   <Select value={form.gender} onValueChange={(v) => setForm({ ...form, gender: v })}>
                     <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -227,7 +227,7 @@ export default function Pacientes() {
                   </Select>
                 </div>
                 <div>
-                  <Label>Sexo Biológico <span className="text-red-400">*</span></Label>
+                  <Label>Sexo Biológico <span className="text-[#6B6B6B]">*</span></Label>
                   <Select value={form.biologicalSex} onValueChange={(v) => setForm({ ...form, biologicalSex: v })}>
                     <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -239,7 +239,7 @@ export default function Pacientes() {
                   </Select>
                 </div>
                 <div>
-                  <Label>Telefone (WhatsApp) <span className="text-red-400">*</span></Label>
+                  <Label>Telefone (WhatsApp) <span className="text-[#6B6B6B]">*</span></Label>
                   <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: formatPhone(e.target.value) })} placeholder="(00) 00000-0000" className="mt-1" maxLength={15} />
                 </div>
               </div>
@@ -247,12 +247,12 @@ export default function Pacientes() {
 
             {/* Endereço - Obrigatório */}
             <section>
-              <h3 className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <h3 className="text-xs font-semibold text-[#C9A55B] uppercase tracking-wider mb-3 flex items-center gap-2">
                 <MapPin className="h-3 w-3" />Endereço (obrigatório)
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div>
-                  <Label>CEP <span className="text-red-400">*</span></Label>
+                  <Label>CEP <span className="text-[#6B6B6B]">*</span></Label>
                   <Input
                     value={form.zipCode}
                     onChange={(e) => {
@@ -264,7 +264,7 @@ export default function Pacientes() {
                     className="mt-1"
                     maxLength={9}
                   />
-                  {loadingCep && <p className="text-[10px] text-amber-400 mt-0.5">Buscando endereço...</p>}
+                  {loadingCep && <p className="text-[10px] text-[#C9A55B] mt-0.5">Buscando endereço...</p>}
                 </div>
                 <div className="sm:col-span-2">
                   <Label>Logradouro</Label>
@@ -369,7 +369,7 @@ export default function Pacientes() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
-            <Button onClick={handleSubmit} disabled={createMutation.isPending} className="bg-amber-600 hover:bg-amber-700">
+            <Button onClick={handleSubmit} disabled={createMutation.isPending} className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]">
               {createMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Cadastrar Paciente
             </Button>
           </DialogFooter>

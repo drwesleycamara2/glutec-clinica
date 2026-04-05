@@ -11,11 +11,11 @@ export default function Assinaturas() {
         <p className="text-sm text-muted-foreground mt-1">Integração com certificado digital ICP-Brasil via D4Sign</p>
       </div>
 
-      <div className="flex items-start gap-3 p-4 rounded-lg bg-blue-50 border border-blue-100">
-        <Info className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+      <div className="flex items-start gap-3 p-4 rounded-lg bg-[#C9A55B]/5 border border-[#C9A55B]/20">
+        <Info className="h-5 w-5 text-[#C9A55B] shrink-0 mt-0.5" />
         <div>
-          <p className="text-sm font-medium text-blue-800">Configuração necessária</p>
-          <p className="text-sm text-blue-700 mt-1">
+          <p className="text-sm font-medium text-[#8A6526]">Configuração necessária</p>
+          <p className="text-sm text-[#8A6526] mt-1">
             Para habilitar a assinatura eletrônica com certificado digital ICP-Brasil, configure as credenciais D4Sign
             nas configurações do sistema. A integração suporta certificados A1 e A3.
           </p>
@@ -41,7 +41,7 @@ export default function Assinaturas() {
                   <p className="text-sm font-medium">{label}</p>
                   <p className="text-xs text-muted-foreground">{desc}</p>
                 </div>
-                <Badge className={supported ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-700"}>
+                <Badge className={supported ? "bg-[#C9A55B]/15 text-[#6B5B2A]" : "bg-gray-100 text-gray-700"}>
                   {supported ? "Suportado" : "Não disponível"}
                 </Badge>
               </div>

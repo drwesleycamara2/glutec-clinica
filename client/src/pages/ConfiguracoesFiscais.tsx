@@ -122,11 +122,11 @@ export function ConfiguracoesFiscais() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "ativo":
-        return "bg-green-100 text-green-700";
+        return "bg-[#C9A55B]/15 text-[#6B5B2A]";
       case "inativo":
         return "bg-yellow-100 text-yellow-700";
       case "expirado":
-        return "bg-red-100 text-red-700";
+        return "bg-[#2F2F2F]/10 text-[#2F2F2F]";
       default:
         return "bg-gray-100 text-gray-700";
     }
@@ -161,12 +161,12 @@ export function ConfiguracoesFiscais() {
       )}
 
       {environment === "producao" && (
-        <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded">
+        <div className="bg-[#6B6B6B]/5 border-l-4 border-[#6B6B6B]/40 p-4 rounded">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+            <AlertTriangle className="h-5 w-5 text-[#2F2F2F] mt-0.5 flex-shrink-0" />
             <div>
-              <h3 className="font-semibold text-red-900">🔴 Modo Produção (Real)</h3>
-              <p className="text-sm text-red-800 mt-1">
+              <h3 className="font-semibold text-[#2F2F2F]">🔴 Modo Produção (Real)</h3>
+              <p className="text-sm text-[#2F2F2F] mt-1">
                 Você está em ambiente de produção. As NFS-es emitidas aqui têm valor fiscal. Verifique todos os dados antes de emitir.
               </p>
             </div>
@@ -186,7 +186,7 @@ export function ConfiguracoesFiscais() {
       <Card className="border-gray-300 bg-gradient-to-br from-blue-50 to-indigo-50">
         <CardHeader>
           <CardTitle className="text-lg text-gray-900 flex items-center gap-2">
-            <Zap className="h-5 w-5 text-blue-600" />
+            <Zap className="h-5 w-5 text-[#C9A55B]" />
             Ambiente de Emissão
           </CardTitle>
         </CardHeader>
@@ -222,14 +222,14 @@ export function ConfiguracoesFiscais() {
               onClick={() => setEnvironment("producao")}
               className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
                 environment === "producao"
-                  ? "border-green-400 bg-green-50"
-                  : "border-gray-200 bg-white hover:border-green-300"
+                  ? "border-[#C9A55B]/40 bg-green-50"
+                  : "border-gray-200 bg-white hover:border-[#C9A55B]/30"
               }`}
             >
               <div className="flex items-start justify-between mb-2">
                 <h3 className="font-semibold text-gray-900">Produção (Real)</h3>
                 {environment === "producao" && (
-                  <Badge className="bg-green-100 text-green-700">Ativo</Badge>
+                  <Badge className="bg-[#C9A55B]/15 text-[#6B5B2A]">Ativo</Badge>
                 )}
               </div>
               <p className="text-sm text-gray-600 mb-3">
@@ -247,7 +247,7 @@ export function ConfiguracoesFiscais() {
 
       {/* Fiscal Configuration Card */}
       <Card className={`border-2 ${
-        environment === "homologacao" ? "border-yellow-200 bg-yellow-50" : "border-green-200 bg-green-50"
+        environment === "homologacao" ? "border-yellow-200 bg-yellow-50" : "border-[#C9A55B]/25 bg-green-50"
       }`}>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
@@ -300,7 +300,7 @@ export function ConfiguracoesFiscais() {
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="text-lg text-gray-900 flex items-center gap-2">
-              <Shield className="h-5 w-5 text-blue-600" />
+              <Shield className="h-5 w-5 text-[#C9A55B]" />
               Certificados Digitais
             </CardTitle>
             <p className="text-sm text-gray-600 mt-1">Certificados para assinatura de documentos e emissão de NFS-e</p>
@@ -346,7 +346,7 @@ export function ConfiguracoesFiscais() {
                   <Button size="sm" variant="outline" className="border-gray-300">
                     Detalhes
                   </Button>
-                  <Button size="sm" variant="outline" className="border-red-300 text-red-600 hover:bg-red-50">
+                  <Button size="sm" variant="outline" className="border-[#6B6B6B]/30 text-[#2F2F2F] hover:bg-[#6B6B6B]/5">
                     Remover
                   </Button>
                 </div>
@@ -361,7 +361,7 @@ export function ConfiguracoesFiscais() {
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="text-lg text-gray-900 flex items-center gap-2">
-              <Smartphone className="h-5 w-5 text-blue-600" />
+              <Smartphone className="h-5 w-5 text-[#C9A55B]" />
               Assinatura Digital em Nuvem (VIDAAS - CFM)
             </CardTitle>
             <p className="text-sm text-gray-600 mt-1">Para assinatura de prescrições, atestados e exames</p>
@@ -371,7 +371,7 @@ export function ConfiguracoesFiscais() {
           </Button>
         </CardHeader>
         <CardContent>
-          <div className="bg-white p-4 rounded-lg border border-blue-200">
+          <div className="bg-white p-4 rounded-lg border border-[#C9A55B]/25">
             {vidaasForm.vidaasAppStatus === "nao_configurado" ? (
               <div className="text-center py-4">
                 <AlertCircle className="h-12 w-12 mx-auto mb-2 text-yellow-600" />
@@ -383,8 +383,8 @@ export function ConfiguracoesFiscais() {
             ) : (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 mb-3">
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
-                  <span className="font-semibold text-green-700">VIDAAS Configurado</span>
+                  <CheckCircle2 className="h-5 w-5 text-[#8A6526]" />
+                  <span className="font-semibold text-[#6B5B2A]">VIDAAS Configurado</span>
                 </div>
                 <p className="text-sm text-gray-700">
                   <strong>CPF:</strong> {vidaasForm.cpf}
@@ -405,11 +405,11 @@ export function ConfiguracoesFiscais() {
       <Card className={`border-2 ${
         environment === "homologacao"
           ? "border-yellow-200 bg-gradient-to-br from-yellow-50 to-yellow-100"
-          : "border-green-200 bg-gradient-to-br from-green-50 to-green-100"
+          : "border-[#C9A55B]/25 bg-gradient-to-br from-[#C9A55B]/5 to-[#C9A55B]/10"
       }`}>
         <CardHeader>
           <CardTitle className="text-lg text-gray-900 flex items-center gap-2">
-            <FileText className="h-5 w-5 text-green-600" />
+            <FileText className="h-5 w-5 text-[#8A6526]" />
             Emissão de NFS-e (Mogi Guaçu-SP 2026)
           </CardTitle>
         </CardHeader>
@@ -426,7 +426,7 @@ export function ConfiguracoesFiscais() {
               <Badge className={`${
                 environment === "homologacao"
                   ? "bg-yellow-100 text-yellow-700"
-                  : "bg-green-100 text-green-700"
+                  : "bg-[#C9A55B]/15 text-[#6B5B2A]"
               }`}>
                 {environment === "homologacao" ? "Homologação (Testes)" : "Produção (Real)"}
               </Badge>
@@ -444,12 +444,12 @@ export function ConfiguracoesFiscais() {
             <div className={`p-3 rounded border mt-3 ${
               environment === "homologacao"
                 ? "bg-yellow-50 border-yellow-200"
-                : "bg-red-50 border-red-200"
+                : "bg-[#6B6B6B]/5 border-[#6B6B6B]/25"
             }`}>
               <p className={`text-xs ${
                 environment === "homologacao"
                   ? "text-yellow-900"
-                  : "text-red-900"
+                  : "text-[#2F2F2F]"
               }`}>
                 <strong>Nota:</strong> Você está emitindo em <strong>{environment === "homologacao" ? "HOMOLOGAÇÃO" : "PRODUÇÃO"}</strong>. 
                 {environment === "homologacao" 
@@ -494,7 +494,7 @@ export function ConfiguracoesFiscais() {
                 className="border-gray-300 mt-1"
               />
               {uploadForm.file && (
-                <p className="text-xs text-green-600 mt-1">✓ {uploadForm.file.name}</p>
+                <p className="text-xs text-[#8A6526] mt-1">✓ {uploadForm.file.name}</p>
               )}
             </div>
 
@@ -682,8 +682,8 @@ export function ConfiguracoesFiscais() {
               />
             </div>
 
-            <div className="bg-blue-50 p-3 rounded border border-blue-200">
-              <p className="text-xs text-blue-900">
+            <div className="bg-[#C9A55B]/5 p-3 rounded border border-[#C9A55B]/25">
+              <p className="text-xs text-[#8A6526]">
                 <strong>Próximo passo:</strong> Após salvar, você receberá um email de confirmação. Acesse o link para
                 ativar o VIDAAS no seu celular.
               </p>

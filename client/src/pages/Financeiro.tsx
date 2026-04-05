@@ -111,30 +111,30 @@ export default function Financeiro() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card>
             <CardContent className="flex items-center gap-3 py-4">
-              <div className="p-2 rounded-lg bg-green-100"><TrendingUp className="h-5 w-5 text-green-600" /></div>
+              <div className="p-2 rounded-lg bg-green-100"><TrendingUp className="h-5 w-5 text-[#8A6526]" /></div>
               <div>
                 <p className="text-xs text-muted-foreground">Receitas do Mês</p>
-                <p className="text-xl font-bold text-green-600">{formatCurrency(summary.totalReceitas)}</p>
+                <p className="text-xl font-bold text-[#8A6526]">{formatCurrency(summary.totalReceitas)}</p>
               </div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="flex items-center gap-3 py-4">
-              <div className="p-2 rounded-lg bg-red-100"><TrendingDown className="h-5 w-5 text-red-600" /></div>
+              <div className="p-2 rounded-lg bg-red-100"><TrendingDown className="h-5 w-5 text-[#2F2F2F]" /></div>
               <div>
                 <p className="text-xs text-muted-foreground">Despesas do Mês</p>
-                <p className="text-xl font-bold text-red-600">{formatCurrency(summary.totalDespesas)}</p>
+                <p className="text-xl font-bold text-[#2F2F2F]">{formatCurrency(summary.totalDespesas)}</p>
               </div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="flex items-center gap-3 py-4">
               <div className={`p-2 rounded-lg ${summary.saldo >= 0 ? "bg-blue-100" : "bg-red-100"}`}>
-                <Wallet className={`h-5 w-5 ${summary.saldo >= 0 ? "text-blue-600" : "text-red-600"}`} />
+                <Wallet className={`h-5 w-5 ${summary.saldo >= 0 ? "text-[#C9A55B]" : "text-[#2F2F2F]"}`} />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Saldo do Mês</p>
-                <p className={`text-xl font-bold ${summary.saldo >= 0 ? "text-blue-600" : "text-red-600"}`}>{formatCurrency(summary.saldo)}</p>
+                <p className={`text-xl font-bold ${summary.saldo >= 0 ? "text-[#C9A55B]" : "text-[#2F2F2F]"}`}>{formatCurrency(summary.saldo)}</p>
               </div>
             </CardContent>
           </Card>
@@ -171,22 +171,22 @@ export default function Financeiro() {
                   <tr key={t.id} className="border-b hover:bg-muted/20">
                     <td className="p-3">
                       {t.type === "receita" ? (
-                        <div className="flex items-center gap-1 text-green-600"><ArrowUpRight className="h-3 w-3" />Receita</div>
+                        <div className="flex items-center gap-1 text-[#8A6526]"><ArrowUpRight className="h-3 w-3" />Receita</div>
                       ) : (
-                        <div className="flex items-center gap-1 text-red-600"><ArrowDownRight className="h-3 w-3" />Despesa</div>
+                        <div className="flex items-center gap-1 text-[#2F2F2F]"><ArrowDownRight className="h-3 w-3" />Despesa</div>
                       )}
                     </td>
                     <td className="p-3">{t.category}</td>
                     <td className="p-3">{t.description}</td>
                     <td className="p-3"><Badge variant="outline" className="text-xs">{t.paymentMethod}</Badge></td>
-                    <td className={`p-3 text-right font-medium ${t.type === "receita" ? "text-green-600" : "text-red-600"}`}>
+                    <td className={`p-3 text-right font-medium ${t.type === "receita" ? "text-[#8A6526]" : "text-[#2F2F2F]"}`}>
                       {t.type === "receita" ? "+" : "-"}{formatCurrency(t.amountInCents)}
                     </td>
                     <td className="p-3 text-center">
                       <Badge className={`text-xs ${
-                        t.status === "pago" ? "bg-green-100 text-green-700" :
+                        t.status === "pago" ? "bg-[#C9A55B]/15 text-[#6B5B2A]" :
                         t.status === "pendente" ? "bg-yellow-100 text-yellow-700" :
-                        t.status === "atrasado" ? "bg-red-100 text-red-700" :
+                        t.status === "atrasado" ? "bg-[#2F2F2F]/10 text-[#2F2F2F]" :
                         "bg-gray-100 text-gray-700"
                       }`}>{t.status}</Badge>
                     </td>

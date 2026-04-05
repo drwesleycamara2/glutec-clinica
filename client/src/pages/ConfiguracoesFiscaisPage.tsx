@@ -156,7 +156,7 @@ export default function ConfiguracoesFiscaisPage() {
       <Card className="border shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Zap className="h-4 w-4 text-blue-600" />
+            <Zap className="h-4 w-4 text-[#C9A55B]" />
             Ambiente de Emissão
           </CardTitle>
         </CardHeader>
@@ -180,13 +180,13 @@ export default function ConfiguracoesFiscaisPage() {
               onClick={() => setForm({ ...form, ambiente: "producao" })}
               className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
                 form.ambiente === "producao"
-                  ? "border-green-400 bg-green-50"
-                  : "border-gray-200 bg-white hover:border-green-300"
+                  ? "border-[#C9A55B]/40 bg-green-50"
+                  : "border-gray-200 bg-white hover:border-[#C9A55B]/30"
               }`}
             >
               <div className="flex items-start justify-between mb-2">
                 <h3 className="font-semibold text-sm">Produção (Real)</h3>
-                {form.ambiente === "producao" && <Badge className="bg-green-100 text-green-700">Ativo</Badge>}
+                {form.ambiente === "producao" && <Badge className="bg-[#C9A55B]/15 text-[#6B5B2A]">Ativo</Badge>}
               </div>
               <p className="text-xs text-muted-foreground">NFS-es emitidas aqui TÊM valor fiscal real.</p>
             </div>

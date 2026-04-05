@@ -92,11 +92,11 @@ function AnamneseTab({ patientId }: { patientId: number }) {
   return (
     <div className="space-y-4">
       {/* Chaperone - CFM */}
-      <Card className="border-amber-500/30 bg-amber-500/5">
+      <Card className="border-[#C9A55B]/30 bg-amber-500/5">
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-2">
-            <UserCheck className="h-4 w-4 text-amber-400" />
-            <Label className="text-xs font-semibold text-amber-400 uppercase">Acompanhante / Chaperone (CFM) <span className="text-red-400">*</span></Label>
+            <UserCheck className="h-4 w-4 text-[#C9A55B]" />
+            <Label className="text-xs font-semibold text-[#C9A55B] uppercase">Acompanhante / Chaperone (CFM) <span className="text-[#6B6B6B]">*</span></Label>
           </div>
           <p className="text-[10px] text-muted-foreground mb-2">Obrigatório: registre o(a) assistente que acompanhou o atendimento ou cirurgia dentro da sala.</p>
           <Input value={chaperone} onChange={(e) => setChaperone(e.target.value)} placeholder="Nome completo do(a) acompanhante/assistente" />
@@ -119,13 +119,13 @@ function AnamneseTab({ patientId }: { patientId: number }) {
           </Select>
         </div>
 
-        <Button size="sm" variant="outline" onClick={() => setShowAddQ(true)} className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10">
+        <Button size="sm" variant="outline" onClick={() => setShowAddQ(true)} className="border-[#C9A55B]/30 text-[#C9A55B] hover:bg-[#C9A55B]/10">
           <Plus className="h-3.5 w-3.5 mr-1.5" />Adicionar Pergunta
         </Button>
-        <Button size="sm" variant="outline" onClick={() => setShowLink(true)} className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10">
+        <Button size="sm" variant="outline" onClick={() => setShowLink(true)} className="border-[#C9A55B]/30 text-[#C9A55B] hover:bg-[#C9A55B]/10">
           <Link2 className="h-3.5 w-3.5 mr-1.5" />Gerar Link p/ Paciente
         </Button>
-        <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white">
+        <Button size="sm" className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33] text-white">
           <Save className="h-3.5 w-3.5 mr-1.5" />Salvar Anamnese
         </Button>
       </div>
@@ -136,7 +136,7 @@ function AnamneseTab({ patientId }: { patientId: number }) {
             <CardContent className="p-4">
               <div className="flex items-start justify-between gap-2 mb-2">
                 <Label className="text-sm font-medium">{q.text}</Label>
-                <button onClick={() => removeQuestion(q.id)} className="text-red-400/50 hover:text-red-400 shrink-0"><Trash2 className="h-3.5 w-3.5" /></button>
+                <button onClick={() => removeQuestion(q.id)} className="text-[#6B6B6B]/50 hover:text-[#6B6B6B] shrink-0"><Trash2 className="h-3.5 w-3.5" /></button>
               </div>
               {q.type === "text" ? (
                 <Textarea value={q.answer} onChange={(e) => updateAnswer(q.id, e.target.value)} className="resize-none" rows={2} placeholder="Digite aqui..." />
@@ -197,7 +197,7 @@ function AnamneseTab({ patientId }: { patientId: number }) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddQ(false)}>Cancelar</Button>
-            <Button onClick={addQuestion} className="bg-amber-600 hover:bg-amber-700">Adicionar</Button>
+            <Button onClick={addQuestion} className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]">Adicionar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -208,7 +208,7 @@ function AnamneseTab({ patientId }: { patientId: number }) {
           <p className="text-sm text-muted-foreground">Um link será gerado para o paciente preencher a anamnese remotamente. Após o preenchimento, o paciente assina digitalmente e os dados são salvos no sistema.</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowLink(false)}>Cancelar</Button>
-            <Button onClick={generateLink} className="bg-amber-600 hover:bg-amber-700"><Copy className="h-4 w-4 mr-2" />Gerar e Copiar Link</Button>
+            <Button onClick={generateLink} className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]"><Copy className="h-4 w-4 mr-2" />Gerar e Copiar Link</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -231,25 +231,25 @@ function AtestadosTab({ patientId, patientName }: { patientId: number; patientNa
   return (
     <div className="space-y-4">
       <div className="flex gap-2 flex-wrap">
-        <Button size="sm" variant="outline" className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10"><FileText className="h-3.5 w-3.5 mr-1.5" />Novo Atestado</Button>
-        <Button size="sm" variant="outline" className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10"><FileText className="h-3.5 w-3.5 mr-1.5" />Nova Declaração</Button>
+        <Button size="sm" variant="outline" className="border-[#C9A55B]/30 text-[#C9A55B] hover:bg-[#C9A55B]/10"><FileText className="h-3.5 w-3.5 mr-1.5" />Novo Atestado</Button>
+        <Button size="sm" variant="outline" className="border-[#C9A55B]/30 text-[#C9A55B] hover:bg-[#C9A55B]/10"><FileText className="h-3.5 w-3.5 mr-1.5" />Nova Declaração</Button>
       </div>
       <Card className="border-border/50">
         <CardHeader className="pb-2"><CardTitle className="text-sm">Modelos Prontos</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           {modelos.map((m, i) => (
-            <button key={i} onClick={() => setTexto(m.texto)} className="w-full text-left p-2.5 rounded-md border border-border/50 hover:border-amber-500/30 hover:bg-amber-500/5 transition-all text-xs">
+            <button key={i} onClick={() => setTexto(m.texto)} className="w-full text-left p-2.5 rounded-md border border-border/50 hover:border-[#C9A55B]/30 hover:bg-amber-500/5 transition-all text-xs">
               <span className="font-medium">{m.nome}</span>
             </button>
           ))}
         </CardContent>
       </Card>
       <Card className="border-border/50">
-        <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><FileText className="h-4 w-4 text-amber-400" />Editor</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><FileText className="h-4 w-4 text-[#C9A55B]" />Editor</CardTitle></CardHeader>
         <CardContent>
           <Textarea value={texto} onChange={(e) => setTexto(e.target.value)} className="min-h-[200px] font-mono text-sm" placeholder="Selecione um modelo ou digite..." />
           <div className="flex gap-2 mt-3">
-            <Button size="sm" className="bg-amber-600 hover:bg-amber-700"><Save className="h-3.5 w-3.5 mr-1.5" />Salvar</Button>
+            <Button size="sm" className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]"><Save className="h-3.5 w-3.5 mr-1.5" />Salvar</Button>
             <Button size="sm" variant="outline"><FileDown className="h-3.5 w-3.5 mr-1.5" />Imprimir / PDF</Button>
           </div>
         </CardContent>
@@ -281,20 +281,20 @@ function PrescricoesTab({ patientId }: { patientId: number }) {
   return (
     <div className="space-y-4">
       <div className="flex gap-2">
-        <Button size="sm" variant={modo === "livre" ? "default" : "outline"} onClick={() => setModo("livre")} className={modo === "livre" ? "bg-amber-600 hover:bg-amber-700" : ""}>
+        <Button size="sm" variant={modo === "livre" ? "default" : "outline"} onClick={() => setModo("livre")} className={modo === "livre" ? "bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]" : ""}>
           <FileText className="h-3.5 w-3.5 mr-1.5" />Texto Livre
         </Button>
-        <Button size="sm" variant={modo === "memed" ? "default" : "outline"} onClick={() => setModo("memed")} className={modo === "memed" ? "bg-blue-600 hover:bg-blue-700" : ""}>
+        <Button size="sm" variant={modo === "memed" ? "default" : "outline"} onClick={() => setModo("memed")} className={modo === "memed" ? "bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]" : ""}>
           <Stethoscope className="h-3.5 w-3.5 mr-1.5" />MEMED
         </Button>
       </div>
       {modo === "memed" ? (
-        <Card className="border-blue-500/30 bg-blue-500/5">
+        <Card className="border-[#C9A55B]/30 bg-blue-500/5">
           <CardContent className="p-6 text-center">
-            <Stethoscope className="h-10 w-10 text-blue-400 mx-auto mb-3" />
+            <Stethoscope className="h-10 w-10 text-[#C9A55B] mx-auto mb-3" />
             <p className="text-sm font-medium">Integração MEMED</p>
             <p className="text-xs text-muted-foreground mt-1">Configure as credenciais MEMED na aba Empresa para ativar.</p>
-            <Button size="sm" className="mt-4 bg-blue-600 hover:bg-blue-700">Abrir MEMED</Button>
+            <Button size="sm" className="mt-4 bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]">Abrir MEMED</Button>
           </CardContent>
         </Card>
       ) : (
@@ -310,12 +310,12 @@ function PrescricoesTab({ patientId }: { patientId: number }) {
             </CardHeader>
             <CardContent className="space-y-2 max-h-40 overflow-y-auto">
               {templates?.map((t) => (
-                <button key={t.id} onClick={() => setTexto(t.content)} className="w-full text-left p-2.5 rounded-md border border-border/50 hover:border-amber-500/30 hover:bg-amber-500/5 transition-all text-xs">
+                <button key={t.id} onClick={() => setTexto(t.content)} className="w-full text-left p-2.5 rounded-md border border-border/50 hover:border-[#C9A55B]/30 hover:bg-amber-500/5 transition-all text-xs">
                   <span className="font-medium">{t.name}</span>
                 </button>
               ))}
               {staticModelos.map((m, i) => (
-                <button key={`static-${i}`} onClick={() => setTexto(m.texto)} className="w-full text-left p-2.5 rounded-md border border-border/50 hover:border-amber-500/30 hover:bg-amber-500/5 transition-all text-xs">
+                <button key={`static-${i}`} onClick={() => setTexto(m.texto)} className="w-full text-left p-2.5 rounded-md border border-border/50 hover:border-[#C9A55B]/30 hover:bg-amber-500/5 transition-all text-xs">
                   <span className="font-medium">{m.nome}</span>
                 </button>
               ))}
@@ -325,7 +325,7 @@ function PrescricoesTab({ patientId }: { patientId: number }) {
             <CardContent className="p-4">
               <Textarea value={texto} onChange={(e) => setTexto(e.target.value)} className="min-h-[200px] font-mono text-sm" placeholder="Digite a prescrição ou selecione um modelo..." />
               <div className="flex gap-2 mt-3">
-                <Button size="sm" className="bg-amber-600 hover:bg-amber-700"><Save className="h-3.5 w-3.5 mr-1.5" />Salvar Prescrição</Button>
+                <Button size="sm" className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]"><Save className="h-3.5 w-3.5 mr-1.5" />Salvar Prescrição</Button>
                 <Button size="sm" variant="outline"><FileDown className="h-3.5 w-3.5 mr-1.5" />Imprimir / PDF</Button>
               </div>
             </CardContent>
@@ -345,7 +345,7 @@ function AnexosTab({ patientId }: { patientId: number }) {
 
   return (
     <div className="space-y-4">
-      <Button size="sm" className="bg-amber-600 hover:bg-amber-700"><Upload className="h-3.5 w-3.5 mr-1.5" />Upload de Arquivo</Button>
+      <Button size="sm" className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]"><Upload className="h-3.5 w-3.5 mr-1.5" />Upload de Arquivo</Button>
       <Card className="border-border/50 border-dashed">
         <CardContent className="p-8 text-center">
           <Upload className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
@@ -358,10 +358,10 @@ function AnexosTab({ patientId }: { patientId: number }) {
       ) : (
         <div className="space-y-2">
           {anexos.map((a) => (
-            <div key={a.id} className="flex items-center gap-3 p-3 rounded-md border border-border/50 hover:border-amber-500/30">
-              <Paperclip className="h-4 w-4 text-amber-400 shrink-0" />
+            <div key={a.id} className="flex items-center gap-3 p-3 rounded-md border border-border/50 hover:border-[#C9A55B]/30">
+              <Paperclip className="h-4 w-4 text-[#C9A55B] shrink-0" />
               <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate">{a.nome}</p><p className="text-[10px] text-muted-foreground">{a.tipo} - {a.data}</p></div>
-              <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300"><Trash2 className="h-3.5 w-3.5" /></Button>
+              <Button size="sm" variant="ghost" className="text-[#6B6B6B] hover:text-[#8B8B8B]"><Trash2 className="h-3.5 w-3.5" /></Button>
             </div>
           ))}
         </div>
@@ -417,10 +417,10 @@ function ExamesTab({ patientId }: { patientId: number }) {
   return (
     <div className="space-y-4">
       <div className="flex gap-2">
-        <Button size="sm" variant={modo === "lista" ? "default" : "outline"} onClick={() => setModo("lista")} className={modo === "lista" ? "bg-amber-600 hover:bg-amber-700" : ""}>
+        <Button size="sm" variant={modo === "lista" ? "default" : "outline"} onClick={() => setModo("lista")} className={modo === "lista" ? "bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]" : ""}>
           <Search className="h-3.5 w-3.5 mr-1.5" />Lista TUSS
         </Button>
-        <Button size="sm" variant={modo === "livre" ? "default" : "outline"} onClick={() => setModo("livre")} className={modo === "livre" ? "bg-amber-600 hover:bg-amber-700" : ""}>
+        <Button size="sm" variant={modo === "livre" ? "default" : "outline"} onClick={() => setModo("livre")} className={modo === "livre" ? "bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]" : ""}>
           <FileText className="h-3.5 w-3.5 mr-1.5" />Texto Livre
         </Button>
       </div>
@@ -443,9 +443,9 @@ function ExamesTab({ patientId }: { patientId: number }) {
                   {filtered.map((exam) => (
                     <button key={exam.code + exam.name} onClick={() => {
                       if (!selectedExams.find((e) => e.code === exam.code)) setSelectedExams([...selectedExams, { ...exam, urgency: "rotina" }]);
-                    }} className="w-full text-left p-2 rounded-md hover:bg-amber-500/10 transition-colors text-xs flex items-center justify-between">
+                    }} className="w-full text-left p-2 rounded-md hover:bg-[#C9A55B]/10 transition-colors text-xs flex items-center justify-between">
                       <span><span className="text-muted-foreground mr-2">{exam.code}</span>{exam.name}</span>
-                      <Plus className="h-3 w-3 text-amber-400" />
+                      <Plus className="h-3 w-3 text-[#C9A55B]" />
                     </button>
                   ))}
                 </div>
@@ -465,12 +465,12 @@ function ExamesTab({ patientId }: { patientId: number }) {
                           <SelectTrigger className="w-24 h-7 text-[10px]"><SelectValue /></SelectTrigger>
                           <SelectContent><SelectItem value="rotina">Rotina</SelectItem><SelectItem value="urgente">Urgente</SelectItem></SelectContent>
                         </Select>
-                        <button onClick={() => setSelectedExams(selectedExams.filter((e) => e.code !== exam.code))} className="text-red-400 hover:text-red-300"><Trash2 className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => setSelectedExams(selectedExams.filter((e) => e.code !== exam.code))} className="text-[#6B6B6B] hover:text-[#8B8B8B]"><Trash2 className="h-3.5 w-3.5" /></button>
                       </div>
                     ))}
                   </div>
                 )}
-                <Button size="sm" className="w-full mt-3 bg-amber-600 hover:bg-amber-700"><Save className="h-3.5 w-3.5 mr-1.5" />Salvar Solicitação</Button>
+                <Button size="sm" className="w-full mt-3 bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]"><Save className="h-3.5 w-3.5 mr-1.5" />Salvar Solicitação</Button>
               </CardContent>
             </Card>
           </div>
@@ -488,7 +488,7 @@ function ExamesTab({ patientId }: { patientId: number }) {
             </CardHeader>
             <CardContent className="space-y-2 max-h-40 overflow-y-auto">
               {templates?.map((t) => (
-                <button key={t.id} onClick={() => setTextoLivre(t.content)} className="w-full text-left p-2.5 rounded-md border border-border/50 hover:border-amber-500/30 hover:bg-amber-500/5 transition-all text-xs">
+                <button key={t.id} onClick={() => setTextoLivre(t.content)} className="w-full text-left p-2.5 rounded-md border border-border/50 hover:border-[#C9A55B]/30 hover:bg-amber-500/5 transition-all text-xs">
                   <span className="font-medium">{t.name}</span>
                 </button>
               ))}
@@ -499,7 +499,7 @@ function ExamesTab({ patientId }: { patientId: number }) {
             <CardContent className="p-4">
               <Textarea value={textoLivre} onChange={(e) => setTextoLivre(e.target.value)} className="min-h-[200px] font-mono text-sm" placeholder="Solicito os seguintes exames laboratoriais..." />
               <div className="flex gap-2 mt-3">
-                <Button size="sm" className="bg-amber-600 hover:bg-amber-700"><Save className="h-3.5 w-3.5 mr-1.5" />Salvar</Button>
+                <Button size="sm" className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]"><Save className="h-3.5 w-3.5 mr-1.5" />Salvar</Button>
                 <Button size="sm" variant="outline"><FileDown className="h-3.5 w-3.5 mr-1.5" />Imprimir / PDF</Button>
               </div>
             </CardContent>
@@ -560,7 +560,7 @@ function ProcedimentosTab({ patientId }: { patientId: number }) {
         <CardHeader className="pb-2"><CardTitle className="text-sm">Selecionar Procedimento</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           {catalogo.map((proc, i) => (
-            <button key={i} onClick={() => selectProc(proc)} className={`w-full text-left p-3 rounded-md border transition-all text-xs ${procedimento === proc.nome ? "border-amber-500 bg-amber-500/10" : "border-border/50 hover:border-amber-500/30"}`}>
+            <button key={i} onClick={() => selectProc(proc)} className={`w-full text-left p-3 rounded-md border transition-all text-xs ${procedimento === proc.nome ? "border-amber-500 bg-[#C9A55B]/10" : "border-border/50 hover:border-[#C9A55B]/30"}`}>
               <span className="font-medium">{proc.nome}</span>
               <span className="text-muted-foreground ml-2">({proc.insumos.length} insumos)</span>
             </button>
@@ -572,7 +572,7 @@ function ProcedimentosTab({ patientId }: { patientId: number }) {
         <Card className="border-border/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
-              <Package className="h-4 w-4 text-amber-400" />Insumos - {procedimento}
+              <Package className="h-4 w-4 text-[#C9A55B]" />Insumos - {procedimento}
               <Badge variant="outline" className="text-[10px] ml-auto">Baixa automática no estoque</Badge>
             </CardTitle>
           </CardHeader>
@@ -589,7 +589,7 @@ function ProcedimentosTab({ patientId }: { patientId: number }) {
                 </div>
               ))}
             </div>
-            <Button size="sm" className="w-full mt-3 bg-amber-600 hover:bg-amber-700">
+            <Button size="sm" className="w-full mt-3 bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]">
               <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />Registrar Procedimento e Dar Baixa no Estoque
             </Button>
           </CardContent>
@@ -611,7 +611,7 @@ export default function ProntuarioDetalhe() {
 
   const { data: patient, isLoading } = trpc.patients.getById.useQuery({ id: patientId });
 
-  if (isLoading) return <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-amber-500" /></div>;
+  if (isLoading) return <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-[#C9A55B]" /></div>;
   if (!patient) return <div className="text-center py-16 text-muted-foreground">Paciente não encontrado.</div>;
 
   return (
@@ -638,8 +638,8 @@ export default function ProntuarioDetalhe() {
 
       {/* LGPD notice */}
       <div className="flex items-center gap-2 p-2.5 rounded-lg bg-blue-500/5 border border-blue-500/20">
-        <ShieldCheck className="h-3.5 w-3.5 text-blue-400 shrink-0" />
-        <p className="text-[10px] text-blue-400">Prontuário protegido pela LGPD. Todos os acessos são registrados.</p>
+        <ShieldCheck className="h-3.5 w-3.5 text-[#C9A55B] shrink-0" />
+        <p className="text-[10px] text-[#C9A55B]">Prontuário protegido pela LGPD. Todos os acessos são registrados.</p>
       </div>
 
       {/* Tabs */}

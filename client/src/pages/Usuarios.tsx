@@ -12,10 +12,10 @@ import { toast } from "sonner";
 import { Users, User, Shield, Stethoscope, ClipboardList, UserCheck, Loader2, Edit } from "lucide-react";
 
 const ROLE_CONFIG = {
-  admin: { label: "Administrador", icon: Shield, color: "bg-red-100 text-red-800" },
-  medico: { label: "Médico", icon: Stethoscope, color: "bg-blue-100 text-blue-800" },
-  enfermeiro: { label: "Enfermeiro", icon: UserCheck, color: "bg-green-100 text-green-800" },
-  recepcionista: { label: "Recepcionista", icon: ClipboardList, color: "bg-yellow-100 text-yellow-800" },
+  admin: { label: "Administrador", icon: Shield, color: "bg-[#2F2F2F]/10 text-[#2F2F2F]" },
+  medico: { label: "Médico", icon: Stethoscope, color: "bg-[#C9A55B]/10 text-[#8A6526]" },
+  enfermeiro: { label: "Enfermeiro", icon: UserCheck, color: "bg-[#C9A55B]/15 text-[#6B5B2A]" },
+  recepcionista: { label: "Recepcionista", icon: ClipboardList, color: "bg-[#F1D791]/30 text-[#8A6526]" },
   user: { label: "Usuário", icon: User, color: "bg-gray-100 text-gray-700" },
 };
 
@@ -100,7 +100,7 @@ export default function Usuarios() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <Badge className={u.active ? "bg-green-100 text-green-800 text-xs" : "bg-gray-100 text-gray-700 text-xs"}>
+                    <Badge className={u.active ? "bg-[#C9A55B]/15 text-[#6B5B2A] text-xs" : "bg-gray-100 text-gray-700 text-xs"}>
                       {u.active ? "Ativo" : "Inativo"}
                     </Badge>
                     <Button size="sm" variant="outline" onClick={() => openEdit(u)}>

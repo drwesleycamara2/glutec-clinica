@@ -96,12 +96,12 @@ export default function Relatorios() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {[
-          { label: "Pacientes", value: stats?.totalPatients ?? 0, icon: Users, color: "text-blue-500", bg: "bg-blue-500/10" },
-          { label: "Consultas Hoje", value: stats?.todayAppointments ?? 0, icon: Calendar, color: "text-green-500", bg: "bg-green-500/10" },
-          { label: "Médicos Ativos", value: stats?.totalDoctors ?? 0, icon: Activity, color: "text-purple-500", bg: "bg-purple-500/10" },
-          { label: "Orçamentos", value: budgetMetrics.pending, icon: DollarSign, color: "text-amber-500", bg: "bg-amber-500/10", suffix: " pendentes" },
-          { label: "Estoque Baixo", value: lowStock?.length ?? 0, icon: Package, color: "text-red-500", bg: "bg-red-500/10" },
-          { label: "Indicações CRM", value: crmMetrics.pending, icon: HeartPulse, color: "text-teal-500", bg: "bg-teal-500/10", suffix: " abertas" },
+          { label: "Pacientes", value: stats?.totalPatients ?? 0, icon: Users, color: "text-[#C9A55B]", bg: "bg-[#C9A55B]/10" },
+          { label: "Consultas Hoje", value: stats?.todayAppointments ?? 0, icon: Calendar, color: "text-[#C9A55B]", bg: "bg-[#C9A55B]/10" },
+          { label: "Médicos Ativos", value: stats?.totalDoctors ?? 0, icon: Activity, color: "text-[#8A6526]", bg: "bg-[#8A6526]/10" },
+          { label: "Orçamentos", value: budgetMetrics.pending, icon: DollarSign, color: "text-[#C9A55B]", bg: "bg-[#C9A55B]/10", suffix: " pendentes" },
+          { label: "Estoque Baixo", value: lowStock?.length ?? 0, icon: Package, color: "text-[#6B6B6B]", bg: "bg-[#6B6B6B]/10" },
+          { label: "Indicações CRM", value: crmMetrics.pending, icon: HeartPulse, color: "text-[#C9A55B]", bg: "bg-[#C9A55B]/10", suffix: " abertas" },
         ].map(({ label, value, icon: Icon, color, bg, suffix }) => (
           <Card key={label} className="border shadow-sm">
             <CardContent className="p-3">
@@ -226,13 +226,13 @@ export default function Relatorios() {
         {/* Tab: Financeiro */}
         <TabsContent value="financeiro" className="space-y-4 mt-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="border shadow-sm border-green-500/20">
+            <Card className="border shadow-sm border-[#C9A55B]/20">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <ArrowUpRight className="h-5 w-5 text-green-500" />
+                  <ArrowUpRight className="h-5 w-5 text-[#C9A55B]" />
                   <span className="text-sm text-muted-foreground">Receitas</span>
                 </div>
-                <p className="text-2xl font-bold text-green-500">
+                <p className="text-2xl font-bold text-[#C9A55B]">
                   {formatCurrency(financialSummary?.totalReceitas ?? 0)}
                 </p>
               </CardContent>
@@ -240,10 +240,10 @@ export default function Relatorios() {
             <Card className="border shadow-sm border-red-500/20">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <ArrowDownRight className="h-5 w-5 text-red-500" />
+                  <ArrowDownRight className="h-5 w-5 text-[#6B6B6B]" />
                   <span className="text-sm text-muted-foreground">Despesas</span>
                 </div>
-                <p className="text-2xl font-bold text-red-500">
+                <p className="text-2xl font-bold text-[#6B6B6B]">
                   {formatCurrency(financialSummary?.totalDespesas ?? 0)}
                 </p>
               </CardContent>
@@ -254,7 +254,7 @@ export default function Relatorios() {
                   <DollarSign className="h-5 w-5 text-primary" />
                   <span className="text-sm text-muted-foreground">Saldo</span>
                 </div>
-                <p className={`text-2xl font-bold ${(financialSummary?.saldo ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
+                <p className={`text-2xl font-bold ${(financialSummary?.saldo ?? 0) >= 0 ? "text-[#C9A55B]" : "text-[#6B6B6B]"}`}>
                   {formatCurrency(financialSummary?.saldo ?? 0)}
                 </p>
               </CardContent>
@@ -285,13 +285,13 @@ export default function Relatorios() {
             </Card>
             <Card className="border shadow-sm">
               <CardContent className="p-4 text-center">
-                <p className="text-3xl font-bold text-green-500">{budgetMetrics.approved}</p>
+                <p className="text-3xl font-bold text-[#C9A55B]">{budgetMetrics.approved}</p>
                 <p className="text-xs text-muted-foreground mt-1">Aprovados</p>
               </CardContent>
             </Card>
             <Card className="border shadow-sm">
               <CardContent className="p-4 text-center">
-                <p className="text-3xl font-bold text-amber-500">{budgetMetrics.pending}</p>
+                <p className="text-3xl font-bold text-[#C9A55B]">{budgetMetrics.pending}</p>
                 <p className="text-xs text-muted-foreground mt-1">Pendentes</p>
               </CardContent>
             </Card>
@@ -327,13 +327,13 @@ export default function Relatorios() {
             </Card>
             <Card className="border shadow-sm">
               <CardContent className="p-4 text-center">
-                <p className="text-3xl font-bold text-green-500">{crmMetrics.converted}</p>
+                <p className="text-3xl font-bold text-[#C9A55B]">{crmMetrics.converted}</p>
                 <p className="text-xs text-muted-foreground mt-1">Realizadas</p>
               </CardContent>
             </Card>
             <Card className="border shadow-sm">
               <CardContent className="p-4 text-center">
-                <p className="text-3xl font-bold text-amber-500">{crmMetrics.pending}</p>
+                <p className="text-3xl font-bold text-[#C9A55B]">{crmMetrics.pending}</p>
                 <p className="text-xs text-muted-foreground mt-1">Pendentes</p>
               </CardContent>
             </Card>
@@ -348,18 +348,18 @@ export default function Relatorios() {
           {lowStock && lowStock.length > 0 && (
             <Card className="border shadow-sm border-red-500/20">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold text-red-500">Alerta: Produtos com Estoque Baixo</CardTitle>
+                <CardTitle className="text-sm font-semibold text-[#6B6B6B]">Alerta: Produtos com Estoque Baixo</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
                   {lowStock.map((p: any) => (
-                    <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-red-500/5">
+                    <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-[#6B6B6B]/5">
                       <div>
                         <p className="text-sm font-medium">{p.name}</p>
                         <p className="text-xs text-muted-foreground">{p.category ?? "Sem categoria"}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-bold text-red-500">{p.currentStock} un</p>
+                        <p className="text-sm font-bold text-[#6B6B6B]">{p.currentStock} un</p>
                         <p className="text-xs text-muted-foreground">Mín: {p.minimumStock}</p>
                       </div>
                     </div>

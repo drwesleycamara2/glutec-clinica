@@ -54,11 +54,11 @@ function formatCpfCnpj(value: string): string {
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
-  rascunho: { label: "Rascunho", color: "bg-yellow-100 text-yellow-800" },
-  emitida: { label: "Emitida", color: "bg-green-100 text-green-800" },
-  cancelada: { label: "Cancelada", color: "bg-red-100 text-red-800" },
-  substituida: { label: "Substituída", color: "bg-blue-100 text-blue-800" },
-  erro: { label: "Erro", color: "bg-red-100 text-red-800" },
+  rascunho: { label: "Rascunho", color: "bg-[#F1D791]/30 text-[#8A6526]" },
+  emitida: { label: "Emitida", color: "bg-[#C9A55B]/15 text-[#6B5B2A]" },
+  cancelada: { label: "Cancelada", color: "bg-[#2F2F2F]/10 text-[#2F2F2F]" },
+  substituida: { label: "Substituída", color: "bg-[#C9A55B]/10 text-[#8A6526]" },
+  erro: { label: "Erro", color: "bg-[#2F2F2F]/10 text-[#2F2F2F]" },
 };
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -548,9 +548,9 @@ export default function NfseEmissao() {
           </div>
 
           {/* Texto Legal (somente leitura) */}
-          <div className="p-3 bg-blue-50 rounded border border-blue-100">
-            <p className="text-xs font-medium text-blue-800 mb-1">Texto Legal (incluído automaticamente)</p>
-            <p className="text-xs text-blue-700">
+          <div className="p-3 bg-[#C9A55B]/5 rounded border border-[#C9A55B]/20">
+            <p className="text-xs font-medium text-[#8A6526] mb-1">Texto Legal (incluído automaticamente)</p>
+            <p className="text-xs text-[#8A6526]">
               {fiscalSettings?.textoLegalFixo || "NÃO SUJEITO A RETENCAO A SEGURIDADE SOCIAL, CONFORME ART-31 DA LEI-8.212/91, OS/INSS-209/99, IN/INSS-DC-100/03 E IN 971/09 ART.120 INCISO III. OS SERVICOS ACIMA DESCRITOS FORAM PRESTADOS PESSOALMENTE PELO(S) SOCIO(S) E SEM O CONCURSO DE EMPREGADOS OU OUTROS CONTRIBUINTES INDIVIDUAIS"}
             </p>
           </div>
@@ -601,9 +601,9 @@ export default function NfseEmissao() {
               />
             </div>
             <div className="flex items-end">
-              <div className="p-3 bg-green-50 rounded border border-green-200 w-full">
-                <p className="text-xs text-green-700">Valor Líquido</p>
-                <p className="text-lg font-bold text-green-800">{formatCurrency(valorLiquido)}</p>
+              <div className="p-3 bg-[#C9A55B]/5 rounded border border-[#C9A55B]/25 w-full">
+                <p className="text-xs text-[#6B5B2A]">Valor Líquido</p>
+                <p className="text-lg font-bold text-[#6B5B2A]">{formatCurrency(valorLiquido)}</p>
               </div>
             </div>
           </div>
@@ -717,7 +717,7 @@ export default function NfseEmissao() {
           <div className="flex items-center justify-between p-3 rounded border">
             <div className="flex items-center gap-2">
               <Label className="text-sm font-medium">Ambiente de Emissão</Label>
-              <Badge className={form.ambiente === "producao" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>
+              <Badge className={form.ambiente === "producao" ? "bg-[#C9A55B]/15 text-[#6B5B2A]" : "bg-[#F1D791]/30 text-[#8A6526]"}>
                 {form.ambiente === "producao" ? "Produção" : "Homologação"}
               </Badge>
             </div>
@@ -732,8 +732,8 @@ export default function NfseEmissao() {
           </div>
 
           {form.ambiente === "producao" && (
-            <div className="p-3 bg-red-50 rounded border border-red-200">
-              <p className="text-xs text-red-800 flex items-center gap-1 font-medium">
+            <div className="p-3 bg-[#6B6B6B]/5 rounded border border-[#6B6B6B]/25">
+              <p className="text-xs text-[#2F2F2F] flex items-center gap-1 font-medium">
                 <AlertTriangle className="h-3 w-3" />
                 ATENÇÃO: Esta NFS-e será emitida em ambiente de PRODUÇÃO e terá valor fiscal real.
               </p>
@@ -771,23 +771,23 @@ export default function NfseEmissao() {
           </div>
 
           {/* Valores */}
-          <div className="p-4 bg-green-50 rounded border border-green-200">
-            <p className="text-xs font-medium text-green-700 mb-3">VALORES</p>
+          <div className="p-4 bg-[#C9A55B]/5 rounded border border-[#C9A55B]/25">
+            <p className="text-xs font-medium text-[#6B5B2A] mb-3">VALORES</p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div>
-                <p className="text-xs text-green-600">Serviço</p>
-                <p className="text-sm font-bold text-green-800">{formatCurrency(valorServicoCents)}</p>
+                <p className="text-xs text-[#8A6526]">Serviço</p>
+                <p className="text-sm font-bold text-[#6B5B2A]">{formatCurrency(valorServicoCents)}</p>
               </div>
               <div>
-                <p className="text-xs text-green-600">Dedução</p>
-                <p className="text-sm font-medium text-green-800">{formatCurrency(valorDeducaoCents)}</p>
+                <p className="text-xs text-[#8A6526]">Dedução</p>
+                <p className="text-sm font-medium text-[#6B5B2A]">{formatCurrency(valorDeducaoCents)}</p>
               </div>
               <div>
-                <p className="text-xs text-green-600">Desconto</p>
-                <p className="text-sm font-medium text-green-800">{formatCurrency(valorDescontoCents)}</p>
+                <p className="text-xs text-[#8A6526]">Desconto</p>
+                <p className="text-sm font-medium text-[#6B5B2A]">{formatCurrency(valorDescontoCents)}</p>
               </div>
               <div>
-                <p className="text-xs text-green-600">Valor Líquido</p>
+                <p className="text-xs text-[#8A6526]">Valor Líquido</p>
                 <p className="text-lg font-bold text-green-900">{formatCurrency(valorLiquido)}</p>
               </div>
             </div>
@@ -858,7 +858,7 @@ export default function NfseEmissao() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="text-green-600 hover:text-green-700"
+                            className="text-[#8A6526] hover:text-[#6B5B2A]"
                             onClick={() => emitMutation.mutate({ id: nfse.id })}
                           >
                             <Send className="h-4 w-4" />
@@ -868,7 +868,7 @@ export default function NfseEmissao() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="text-red-600 hover:text-red-700"
+                            className="text-[#2F2F2F] hover:text-[#2F2F2F]"
                             onClick={() => { setSelectedNfse(nfse); setShowCancelar(true); }}
                           >
                             <XCircle className="h-4 w-4" />
@@ -932,7 +932,7 @@ export default function NfseEmissao() {
                     step === s.num
                       ? "bg-primary text-primary-foreground shadow-md"
                       : step > s.num
-                      ? "bg-green-100 text-green-800"
+                      ? "bg-[#C9A55B]/15 text-[#6B5B2A]"
                       : "bg-muted text-muted-foreground"
                   }`}
                 >
@@ -1033,17 +1033,17 @@ export default function NfseEmissao() {
                 <p className="text-sm whitespace-pre-wrap">{selectedNfse.descricaoServico}</p>
               </div>
 
-              <div className="grid grid-cols-3 gap-4 p-3 bg-green-50 rounded">
+              <div className="grid grid-cols-3 gap-4 p-3 bg-[#C9A55B]/5 rounded">
                 <div>
-                  <p className="text-xs text-green-600">Valor do Serviço</p>
-                  <p className="text-sm font-bold text-green-800">{formatCurrency(selectedNfse.valorServico)}</p>
+                  <p className="text-xs text-[#8A6526]">Valor do Serviço</p>
+                  <p className="text-sm font-bold text-[#6B5B2A]">{formatCurrency(selectedNfse.valorServico)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-green-600">Deduções</p>
-                  <p className="text-sm font-medium text-green-800">{formatCurrency((selectedNfse.valorDeducao || 0) + (selectedNfse.valorDescontoIncondicionado || 0))}</p>
+                  <p className="text-xs text-[#8A6526]">Deduções</p>
+                  <p className="text-sm font-medium text-[#6B5B2A]">{formatCurrency((selectedNfse.valorDeducao || 0) + (selectedNfse.valorDescontoIncondicionado || 0))}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-green-600">Valor Líquido</p>
+                  <p className="text-xs text-[#8A6526]">Valor Líquido</p>
                   <p className="text-sm font-bold text-green-900">{formatCurrency(selectedNfse.valorLiquido)}</p>
                 </div>
               </div>
@@ -1074,7 +1074,7 @@ export default function NfseEmissao() {
       <Dialog open={showCancelar} onOpenChange={setShowCancelar}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600">
+            <DialogTitle className="flex items-center gap-2 text-[#2F2F2F]">
               <XCircle className="h-5 w-5" />
               Cancelar NFS-e
             </DialogTitle>

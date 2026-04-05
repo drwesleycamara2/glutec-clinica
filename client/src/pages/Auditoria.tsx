@@ -7,13 +7,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ShieldCheck, Search, Loader2, Clock, User, FileText } from "lucide-react";
 
 const ACTION_COLORS: Record<string, string> = {
-  VIEW_MEDICAL_RECORDS: "bg-blue-100 text-blue-800",
-  VIEW_MEDICAL_RECORD: "bg-blue-100 text-blue-800",
-  CREATE_MEDICAL_RECORD: "bg-green-100 text-green-800",
-  UPDATE_MEDICAL_RECORD: "bg-yellow-100 text-yellow-800",
-  CREATE_PRESCRIPTION: "bg-purple-100 text-purple-800",
-  CREATE_EXAM_REQUEST: "bg-teal-100 text-teal-800",
-  UPDATE_USER_ROLE: "bg-red-100 text-red-800",
+  VIEW_MEDICAL_RECORDS: "bg-[#C9A55B]/10 text-[#8A6526]",
+  VIEW_MEDICAL_RECORD: "bg-[#C9A55B]/10 text-[#8A6526]",
+  CREATE_MEDICAL_RECORD: "bg-[#C9A55B]/15 text-[#6B5B2A]",
+  UPDATE_MEDICAL_RECORD: "bg-[#F1D791]/30 text-[#8A6526]",
+  CREATE_PRESCRIPTION: "bg-[#8A6526]/10 text-[#8A6526]",
+  CREATE_EXAM_REQUEST: "bg-[#C9A55B]/10 text-[#8A6526]",
+  UPDATE_USER_ROLE: "bg-[#2F2F2F]/10 text-[#2F2F2F]",
   VIEW_PATIENT: "bg-gray-100 text-gray-700",
 };
 
@@ -51,9 +51,9 @@ export default function Auditoria() {
         </Select>
       </div>
 
-      <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-50 border border-blue-100">
-        <ShieldCheck className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
-        <p className="text-xs text-blue-700">
+      <div className="flex items-start gap-3 p-3 rounded-lg bg-[#C9A55B]/5 border border-[#C9A55B]/20">
+        <ShieldCheck className="h-4 w-4 text-[#C9A55B] shrink-0 mt-0.5" />
+        <p className="text-xs text-[#8A6526]">
           Todos os acessos a prontuários e dados sensíveis são registrados automaticamente conforme exigido pela LGPD
           e pela Resolução CFM 1821/2007. Este log é imutável e não pode ser excluído.
         </p>

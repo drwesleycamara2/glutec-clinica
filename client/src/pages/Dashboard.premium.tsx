@@ -27,12 +27,12 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  agendada: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
-  confirmada: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
-  em_atendimento: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
+  agendada: "bg-[#C9A55B]/10 text-[#8A6526] dark:bg-[#C9A55B]/15 dark:text-[#E8D29B]",
+  confirmada: "bg-[#C9A55B]/15 text-[#6B5B2A] dark:bg-[#C9A55B]/20 dark:text-[#F1D791]",
+  em_atendimento: "bg-[#F1D791]/30 text-[#8A6526] dark:bg-[#F1D791]/15 dark:text-[#F1D791]",
   concluida: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-  cancelada: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
-  falta: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
+  cancelada: "bg-[#2F2F2F]/10 text-[#2F2F2F] dark:bg-[#6B6B6B]/20 dark:text-[#D3D3D3]",
+  falta: "bg-[#E8D29B]/30 text-[#8A6526] dark:bg-[#E8D29B]/15 dark:text-[#E8D29B]",
 };
 
 function getGreeting() {
@@ -135,7 +135,7 @@ export default function DashboardPremium() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 pb-6 border-b border-gold">
         <div>
           <h1 className="text-4xl font-light text-text-primary tracking-tight">
-            {getGreeting()}, <span className="font-semibold text-accent">{formatUserGreeting(user)}</span>
+            {getGreeting()}, <span className="font-semibold" style={{ color: 'var(--accent)' }}>{formatUserGreeting(user)}</span>
           </h1>
           <p className="text-sm text-text-tertiary font-medium mt-2 uppercase tracking-widest">
             {today.toLocaleDateString("pt-BR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
@@ -163,13 +163,13 @@ export default function DashboardPremium() {
 
       {/* Alerta de estoque baixo - Premium */}
       {lowStock && lowStock.length > 0 && (
-        <PremiumCard borderGold className="border-red-500/30 bg-red-500/5 dark:bg-red-950/20">
+        <PremiumCard borderGold className="border-[#6B6B6B]/30 bg-[#6B6B6B]/5 dark:bg-red-950/20">
           <div className="flex items-center gap-4">
             <div className="flex-shrink-0">
-              <AlertTriangle className="h-6 w-6 text-red-500" />
+              <AlertTriangle className="h-6 w-6 text-[#6B6B6B]" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-semibold text-red-600 dark:text-red-400">Alerta de Estoque</p>
+              <p className="text-sm font-semibold text-[#2F2F2F] dark:text-[#6B6B6B]">Alerta de Estoque</p>
               <p className="text-xs text-text-secondary mt-1">
                 {lowStock.length} produto(s) abaixo do estoque mínimo: {lowStock.slice(0, 3).map((p: any) => p.name).join(", ")}
                 {lowStock.length > 3 && ` e mais ${lowStock.length - 3}`}
