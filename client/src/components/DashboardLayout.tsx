@@ -19,14 +19,31 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Calendar, ClipboardList, Settings, ShieldCheck } from "lucide-react";
-import { CSSProperties, useEffect, useRef, useState } from "react";
+import {
+  BarChart3,
+  CalendarDays as Calendar,
+  Camera,
+  ClipboardList,
+  FileText,
+  Files,
+  LayoutDashboard,
+  LogOut,
+  MessageSquareText,
+  Package,
+  Receipt,
+  Settings,
+  ShieldCheck,
+  Stethoscope,
+  UserCircle2,
+  Users,
+  Wallet,
+} from "lucide-react";
+import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
+import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
+import { ThemeToggle } from "./ThemeToggle";
 import { Button } from "./ui/button";
-import { ThemeToggle } from './ThemeToggle';
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },

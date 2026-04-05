@@ -14,7 +14,7 @@ export function ThemeToggle() {
   return (
     <button
       onClick={toggleTheme}
-      className="relative inline-flex items-center justify-center w-10 h-10 rounded-lg border border-gold-base transition-all duration-200 hover:shadow-gold-glow focus:outline-none focus:ring-2 focus:ring-gold-base focus:ring-offset-2 dark:focus:ring-offset-black-rich"
+      className="theme-toggle-premium relative inline-flex items-center justify-center h-10 w-10 rounded-xl transition-all duration-200 hover:-translate-y-0.5 hover:glow-gold focus:outline-none focus:ring-2 focus:ring-gold-base focus:ring-offset-2 dark:focus:ring-offset-black-rich"
       aria-label={`Alternar para tema ${isDark ? 'claro' : 'escuro'}`}
       title={`Tema ${isDark ? 'claro' : 'escuro'}`}
     >

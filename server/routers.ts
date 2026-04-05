@@ -603,8 +603,15 @@ export const appRouter = router({
         cnpj: z.string().optional(),
         razaoSocial: z.string().optional(),
         nomeFantasia: z.string().optional(),
+        telefone: z.string().optional(),
+        email: z.string().optional(),
+        cep: z.string().optional(),
         municipio: z.string().optional(),
         uf: z.string().optional(),
+        bairro: z.string().optional(),
+        logradouro: z.string().optional(),
+        numero: z.string().optional(),
+        complemento: z.string().optional(),
         optanteSimplesNacional: z.boolean().optional(),
         regimeApuracao: z.string().optional(),
         codigoTributacaoNacional: z.string().optional(),
@@ -634,7 +641,7 @@ export const appRouter = router({
     create: protectedProcedure
       .input(z.object({
         tomadorDocumento: z.string(),
-        tomadorTipoDocumento: z.string(),
+        tomadorTipoDocumento: z.enum(["cpf", "cnpj"]).default("cpf"),
         tomadorNome: z.string(),
         tomadorEmail: z.string().optional(),
         tomadorTelefone: z.string().optional(),
@@ -648,6 +655,13 @@ export const appRouter = router({
         patientId: z.number().optional(),
         descricaoServico: z.string(),
         complementoDescricao: z.string().optional(),
+        valorServico: z.number().min(1),
+        valorDeducao: z.number().optional(),
+        valorDescontoIncondicionado: z.number().optional(),
+        formaPagamento: z.enum(["pix", "dinheiro", "cartao_credito", "cartao_debito", "boleto", "transferencia", "financiamento", "outro"]).default("pix"),
+        detalhesPagamento: z.string().optional(),
+        dataCompetencia: z.string().optional(),
+        ambiente: z.enum(['homologacao', 'producao']).default('homologacao'),
       }))
       .mutation(async ({ ctx, input }) => {
         return dbComplete.createNfse(input, ctx.user.id);

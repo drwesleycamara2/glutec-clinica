@@ -11,7 +11,27 @@ export async function listPatients(query?: string, limit: number = 100) {
   if (query) {
     query_obj = query_obj.where(like(sql`fullName`, `%${query}%`));
   }
-  return query_obj.limit(limit);
+  const rows = await query_obj.limit(limit);
+  return rows.map((row: any) => {
+    let addressData: Record<string, string> = {};
+    if (typeof row.address === "string" && row.address.trim().startsWith("{")) {
+      try {
+        addressData = JSON.parse(row.address);
+      } catch {
+        addressData = {};
+      }
+    }
+
+    return {
+      ...row,
+      name: row.fullName ?? "",
+      zipCode: addressData.zip ?? "",
+      city: addressData.city ?? "",
+      state: addressData.state ?? "",
+      neighborhood: addressData.neighborhood ?? "",
+      address: addressData.street ?? row.address ?? "",
+    };
+  });
 }
 
 export async function createPatient(data: any, userId: number) {
@@ -417,12 +437,52 @@ export async function updateClinicSettings(data: any) {
 }
 
 // ─── FISCAL ──────────────────────────────────────────────────────────────────
+function decimalToCents(value: unknown): number {
+  const numeric = typeof value === "number" ? value : Number.parseFloat(String(value ?? 0));
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.round(numeric * 100);
+}
+
+function centsToDecimal(value: unknown): number {
+  const numeric = typeof value === "number" ? value : Number.parseFloat(String(value ?? 0));
+  if (!Number.isFinite(numeric)) return 0;
+  return Number((numeric / 100).toFixed(2));
+}
+
+function inferDocumentType(document: string | null | undefined): "cpf" | "cnpj" {
+  const digits = String(document ?? "").replace(/\D/g, "");
+  return digits.length > 11 ? "cnpj" : "cpf";
+}
+
+function normalizeNfseRow(row: any) {
+  return {
+    ...row,
+    tomadorDocumento: row.tomadorCpfCnpj ?? row.tomadorDocumento ?? "",
+    tomadorTipoDocumento: row.tomadorTipoDocumento ?? inferDocumentType(row.tomadorCpfCnpj),
+    valorServico: decimalToCents(row.valorServicos ?? row.valorServico),
+    valorDeducao: decimalToCents(row.valorDeducoes ?? row.valorDeducao),
+    valorDescontoIncondicionado: decimalToCents(row.descontoIncondicionado ?? row.valorDescontoIncondicionado),
+    valorLiquido: decimalToCents(row.valorLiquidoNfse ?? row.valorLiquido),
+  };
+}
+
 export async function getFiscalSettings() {
   const db = await getDb();
   if (!db) return null;
   
-  const result = await db.select().from(sql`fiscal_settings`).limit(1);
-  return result[0];
+  const result = await db.select().from(sql`fiscal_config`).limit(1);
+  const fiscal = result[0];
+  if (!fiscal) return null;
+
+  return {
+    ...fiscal,
+    optanteSimplesNacional: Boolean(fiscal.optanteSimplesNacional),
+    regimeApuracao: fiscal.regimeApuracao ?? fiscal.regimeTributario ?? null,
+    descricaoServicoPadrao: fiscal.descricaoServicoPadrao ?? fiscal.descricaoServico ?? null,
+    municipioIncidencia: fiscal.municipioIncidencia ?? fiscal.municipio ?? null,
+    ufIncidencia: fiscal.ufIncidencia ?? fiscal.uf ?? null,
+    provedor: fiscal.provedor ?? "nfse_nacional",
+  };
 }
 
 export async function upsertFiscalSettings(data: any) {
@@ -430,11 +490,23 @@ export async function upsertFiscalSettings(data: any) {
   if (!db) throw new Error("DB unavailable");
   
   const existing = await getFiscalSettings();
+  const payload = {
+    ...data,
+    optanteSimplesNacional: data.optanteSimplesNacional ? 1 : 0,
+    regimeTributario: data.regimeTributario ?? data.regimeApuracao ?? null,
+    regimeApuracao: data.regimeApuracao ?? data.regimeTributario ?? null,
+    descricaoServico: data.descricaoServico ?? data.descricaoServicoPadrao ?? null,
+    descricaoServicoPadrao: data.descricaoServicoPadrao ?? data.descricaoServico ?? null,
+    municipioIncidencia: data.municipioIncidencia ?? data.municipio ?? null,
+    ufIncidencia: data.ufIncidencia ?? data.uf ?? null,
+    provedor: data.provedor ?? "nfse_nacional",
+    ativo: data.cnpj && data.razaoSocial ? 1 : 0,
+  };
   
   if (existing) {
-    await db.update(sql`fiscal_settings`).set(data).where(eq(sql`id`, existing.id));
+    await db.update(sql`fiscal_config`).set(payload).where(eq(sql`id`, existing.id));
   } else {
-    await db.insert(sql`fiscal_settings`).values(data);
+    await db.insert(sql`fiscal_config`).values(payload);
   }
   
   return { success: true };
@@ -445,34 +517,123 @@ export async function listNfse() {
   const db = await getDb();
   if (!db) return [];
   
-  return db.select().from(sql`nfse`).orderBy(desc(sql`createdAt`));
+  const rows = await db.select().from(sql`nfse`).orderBy(desc(sql`createdAt`));
+  return rows.map(normalizeNfseRow);
 }
 
 export async function createNfse(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+  const fiscal = await getFiscalSettings();
+  if (!fiscal) {
+    throw new Error("Configure os dados fiscais da clínica antes de criar a NFS-e.");
+  }
+
+  const numeroRps = Number(fiscal.numeracaoSequencial || 1);
+  const valorServicos = centsToDecimal(data.valorServico);
+  const valorDeducoes = centsToDecimal(data.valorDeducao);
+  const descontoIncondicionado = centsToDecimal(data.valorDescontoIncondicionado);
+  const baseCalculo = Math.max(0, Number((valorServicos - valorDeducoes - descontoIncondicionado).toFixed(2)));
+  const aliquotaIssPercent = Number.parseFloat(String(fiscal.aliquotaIss ?? 0));
+  const aliquota = Number.isFinite(aliquotaIssPercent) ? Number((aliquotaIssPercent / 100).toFixed(4)) : 0;
+  const valorIss = Number((baseCalculo * aliquota).toFixed(2));
+  const valorLiquidoNfse = Number((baseCalculo - valorIss).toFixed(2));
+  const dataCompetencia = data.dataCompetencia || new Date().toISOString().slice(0, 10);
+  const descricaoServico = data.complementoDescricao
+    ? `${data.descricaoServico}\n\n${data.complementoDescricao}`
+    : data.descricaoServico;
+  const tomadorEndereco = JSON.stringify({
+    cep: data.tomadorCep || null,
+    municipio: data.tomadorMunicipio || null,
+    uf: data.tomadorUf || null,
+    bairro: data.tomadorBairro || null,
+    logradouro: data.tomadorLogradouro || null,
+    numero: data.tomadorNumero || null,
+    complemento: data.tomadorComplemento || null,
+  });
   
   const result = await db.insert(sql`nfse`).values({
-    ...data,
-    createdBy: userId,
+    patientId: data.patientId ?? null,
+    tomadorNome: data.tomadorNome,
+    tomadorCpfCnpj: data.tomadorDocumento,
+    tomadorTipoDocumento: data.tomadorTipoDocumento ?? inferDocumentType(data.tomadorDocumento),
+    tomadorEmail: data.tomadorEmail ?? null,
+    tomadorEndereco,
+    numeroRps,
+    dataEmissao: new Date(),
+    dataCompetencia,
+    descricaoServico,
+    codigoServico: fiscal.codigoServico ?? fiscal.codigoTributacaoNacional ?? null,
+    itemListaServico: fiscal.itemListaServico ?? null,
+    cnaeServico: fiscal.cnaeServico ?? null,
+    codigoMunicipioIncidencia: fiscal.codigoMunicipio ?? null,
+    valorServicos,
+    valorDeducoes,
+    valorIss,
+    baseCalculo,
+    aliquota,
+    valorLiquidoNfse,
+    descontoIncondicionado,
+    formaPagamento: data.formaPagamento ?? null,
+    detalhesPagamento: data.detalhesPagamento ?? null,
+    ambiente: data.ambiente ?? fiscal.ambiente ?? "homologacao",
+    enviadoPorId: userId,
     status: 'rascunho',
   });
-  return result[0];
+
+  await db
+    .update(sql`fiscal_config`)
+    .set({ numeracaoSequencial: numeroRps + 1 })
+    .where(eq(sql`id`, fiscal.id));
+
+  const insertedId =
+    typeof result[0] === "number"
+      ? result[0]
+      : result[0]?.insertId ?? result[0]?.id;
+  if (!insertedId) {
+    throw new Error("Não foi possível identificar o rascunho da NFS-e criado.");
+  }
+
+  const inserted = await db
+    .select()
+    .from(sql`nfse`)
+    .where(eq(sql`id`, insertedId))
+    .limit(1);
+
+  return normalizeNfseRow(inserted[0]);
 }
 
 export async function emitNfse(nfseId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+  const current = await db.select().from(sql`nfse`).where(eq(sql`id`, nfseId)).limit(1);
+  if (!current[0]) throw new Error("NFS-e não encontrada.");
   
-  await db.update(sql`nfse`).set({ status: 'emitido' }).where(eq(sql`id`, nfseId));
-  return { success: true };
+  const pendingMessage =
+    "A emissão automática no Emissor Nacional ainda não está integrada. O rascunho foi preparado para conferência e emissão manual no portal nfse.gov.br.";
+
+  await db.update(sql`nfse`).set({
+    status: 'aguardando',
+    erroMensagem: pendingMessage,
+    tentativas: sql`tentativas + 1`,
+  }).where(eq(sql`id`, nfseId));
+
+  return {
+    success: true,
+    status: 'aguardando',
+    message: pendingMessage,
+  };
 }
 
 export async function cancelNfse(nfseId: number, reason: string) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   
-  await db.update(sql`nfse`).set({ status: 'cancelado', cancellationReason: reason }).where(eq(sql`id`, nfseId));
+  await db.update(sql`nfse`).set({
+    status: 'cancelada',
+    motivoCancelamento: reason,
+    dataCancelamento: new Date(),
+  }).where(eq(sql`id`, nfseId));
   return { success: true };
 }
 
