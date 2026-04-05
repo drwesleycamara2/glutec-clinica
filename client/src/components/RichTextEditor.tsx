@@ -6,7 +6,7 @@
 
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import TextStyle from "@tiptap/extension-text-style";
+import { TextStyle } from "@tiptap/extension-text-style";
 import FontFamily from "@tiptap/extension-font-family";
 import { Button } from "@/components/ui/button";
 import { Bold, Italic, List, ListOrdered, Undo2, Redo2 } from "lucide-react";
