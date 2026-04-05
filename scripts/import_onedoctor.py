@@ -148,6 +148,17 @@ def cents(value: Optional[str]) -> int:
         return 0
 
 
+def money(value: Optional[str]) -> float:
+    raw = str(value or "").strip()
+    if not raw:
+        return 0.0
+    raw = raw.replace(".", "").replace(",", ".")
+    try:
+        return round(float(raw), 2)
+    except ValueError:
+        return 0.0
+
+
 def plain_text(value: Optional[str]) -> Optional[str]:
     raw = str(value or "").strip()
     if not raw:
@@ -225,7 +236,22 @@ def prepare_source(source: Path) -> Tuple[Path, Optional[Path]]:
     if source.is_dir():
         return source, None
     tmp = Path(tempfile.mkdtemp(prefix="glutec-ondoctor-"))
-    subprocess.run(["tar", "-xf", str(source), "-C", str(tmp)], check=True)
+    extracted = False
+    extract_attempts = [
+        ["tar", "-xf", str(source), "-C", str(tmp)],
+        ["unar", "-f", "-o", str(tmp), str(source)],
+    ]
+    for command in extract_attempts:
+        try:
+            result = subprocess.run(command, capture_output=True, text=True)
+            if result.returncode == 0 or any(tmp.iterdir()):
+                extracted = True
+                break
+        except FileNotFoundError:
+            continue
+    if not extracted:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise RuntimeError(f"Nao foi possivel extrair o arquivo compactado: {source}")
     entries = [entry for entry in tmp.iterdir() if entry.exists()]
     if len(entries) == 1 and entries[0].is_dir():
         return entries[0], tmp
@@ -504,36 +530,37 @@ def import_budgets(mysql: MysqlCli, rows: List[Dict[str, str]], created_by: int,
         if not patient_id:
             stats.skipped_rows += 1
             continue
-        status = "emitido"
+        status = "enviado"
         if parse_bool(row.get("cancelado")):
             status = "cancelado"
         elif parse_bool(row.get("aprovado")):
             status = "aprovado"
+        created_at = dt(row.get("data"), row.get("hora"))
+        payload_items = {
+            "numero": row.get("numero"),
+            "valorVista": row.get("valor_vista"),
+            "valorPrazo": row.get("valor_prazo"),
+            "parcelas": row.get("parcelas"),
+            "vencimento1": row.get("vencimento1"),
+        }
         payload = payload_for(
             mysql,
             "budgets",
             {
                 "patientId": patient_id,
                 "doctorId": doctor_id,
+                "date": parse_date(row.get("data")) or (created_at.split(" ", 1)[0] if created_at else None),
+                "validUntil": parse_date(row.get("validade")),
+                "title": f"Orcamento OneDoctor #{row.get('numero') or source_id}",
+                "items": json.dumps(payload_items, ensure_ascii=False),
+                "subtotal": money(row.get("valor") or row.get("valor_total")),
+                "discount": money(row.get("valor_desconto")),
+                "total": money(row.get("valor_total") or row.get("valor")),
                 "status": status,
-                "totalInCents": cents(row.get("valor_total") or row.get("valor")),
-                "discountInCents": cents(row.get("valor_desconto")),
-                "finalTotalInCents": cents(row.get("valor_total") or row.get("valor")),
-                "paymentConditions": json.dumps(
-                    {
-                        "valorVista": row.get("valor_vista"),
-                        "valorPrazo": row.get("valor_prazo"),
-                        "parcelas": row.get("parcelas"),
-                    },
-                    ensure_ascii=False,
-                ),
-                "clinicalNotes": row.get("observacao") or None,
-                "expiresAt": dt(row.get("validade"), row.get("hora")),
-                "approvedAt": dt(row.get("data_aprovado"), row.get("hora")),
+                "notes": row.get("observacao") or None,
                 "sourceSystem": SOURCE_SYSTEM,
                 "sourceId": source_id,
-                "createdBy": created_by,
-                "createdAt": dt(row.get("data"), row.get("hora")),
+                "createdAt": created_at,
             },
         )
         budget_id = mysql.insert_id(insert_sql("budgets", payload))
@@ -549,21 +576,23 @@ def import_payments(mysql: MysqlCli, rows: List[Dict[str, str]], created_by: int
         if not source_id or map_id(mysql, "RECEBER", source_id):
             stats.skipped_rows += 1
             continue
+        patient_id = map_id(mysql, "PESSOA", row.get("id_cliente"))
+        if not patient_id:
+            stats.skipped_rows += 1
+            continue
         payload = payload_for(
             mysql,
-            "financial_transactions",
+            "payments",
             {
-                "type": "receita",
-                "category": "Atendimento",
-                "description": row.get("descricao") or f"Recebimento #{source_id}",
-                "amountInCents": cents(row.get("valor_pago") or row.get("valor")),
-                "paymentMethod": "outro",
-                "patientId": map_id(mysql, "PESSOA", row.get("id_cliente")),
+                "patientId": patient_id,
+                "doctorId": created_by,
                 "budgetId": map_id(mysql, "ORCAMENTO", row.get("id_orcamento")),
-                "dueDate": parse_date(row.get("vencimento")),
-                "paidAt": dt(row.get("pagamento"), row.get("emissao_hora")),
+                "date": parse_date(row.get("pagamento")) or parse_date(row.get("vencimento")) or parse_date(row.get("emissao")),
+                "amount": money(row.get("valor_pago") or row.get("valor")),
+                "method": row.get("forma_pagamento") or row.get("metodo") or "outro",
                 "status": "pago" if parse_bool(row.get("quitado")) or parse_date(row.get("pagamento")) else "pendente",
-                "createdBy": created_by,
+                "description": row.get("descricao") or f"Recebimento #{source_id}",
+                "receipt": row.get("arquivo") or None,
                 "sourceSystem": SOURCE_SYSTEM,
                 "sourceId": source_id,
                 "createdAt": dt(row.get("emissao"), row.get("emissao_hora")),
@@ -572,8 +601,8 @@ def import_payments(mysql: MysqlCli, rows: List[Dict[str, str]], created_by: int
         if not payload:
             stats.skipped_rows += 1
             continue
-        payment_id = mysql.insert_id(insert_sql("financial_transactions", payload))
-        save_map(mysql, "RECEBER", source_id, "financial_transactions", payment_id)
+        payment_id = mysql.insert_id(insert_sql("payments", payload))
+        save_map(mysql, "RECEBER", source_id, "payments", payment_id)
         log_import(mysql, "RECEBER", source_id, payment_id, "inserted", "Recebimento importado.")
         stats.inserted_rows += 1
         stats.processed_rows += 1
