@@ -42,8 +42,8 @@ const EXAM_TEMPLATES: Record<string, { name: string; code?: string }[]> = {
 
 const URGENCY_CONFIG = {
   rotina: { label: "Rotina", color: "bg-gray-100 text-gray-700" },
-  urgente: { label: "Urgente", color: "bg-yellow-100 text-yellow-800" },
-  emergencia: { label: "Emergência", color: "bg-red-100 text-red-800" },
+  urgente: { label: "Urgente", color: "bg-[#F1D791]/30 text-[#8A6526]" },
+  emergencia: { label: "Emergência", color: "bg-[#2F2F2F]/10 text-[#2F2F2F]" },
 };
 
 const defaultExamItem = { name: "", code: "", instructions: "", urgency: "rotina" as const };

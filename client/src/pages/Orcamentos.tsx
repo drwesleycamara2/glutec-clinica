@@ -116,9 +116,9 @@ export default function Orcamentos() {
 
   const STATUS_COLORS: Record<string, string> = {
     rascunho: "bg-gray-100 text-gray-700",
-    emitido: "bg-blue-100 text-blue-700",
-    aprovado: "bg-green-100 text-green-700",
-    rejeitado: "bg-red-100 text-red-700",
+    emitido: "bg-[#C9A55B]/10 text-[#8A6526]",
+    aprovado: "bg-[#C9A55B]/15 text-[#6B5B2A]",
+    rejeitado: "bg-[#2F2F2F]/10 text-[#2F2F2F]",
     expirado: "bg-yellow-100 text-yellow-700",
   };
 
@@ -311,8 +311,8 @@ export default function Orcamentos() {
                             <p className="text-xs text-muted-foreground">{plan.description}</p>
                             <p className="text-sm font-semibold mt-1 text-primary">
                               {formatCurrency(finalValue)}
-                              {discount > 0 && <span className="text-green-600 ml-1">(-{discount}%)</span>}
-                              {interest > 0 && <span className="text-red-500 ml-1">(+{interest}% juros)</span>}
+                              {discount > 0 && <span className="text-[#8A6526] ml-1">(-{discount}%)</span>}
+                              {interest > 0 && <span className="text-[#6B6B6B] ml-1">(+{interest}% juros)</span>}
                             </p>
                             {plan.maxInstallments && plan.maxInstallments > 1 && (
                               <p className="text-xs text-muted-foreground">

@@ -422,10 +422,10 @@ export default function Documentos() {
   const getStatusConfig = (status: string) => {
     switch (status) {
       case "rascunho": return { color: "bg-gray-100 text-gray-700 border-gray-300", icon: <Clock className="h-3 w-3" />, label: "Rascunho" };
-      case "finalizado": return { color: "bg-blue-100 text-blue-700 border-blue-300", icon: <CheckCircle2 className="h-3 w-3" />, label: "Finalizado" };
+      case "finalizado": return { color: "bg-[#C9A55B]/10 text-[#8A6526] border-[#C9A55B]/30", icon: <CheckCircle2 className="h-3 w-3" />, label: "Finalizado" };
       case "enviado_assinatura": return { color: "bg-amber-100 text-amber-700 border-amber-300", icon: <Send className="h-3 w-3" />, label: "Aguardando Assinatura" };
-      case "assinado": return { color: "bg-green-100 text-green-700 border-green-300", icon: <PenTool className="h-3 w-3" />, label: "Assinado" };
-      case "cancelado": return { color: "bg-red-100 text-red-700 border-red-300", icon: <XCircle className="h-3 w-3" />, label: "Cancelado" };
+      case "assinado": return { color: "bg-[#C9A55B]/15 text-[#6B5B2A] border-[#C9A55B]/30", icon: <PenTool className="h-3 w-3" />, label: "Assinado" };
+      case "cancelado": return { color: "bg-[#2F2F2F]/10 text-[#2F2F2F] border-[#6B6B6B]/30", icon: <XCircle className="h-3 w-3" />, label: "Cancelado" };
       default: return { color: "bg-gray-100 text-gray-700 border-gray-300", icon: null, label: status };
     }
   };
@@ -474,7 +474,7 @@ export default function Documentos() {
                 <Button variant="outline" onClick={() => setShowD4SignDialog(true)} className="border-amber-400 text-amber-700 hover:bg-amber-50">
                   <PenTool className="h-4 w-4 mr-2" /> Enviar p/ D4Sign
                 </Button>
-                <Button onClick={handleFinalizeDocument} className="bg-blue-600 hover:bg-blue-700 text-white">
+                <Button onClick={handleFinalizeDocument} className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33] text-white">
                   <CheckCircle2 className="h-4 w-4 mr-2" /> Finalizar
                 </Button>
                 <Button onClick={handleSaveDocument} className="btn-gold-gradient">

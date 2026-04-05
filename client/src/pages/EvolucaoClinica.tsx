@@ -150,7 +150,7 @@ export default function EvolucaoClinica() {
                         audioTranscription: e.target.value,
                       })
                     }
-                    className="mt-2 resize-none bg-blue-50 dark:bg-blue-950/20"
+                    className="mt-2 resize-none bg-[#C9A55B]/5 dark:bg-[#C9A55B]/10"
                     rows={4}
                   />
                 </div>
@@ -188,7 +188,7 @@ export default function EvolucaoClinica() {
 
           {/* Summary */}
           {evolucaoData.icd10 && (
-            <Card className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/20">
+            <Card className="border-[#C9A55B]/25 bg-[#C9A55B]/5 dark:border-[#C9A55B]/20 dark:bg-[#C9A55B]/10">
               <CardContent className="pt-6">
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-foreground">

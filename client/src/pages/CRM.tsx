@@ -11,11 +11,11 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
-  novo: { label: "Novo", color: "bg-blue-100 text-blue-700" },
+  novo: { label: "Novo", color: "bg-[#C9A55B]/10 text-[#8A6526]" },
   contatado: { label: "Contatado", color: "bg-yellow-100 text-yellow-700" },
   agendado: { label: "Agendado", color: "bg-purple-100 text-purple-700" },
-  convertido: { label: "Convertido", color: "bg-green-100 text-green-700" },
-  perdido: { label: "Perdido", color: "bg-red-100 text-red-700" },
+  convertido: { label: "Convertido", color: "bg-[#C9A55B]/15 text-[#6B5B2A]" },
+  perdido: { label: "Perdido", color: "bg-[#2F2F2F]/10 text-[#2F2F2F]" },
 };
 
 export default function CRM() {

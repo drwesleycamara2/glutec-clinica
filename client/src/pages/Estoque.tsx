@@ -119,7 +119,7 @@ export default function Estoque() {
           <h1 className="text-2xl font-semibold">Controle de Estoque</h1>
           <p className="text-sm text-muted-foreground mt-1">{stats.total} produto(s) cadastrado(s)</p>
         </div>
-        <Button onClick={() => { setEditMode(false); resetForm(); setShowCreate(true); }} className="bg-amber-600 hover:bg-amber-700">
+        <Button onClick={() => { setEditMode(false); resetForm(); setShowCreate(true); }} className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]">
           <Plus className="h-4 w-4 mr-2" />Novo Produto
         </Button>
       </div>
@@ -128,46 +128,46 @@ export default function Estoque() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card className="border-border/50">
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1"><Package className="h-4 w-4 text-amber-400" /><span className="text-xs text-muted-foreground">Total de Itens</span></div>
+            <div className="flex items-center gap-2 mb-1"><Package className="h-4 w-4 text-[#C9A55B]" /><span className="text-xs text-muted-foreground">Total de Itens</span></div>
             <p className="text-2xl font-bold">{stats.total}</p>
           </CardContent>
         </Card>
         <Card className="border-border/50">
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1"><DollarSign className="h-4 w-4 text-emerald-400" /><span className="text-xs text-muted-foreground">Valor em Estoque</span></div>
+            <div className="flex items-center gap-2 mb-1"><DollarSign className="h-4 w-4 text-[#C9A55B]" /><span className="text-xs text-muted-foreground">Valor em Estoque</span></div>
             <p className="text-2xl font-bold">{formatCurrency(stats.totalValue)}</p>
           </CardContent>
         </Card>
-        <Card className={`border-border/50 ${stats.lowCount > 0 ? "border-red-500/50 bg-red-500/5" : ""}`}>
+        <Card className={`border-border/50 ${stats.lowCount > 0 ? "border-[#6B6B6B]/50 bg-[#6B6B6B]/5" : ""}`}>
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1"><TrendingDown className="h-4 w-4 text-red-400" /><span className="text-xs text-muted-foreground">Estoque Baixo</span></div>
-            <p className={`text-2xl font-bold ${stats.lowCount > 0 ? "text-red-400" : ""}`}>{stats.lowCount}</p>
+            <div className="flex items-center gap-2 mb-1"><TrendingDown className="h-4 w-4 text-[#6B6B6B]" /><span className="text-xs text-muted-foreground">Estoque Baixo</span></div>
+            <p className={`text-2xl font-bold ${stats.lowCount > 0 ? "text-[#6B6B6B]" : ""}`}>{stats.lowCount}</p>
           </CardContent>
         </Card>
-        <Card className={`border-border/50 ${stats.expiringCount > 0 ? "border-orange-500/50 bg-orange-500/5" : ""}`}>
+        <Card className={`border-border/50 ${stats.expiringCount > 0 ? "border-[#C9A55B]/50 bg-[#C9A55B]/5" : ""}`}>
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1"><Calendar className="h-4 w-4 text-orange-400" /><span className="text-xs text-muted-foreground">Vencendo em 90 dias</span></div>
-            <p className={`text-2xl font-bold ${stats.expiringCount > 0 ? "text-orange-400" : ""}`}>{stats.expiringCount}</p>
+            <div className="flex items-center gap-2 mb-1"><Calendar className="h-4 w-4 text-[#C9A55B]" /><span className="text-xs text-muted-foreground">Vencendo em 90 dias</span></div>
+            <p className={`text-2xl font-bold ${stats.expiringCount > 0 ? "text-[#C9A55B]" : ""}`}>{stats.expiringCount}</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Low stock alert banner */}
       {lowStockItems && lowStockItems.length > 0 && (
-        <Card className="border-red-500/50 bg-red-500/5">
+        <Card className="border-[#6B6B6B]/50 bg-[#6B6B6B]/5">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
+              <AlertTriangle className="h-5 w-5 text-[#6B6B6B] shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-semibold text-red-400">Atenção: Produtos com estoque abaixo do mínimo!</p>
+                <p className="text-sm font-semibold text-[#6B6B6B]">Atenção: Produtos com estoque abaixo do mínimo!</p>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {lowStockItems.map((item: any) => (
-                    <Badge key={item.id} className="bg-red-500/10 text-red-400 border-red-500/30 text-xs cursor-pointer hover:bg-red-500/20" onClick={() => openEdit(item)}>
+                    <Badge key={item.id} className="bg-[#6B6B6B]/10 text-[#6B6B6B] border-[#6B6B6B]/30 text-xs cursor-pointer hover:bg-[#6B6B6B]/50/20" onClick={() => openEdit(item)}>
                       {item.name} ({item.currentStock}/{item.minimumStock})
                     </Badge>
                   ))}
                 </div>
-                <p className="text-[10px] text-red-400/70 mt-2">Clique em um produto para editar ou providenciar reposição.</p>
+                <p className="text-[10px] text-[#6B6B6B]/70 mt-2">Clique em um produto para editar ou providenciar reposição.</p>
               </div>
             </div>
           </CardContent>
@@ -207,7 +207,7 @@ export default function Estoque() {
 
       {/* Table */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-amber-500" /></div>
+        <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-[#C9A55B]" /></div>
       ) : !products || products.length === 0 ? (
         <Card className="border-border/50 border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-16">
@@ -241,7 +241,7 @@ export default function Estoque() {
                   const isExpired = daysExp <= 0;
 
                   return (
-                    <tr key={item.id} className={`border-t border-border/30 text-sm transition-colors ${isLow ? "bg-red-500/5" : isExpired ? "bg-orange-500/5" : "hover:bg-muted/30"}`}>
+                    <tr key={item.id} className={`border-t border-border/30 text-sm transition-colors ${isLow ? "bg-[#6B6B6B]/5" : isExpired ? "bg-[#C9A55B]/5" : "hover:bg-muted/30"}`}>
                       <td className="px-3 py-2.5">
                         <div><p className="font-medium text-xs">{item.name}</p><p className="text-[10px] text-muted-foreground">{item.category} {item.sku ? `| ${item.sku}` : ""}</p></div>
                       </td>
@@ -250,31 +250,31 @@ export default function Estoque() {
                       <td className="px-3 py-2.5 text-xs text-muted-foreground">{item.supplierName || "—"}</td>
                       <td className="px-3 py-2.5 text-xs text-right font-mono">{formatCurrency(item.costPriceInCents)}</td>
                       <td className="px-3 py-2.5 text-center">
-                        <span className={`text-xs font-bold ${isLow ? "text-red-400" : ""}`}>{item.currentStock}</span>
+                        <span className={`text-xs font-bold ${isLow ? "text-[#6B6B6B]" : ""}`}>{item.currentStock}</span>
                       </td>
                       <td className="px-3 py-2.5 text-center text-xs text-muted-foreground">{item.minimumStock}</td>
                       <td className="px-3 py-2.5 text-xs">
                         {item.expirationDate ? (
-                          <span className={isExpired ? "text-red-400 font-medium" : isExpiring ? "text-orange-400" : "text-muted-foreground"}>
+                          <span className={isExpired ? "text-[#6B6B6B] font-medium" : isExpiring ? "text-[#C9A55B]" : "text-muted-foreground"}>
                             {new Date(item.expirationDate).toLocaleDateString("pt-BR")}
                           </span>
                         ) : <span className="text-muted-foreground/50">—</span>}
                       </td>
                       <td className="px-3 py-2.5 text-center">
                         {isExpired ? (
-                          <Badge className="bg-red-500/10 text-red-400 border-red-500/30 text-[10px]">Vencido</Badge>
+                          <Badge className="bg-[#6B6B6B]/10 text-[#6B6B6B] border-[#6B6B6B]/30 text-[10px]">Vencido</Badge>
                         ) : isLow ? (
-                          <Badge className="bg-red-500/10 text-red-400 border-red-500/30 text-[10px]">Repor!</Badge>
+                          <Badge className="bg-[#6B6B6B]/10 text-[#6B6B6B] border-[#6B6B6B]/30 text-[10px]">Repor!</Badge>
                         ) : isExpiring ? (
-                          <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/30 text-[10px]">Vencendo</Badge>
+                          <Badge className="bg-[#C9A55B]/10 text-[#C9A55B] border-[#C9A55B]/30 text-[10px]">Vencendo</Badge>
                         ) : (
-                          <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px]">OK</Badge>
+                          <Badge className="bg-[#C9A55B]/10 text-[#C9A55B] border-emerald-500/30 text-[10px]">OK</Badge>
                         )}
                       </td>
                       <td className="px-3 py-2.5 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => { setSelectedProductId(item.id); setShowMovement(true); }} className="p-1 rounded hover:bg-amber-500/10" title="Movimentar">
-                            <RotateCcw className="h-3.5 w-3.5 text-amber-400" />
+                          <button onClick={() => { setSelectedProductId(item.id); setShowMovement(true); }} className="p-1 rounded hover:bg-[#C9A55B]/10" title="Movimentar">
+                            <RotateCcw className="h-3.5 w-3.5 text-[#C9A55B]" />
                           </button>
                           <button onClick={() => openEdit(item)} className="p-1 rounded hover:bg-muted" title="Editar">
                             <Edit2 className="h-3.5 w-3.5 text-muted-foreground" />
@@ -295,13 +295,13 @@ export default function Estoque() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Package className="h-5 w-5 text-amber-500" />{editMode ? "Editar Produto" : "Novo Produto no Estoque"}
+              <Package className="h-5 w-5 text-[#C9A55B]" />{editMode ? "Editar Produto" : "Novo Produto no Estoque"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <div className="sm:col-span-2 lg:col-span-3">
-                <Label>Nome do Produto <span className="text-red-400">*</span></Label>
+                <Label>Nome do Produto <span className="text-[#6B6B6B]">*</span></Label>
                 <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: Lidocaína 2% c/ vaso" className="mt-1" />
               </div>
               <div>
@@ -340,7 +340,7 @@ export default function Estoque() {
                 <Input type="date" value={form.expirationDate} onChange={(e) => setForm({ ...form, expirationDate: e.target.value })} className="mt-1" />
               </div>
               <div>
-                <Label>Quantidade em Estoque <span className="text-red-400">*</span></Label>
+                <Label>Quantidade em Estoque <span className="text-[#6B6B6B]">*</span></Label>
                 <Input type="number" value={form.currentStock} onChange={(e) => setForm({ ...form, currentStock: parseInt(e.target.value) || 0 })} placeholder="0" className="mt-1" />
               </div>
               <div>
@@ -352,7 +352,7 @@ export default function Estoque() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowCreate(false); setEditMode(false); resetForm(); }}>Cancelar</Button>
-            <Button onClick={() => createProductMutation.mutate(form)} disabled={createProductMutation.isPending} className="bg-amber-600 hover:bg-amber-700">
+            <Button onClick={() => createProductMutation.mutate(form)} disabled={createProductMutation.isPending} className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]">
               {createProductMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               <Save className="h-4 w-4 mr-2" />{editMode ? "Salvar Alterações" : "Adicionar ao Estoque"}
             </Button>
@@ -370,15 +370,15 @@ export default function Estoque() {
               <Select value={movForm.type} onValueChange={(v: any) => setMovForm({ ...movForm, type: v })}>
                 <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="entrada"><div className="flex items-center gap-2"><ArrowDown className="h-3 w-3 text-green-500" />Entrada</div></SelectItem>
-                  <SelectItem value="saida"><div className="flex items-center gap-2"><ArrowUp className="h-3 w-3 text-red-500" />Saída</div></SelectItem>
-                  <SelectItem value="ajuste"><div className="flex items-center gap-2"><RotateCcw className="h-3 w-3 text-blue-500" />Ajuste</div></SelectItem>
+                  <SelectItem value="entrada"><div className="flex items-center gap-2"><ArrowDown className="h-3 w-3 text-[#C9A55B]" />Entrada</div></SelectItem>
+                  <SelectItem value="saida"><div className="flex items-center gap-2"><ArrowUp className="h-3 w-3 text-[#6B6B6B]" />Saída</div></SelectItem>
+                  <SelectItem value="ajuste"><div className="flex items-center gap-2"><RotateCcw className="h-3 w-3 text-[#C9A55B]" />Ajuste</div></SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div><Label>Quantidade</Label><Input type="number" min={1} value={movForm.quantity} onChange={(e) => setMovForm({ ...movForm, quantity: parseInt(e.target.value) || 1 })} className="mt-1" /></div>
             <div><Label>Motivo</Label><Input value={movForm.reason} onChange={(e) => setMovForm({ ...movForm, reason: e.target.value })} placeholder="Motivo da movimentação" className="mt-1" /></div>
-            <Button onClick={() => { if (selectedProductId) createMovementMutation.mutate({ productId: selectedProductId, ...movForm }); }} disabled={createMovementMutation.isPending} className="w-full bg-amber-600 hover:bg-amber-700">
+            <Button onClick={() => { if (selectedProductId) createMovementMutation.mutate({ productId: selectedProductId, ...movForm }); }} disabled={createMovementMutation.isPending} className="w-full bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]">
               {createMovementMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Registrar
             </Button>
           </div>

@@ -21,9 +21,9 @@ import {
 import { toast } from "sonner";
 
 const ROLE_CONFIG = {
-  admin: { label: "Administrador", icon: Shield, color: "text-red-500 bg-red-500/10" },
-  medico: { label: "Médico", icon: Stethoscope, color: "text-blue-500 bg-blue-500/10" },
-  enfermeiro: { label: "Enfermeiro", icon: UserCheck, color: "text-green-500 bg-green-500/10" },
+  admin: { label: "Administrador", icon: Shield, color: "text-[#6B6B6B] bg-[#6B6B6B]/10" },
+  medico: { label: "Médico", icon: Stethoscope, color: "text-[#C9A55B] bg-[#C9A55B]/10" },
+  enfermeiro: { label: "Enfermeiro", icon: UserCheck, color: "text-[#C9A55B] bg-[#C9A55B]/10" },
   recepcionista: { label: "Recepcionista", icon: ClipboardList, color: "text-yellow-500 bg-yellow-500/10" },
   user: { label: "Usuário", icon: User, color: "text-gray-500 bg-gray-500/10" },
 };
@@ -153,7 +153,7 @@ export default function UsuariosPremium() {
                       {roleInfo.label}
                     </div>
                     
-                    <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${u.status === 'active' ? 'text-green-500 bg-green-500/10' : 'text-red-500 bg-red-500/10'}`}>
+                    <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${u.status === 'active' ? 'text-[#C9A55B] bg-[#C9A55B]/10' : 'text-[#6B6B6B] bg-[#6B6B6B]/10'}`}>
                       {u.status === 'active' ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
                       {u.status === 'active' ? 'Ativo' : 'Inativo'}
                     </div>
@@ -173,7 +173,7 @@ export default function UsuariosPremium() {
                         <PremiumButton
                           variant="outline"
                           size="sm"
-                          className="text-red-500 hover:bg-red-500/10 border-red-500/30"
+                          className="text-[#6B6B6B] hover:bg-[#6B6B6B]/10 border-[#6B6B6B]/30"
                           icon={<Trash2 size={14} />}
                           onClick={() => {
                             if (confirm("Tem certeza que deseja remover este usuário permanentemente?")) {
