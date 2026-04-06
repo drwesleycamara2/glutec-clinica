@@ -5,12 +5,10 @@ import net from "net";
 import fs from "fs";
 import path from "path";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { setupVite } from "./vite";
-import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
-import { getSessionCookieOptions } from "./cookies";
+import { registerAuthRoutes } from "./authRoutes";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -39,16 +37,7 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-  // Bypass route for emergency access
-  app.get("/api/auth/bypass", (req, res) => {
-    const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJvcGVuSWQiOiJpbnZpdGVkX2NvbnRhdG9AZHJ3ZXNsZXljYW1hcmEuY29tLmJyIiwiYXBwSWQiOiJnbHV0ZWMtY2xpbmljYSIsIm5hbWUiOiJXXHUwMDU5c2xleSBDXHUwMGUybWFyYSIsImV4cCI6MTgwNTU5ODcyMn0.N1EIyswOt_MavEnB_J6qEd_tLIsDXc8DQK8h9lz-GnQ";
-    const cookieOptions = getSessionCookieOptions(req);
-    res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: ONE_YEAR_MS });
-    res.redirect(302, "/");
-  });
-
-  // OAuth callback under /api/oauth/callback
-  registerOAuthRoutes(app);
+  registerAuthRoutes(app);
 
   // tRPC API
   app.use(
@@ -64,7 +53,7 @@ async function startServer() {
     await setupVite(app, server);
   } else {
     // Serve static files
-    const distPath = path.resolve(process.cwd(), "../..", "dist", "public");
+    const distPath = path.resolve(process.cwd(), "dist", "public");
     
     if (!fs.existsSync(distPath)) {
       console.error(

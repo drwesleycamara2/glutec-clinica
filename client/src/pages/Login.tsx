@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,17 +33,20 @@ export default function Login() {
       }
 
       if (data.status === "requires_2fa") {
-        // Redirecionar para a página de 2FA com o token temporário
         setLocation(`/verificar-2fa?token=${data.tempToken}`);
         return;
       }
 
       if (data.status === "must_change_password") {
-        setLocation("/trocar-senha");
+        window.location.href = "/trocar-senha";
         return;
       }
 
-      // Login completo — redirecionar para dashboard
+      if (data.status === "requires_2fa_setup") {
+        window.location.href = "/configurar-2fa";
+        return;
+      }
+
       window.location.href = "/";
     } catch {
       setError("Erro de conexão. Verifique sua internet e tente novamente.");
@@ -53,131 +56,132 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#F7F4EE] relative overflow-hidden">
-      {/* Faixa dourada superior */}
-      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#F1D791]" />
-      <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-[#F1D791] via-[#C9A55B] to-[#8A6526]" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#040404] px-4 py-10 text-white">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(246,226,166,0.14),transparent_32%),radial-gradient(circle_at_left_center,rgba(201,165,91,0.12),transparent_28%),linear-gradient(135deg,#020202_0%,#090909_48%,#030303_100%)]" />
+      <div className="pointer-events-none absolute inset-0 opacity-70">
+        <div className="absolute -left-16 top-10 h-[28rem] w-[28rem] rounded-full bg-[radial-gradient(circle,rgba(201,165,91,0.16),transparent_68%)] blur-3xl" />
+        <div className="absolute bottom-[-5rem] right-[-3rem] h-[24rem] w-[24rem] rounded-full bg-[radial-gradient(circle,rgba(246,226,166,0.12),transparent_66%)] blur-3xl" />
+        <div className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(246,226,166,0.85),transparent)]" />
+        <div className="absolute inset-y-0 left-0 w-px bg-[linear-gradient(180deg,transparent,rgba(201,165,91,0.4),transparent)]" />
+      </div>
 
-      {/* Marca d'água do logo */}
-      <div
-        className="absolute inset-0 pointer-events-none opacity-[0.06]"
-        style={{
-          backgroundImage: "url('/logo-glutee.svg')",
-          backgroundRepeat: "no-repeat",
-          backgroundPosition: "center",
-          backgroundSize: "55%",
-        }}
-      />
+      <div className="pointer-events-none absolute inset-0 opacity-[0.08] mix-blend-screen">
+        <div
+          className="absolute inset-0 bg-center bg-no-repeat"
+          style={{
+            backgroundImage: "url('/logo-glutee-white.png')",
+            backgroundSize: "54rem",
+          }}
+        />
+      </div>
 
-      <div className="relative z-10 w-full max-w-md px-4">
-        <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-2xl border border-[#C9A55B]/20 overflow-hidden">
-          {/* Header do card */}
-          <div className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#8A6526] px-8 py-8 text-center">
-            <img src="/logo-glutee.svg" alt="Glutec" className="h-14 mx-auto mb-3" />
-            <h1 className="text-white text-2xl font-bold tracking-tight">Glutec Clínica</h1>
-            <p className="text-white/80 text-sm mt-1">Sistema de Gestão Médica</p>
-          </div>
+      <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-[2rem] border border-[#d7ba78]/30 bg-[linear-gradient(180deg,rgba(10,10,10,0.94),rgba(6,6,6,0.9))] shadow-[0_34px_90px_rgba(0,0,0,0.55),0_0_0_1px_rgba(255,255,255,0.03)] backdrop-blur-xl">
+        <div className="relative overflow-hidden border-b border-[#d7ba78]/18 px-8 pb-8 pt-9 text-center">
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(9,9,9,0.96)_0%,rgba(30,22,8,0.98)_40%,rgba(8,8,8,0.98)_100%)]" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(246,226,166,0.95),transparent)]" />
+          <div className="pointer-events-none absolute bottom-0 left-10 right-10 h-px bg-[linear-gradient(90deg,transparent,rgba(201,165,91,0.45),transparent)]" />
+          <div className="pointer-events-none absolute -right-20 -top-12 h-52 w-52 rounded-full bg-[radial-gradient(circle,rgba(246,226,166,0.2),transparent_65%)] blur-2xl" />
+          <div className="pointer-events-none absolute -left-16 bottom-0 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(201,165,91,0.18),transparent_68%)] blur-2xl" />
 
-          {/* Formulário */}
-          <div className="px-8 py-8">
-            <h2 className="text-[#050505] text-xl font-semibold mb-1">Bem-vindo de volta</h2>
-            <p className="text-[#6B6B6B] text-sm mb-6">Faça login para acessar o sistema</p>
+          <div className="relative mx-auto flex max-w-sm flex-col items-center gap-5">
+            <img
+              src="/logo-glutee-white.png"
+              alt="Clínica Glutée"
+              className="h-24 w-auto object-contain drop-shadow-[0_0_24px_rgba(214,178,90,0.28)]"
+            />
 
-            {error && (
-              <div className="flex items-start gap-2 bg-[#6B6B6B]/5 border border-[#6B6B6B]/25 rounded-lg px-4 py-3 mb-5">
-                <AlertCircle className="h-4 w-4 text-[#6B6B6B] mt-0.5 shrink-0" />
-                <p className="text-[#2F2F2F] text-sm">{error}</p>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {/* E-mail */}
-              <div className="space-y-1.5">
-                <Label htmlFor="email" className="text-[#050505] font-medium text-sm">
-                  E-mail
-                </Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#8B8B8B]" />
-                  <Input
-                    id="email"
-                    type="email"
-                    autoComplete="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="seu@email.com"
-                    className="pl-10 h-11 border-[#E0D8CC] focus:border-[#C9A55B] focus:ring-[#C9A55B]/20"
-                    required
-                    disabled={loading}
-                  />
-                </div>
-              </div>
-
-              {/* Senha */}
-              <div className="space-y-1.5">
-                <Label htmlFor="password" className="text-[#050505] font-medium text-sm">
-                  Senha
-                </Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#8B8B8B]" />
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="pl-10 pr-10 h-11 border-[#E0D8CC] focus:border-[#C9A55B] focus:ring-[#C9A55B]/20"
-                    required
-                    disabled={loading}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8B8B8B] hover:text-[#050505] transition-colors"
-                    tabIndex={-1}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Botão de login */}
-              <Button
-                type="submit"
-                disabled={loading || !email || !password}
-                className="w-full h-12 text-base font-semibold text-white border-none shadow-md transition-all hover:scale-[1.01] active:scale-[0.99]"
-                style={{
-                  background: loading
-                    ? "#C9A55B"
-                    : "linear-gradient(135deg, #8A6526 0%, #C9A55B 30%, #F1D791 50%, #B8863B 75%, #8A6526 100%)",
-                  boxShadow: "0 4px 15px rgba(201, 165, 91, 0.35)",
-                }}
-              >
-                {loading ? (
-                  <span className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Entrando...
-                  </span>
-                ) : (
-                  "Entrar no Sistema"
-                )}
-              </Button>
-            </form>
-
-            <div className="mt-6 pt-5 border-t border-[#F0EAE0] text-center">
-              <p className="text-xs text-[#8B8B8B]">
-                Sem conta?{" "}
-                <span className="text-[#8A6526]">
-                  Solicite um convite ao administrador do sistema.
-                </span>
+            <div className="w-full rounded-[1.4rem] border border-[#d7ba78]/28 bg-[linear-gradient(135deg,rgba(255,214,120,0.12),rgba(255,255,255,0.02),rgba(255,214,120,0.08))] px-6 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] backdrop-blur-md">
+              <h1 className="text-3xl font-semibold tracking-[0.04em] text-[#fff8ea]">Glutec</h1>
+              <p className="mt-2 text-sm font-medium tracking-[0.18em] text-[#f1d791]/80 uppercase">
+                Sistema de atendimento e gestão médica
               </p>
             </div>
           </div>
         </div>
 
-        <p className="text-center text-xs text-[#8B8B8B] mt-5">
-          © 2026 Clinica Glutee — Excelência em Gestão Médica
-        </p>
+        <div className="px-8 py-8 sm:px-10">
+          <h2 className="text-3xl font-semibold tracking-tight text-[#fffaf0]">Bem-vindo de volta</h2>
+          <p className="mt-2 text-sm text-[#d3c6a4]">Faça login para acessar o sistema.</p>
+
+          {error && (
+            <div className="mt-6 flex items-start gap-3 rounded-2xl border border-[#d7ba78]/25 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#f1d791]" />
+              <p className="text-sm text-[#f8f0dc]">{error}</p>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-sm font-medium text-[#f8efd8]">
+                E-mail
+              </Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#d7ba78]" />
+                <Input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="seu@email.com"
+                  className="h-12 rounded-xl border-[#c9a55b]/26 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] pl-10 text-[#fffaf0] placeholder:text-[#c8ba93] focus:border-[#f1d791] focus:ring-[#f1d791]/25"
+                  required
+                  disabled={loading}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-sm font-medium text-[#f8efd8]">
+                Senha
+              </Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#d7ba78]" />
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Digite sua senha"
+                  className="h-12 rounded-xl border-[#c9a55b]/26 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] pl-10 pr-10 text-[#fffaf0] placeholder:text-[#c8ba93] focus:border-[#f1d791] focus:ring-[#f1d791]/25"
+                  required
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#d7ba78] transition-colors hover:text-[#fff4cf]"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              variant="premium"
+              disabled={loading || !email || !password}
+              className="mt-2 h-[3.25rem] w-full rounded-xl text-base font-semibold text-[#130d02] transition-all hover:scale-[1.01] active:scale-[0.99]"
+            >
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Entrando...
+                </span>
+              ) : (
+                "Entrar no sistema"
+              )}
+            </Button>
+          </form>
+
+          <div className="mt-6 border-t border-[#d7ba78]/14 pt-5 text-center">
+            <p className="text-xs text-[#cbbf9c]">
+              O acesso é liberado apenas por convite do administrador.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

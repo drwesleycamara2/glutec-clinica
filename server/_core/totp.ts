@@ -1,36 +1,26 @@
-/**
- * totp.ts — Módulo TOTP para 2FA com App Autenticador
- *
- * Compatível com Google Authenticator, Authy, Microsoft Authenticator, etc.
- * Usa o padrão RFC 6238 (TOTP).
- */
-
-import { TOTP, generateSecret as _gs } from "otplib";
-const _totp = new TOTP();
+﻿import otplib from "otplib";
 import QRCode from "qrcode";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
 
-const APP_NAME = "Glutec Clínica";
+const { authenticator } = otplib as any;
+const APP_NAME = "Glutec Clinica";
 
-// Configurar otplib para máxima compatibilidade
-_totp.options = {
-  window: 1,      // Aceitar código do período anterior/próximo (30s de tolerância)
-  step: 30,       // Período de 30 segundos (padrão)
-  digits: 6,      // 6 dígitos (padrão)
+authenticator.options = {
+  window: 1,
+  step: 30,
+  digits: 6,
 };
 
-// ─── Gerar Secret e QR Code ───────────────────────────────────────────────────
-
 export function generateTotpSecret(): string {
-  return _gs(); // 20 bytes = 160 bits (seguro)
+  return authenticator.generateSecret();
 }
 
 export async function generateQrCodeDataUrl(
   email: string,
   secret: string
 ): Promise<string> {
-  const otpAuthUrl = _totp.keyuri(email, APP_NAME, secret);
+  const otpAuthUrl = authenticator.keyuri(email, APP_NAME, secret);
   return QRCode.toDataURL(otpAuthUrl, {
     width: 256,
     margin: 2,
@@ -41,19 +31,14 @@ export async function generateQrCodeDataUrl(
   });
 }
 
-// ─── Verificar Código ─────────────────────────────────────────────────────────
-
 export function verifyTotpCode(token: string, secret: string): boolean {
   try {
-    return _totp.verify({ token: token.replace(/\s/g, ""), secret });
+    return authenticator.verify({ token: token.replace(/\s/g, ""), secret });
   } catch {
     return false;
   }
 }
 
-// ─── Códigos de Backup ────────────────────────────────────────────────────────
-
-/** Gerar 8 códigos de backup (formato XXXX-XXXX) */
 export function generateBackupCodes(): string[] {
   return Array.from({ length: 8 }, () => {
     const bytes = randomBytes(4).toString("hex").toUpperCase();
@@ -61,13 +46,11 @@ export function generateBackupCodes(): string[] {
   });
 }
 
-/** Hashear lista de códigos de backup para salvar no banco */
 export async function hashBackupCodes(codes: string[]): Promise<string> {
   const hashed = await Promise.all(codes.map(code => bcrypt.hash(code.replace("-", ""), 10)));
   return JSON.stringify(hashed);
 }
 
-/** Verificar e consumir um código de backup */
 export async function verifyAndConsumeBackupCode(
   inputCode: string,
   hashedCodesJson: string
@@ -88,7 +71,6 @@ export async function verifyAndConsumeBackupCode(
     return { valid: false, remainingCodesJson: hashedCodesJson };
   }
 
-  // Remove o código usado
   hashedCodes.splice(matchIndex, 1);
   return { valid: true, remainingCodesJson: JSON.stringify(hashedCodes) };
 }

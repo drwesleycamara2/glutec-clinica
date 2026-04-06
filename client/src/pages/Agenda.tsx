@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Plus, Clock, User, ChevronLeft, ChevronRight, CheckCircle2, UserCheck, Search, Settings } from "lucide-react";
+import { Plus, Clock, User, ChevronLeft, ChevronRight, CheckCircle2, UserCheck, Settings, History } from "lucide-react";
 
 const DAYS_PT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const MONTHS_PT = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -19,6 +19,15 @@ const APPOINTMENT_TYPES = [
   { value: "procedimento", label: "Procedimento" },
   { value: "teleconsulta", label: "Teleconsulta" },
 ];
+
+const STATUS_LABELS: Record<string, string> = {
+  agendada: "Agendada",
+  confirmada: "Confirmada",
+  em_atendimento: "Em atendimento",
+  concluida: "Concluida",
+  cancelada: "Cancelada",
+  falta: "Falta",
+};
 
 // Cores de status por dia
 const DAY_STATUS_COLORS = {
@@ -70,30 +79,25 @@ export default function AgendaReformulada() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [calYear, setCalYear] = useState(new Date().getFullYear());
-  const [viewMode, setViewMode] = useState<ViewMode>("day");
+  const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [showCreate, setShowCreate] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [form, setForm] = useState(defaultForm);
-  const [selectedDoctor, setSelectedDoctor] = useState<string>("");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedDoctor, setSelectedDoctor] = useState<string>("all");
 
-  const dayStart = useMemo(() => {
-    const d = new Date(selectedDate);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, [selectedDate]);
+  const broadRangeStart = useMemo(() => {
+    return new Date(calYear - 1, 0, 1, 0, 0, 0, 0);
+  }, [calYear]);
 
-  const dayEnd = useMemo(() => {
-    const d = new Date(selectedDate);
-    d.setHours(23, 59, 59, 999);
-    return d;
-  }, [selectedDate]);
+  const broadRangeEnd = useMemo(() => {
+    return new Date(calYear + 1, 11, 31, 23, 59, 59, 999);
+  }, [calYear]);
 
   const { data: doctors } = trpc.admin.getDoctors.useQuery();
-  const { data: patients } = trpc.patients.list.useQuery({ limit: 500 });
+  const { data: patients } = trpc.patients.list.useQuery({ limit: 5000 });
   const { data: appointments, refetch } = trpc.appointments.getByDate.useQuery({
-    from: dayStart.toISOString(),
-    to: dayEnd.toISOString(),
+    from: broadRangeStart.toISOString(),
+    to: broadRangeEnd.toISOString(),
   });
 
   const createMutation = trpc.appointments.create.useMutation({
@@ -106,12 +110,44 @@ export default function AgendaReformulada() {
     onError: (err: any) => toast.error(err.message),
   });
 
+  const getPatientName = (patientId: number) =>
+    patients?.find(patient => patient.id === patientId)?.fullName ?? `Paciente #${patientId}`;
+
+  const getDoctorName = (doctorId: number) =>
+    doctors?.find(doctor => doctor.id === doctorId)?.name ?? `Profissional #${doctorId}`;
+
+  const filteredAppointments = useMemo(() => {
+    return (appointments ?? [])
+      .filter((apt) => selectedDoctor === "all" || String(apt.doctorId) === selectedDoctor)
+      .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
+  }, [appointments, selectedDoctor]);
+
+  const selectedDayAppointments = useMemo(() => {
+    return filteredAppointments.filter((apt) => {
+      const aptDate = new Date(apt.scheduledAt);
+      return isSameDay(aptDate, selectedDate);
+    });
+  }, [filteredAppointments, selectedDate]);
+
+  const upcomingAppointments = useMemo(() => {
+    const now = Date.now();
+    return filteredAppointments.filter((apt) => new Date(apt.scheduledAt).getTime() >= now).slice(0, 8);
+  }, [filteredAppointments]);
+
+  const pastAppointments = useMemo(() => {
+    const now = Date.now();
+    return [...filteredAppointments]
+      .filter((apt) => new Date(apt.scheduledAt).getTime() < now)
+      .sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime())
+      .slice(0, 8);
+  }, [filteredAppointments]);
+
   // Calcular status do dia (verde, amarelo, vermelho, preto)
   const getDayStatus = (date: Date): keyof typeof DAY_STATUS_COLORS => {
     const dayOfWeek = date.getDay();
     if (dayOfWeek === 0) return "fechado"; // Domingo
     
-    const dayAppointments = (appointments ?? []).filter(apt => {
+    const dayAppointments = filteredAppointments.filter(apt => {
       const aptDate = new Date(apt.scheduledAt);
       return isSameDay(aptDate, date);
     });
@@ -124,16 +160,14 @@ export default function AgendaReformulada() {
   // Map appointments to time slots
   const slotMap = useMemo(() => {
     const map: Record<string, any[]> = {};
-    (appointments ?? []).forEach((apt) => {
+    selectedDayAppointments.forEach((apt) => {
       const d = new Date(apt.scheduledAt);
       const key = `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes() < 30 ? "00" : "30"}`;
       if (!map[key]) map[key] = [];
-      const patient = patients?.find((p) => p.id === apt.patientId);
-      const doctor = doctors?.find((d) => d.id === apt.doctorId);
-      map[key].push({ ...apt, patientName: patient?.fullName ?? `Paciente #${apt.patientId}`, doctorName: doctor?.name ?? "" });
+      map[key].push({ ...apt, patientName: getPatientName(apt.patientId), doctorName: getDoctorName(apt.doctorId) });
     });
     return map;
-  }, [appointments, patients, doctors]);
+  }, [selectedDayAppointments, patients, doctors]);
 
   // Calendar mini
   const daysInMonth = getDaysInMonth(calYear, calMonth);
@@ -161,7 +195,11 @@ export default function AgendaReformulada() {
     const [h, m] = time.split(":").map(Number);
     const d = new Date(selectedDate);
     d.setHours(h, m, 0, 0);
-    setForm({ ...defaultForm, scheduledAt: d.toISOString().slice(0, 16) });
+    setForm({
+      ...defaultForm,
+      doctorId: selectedDoctor === "all" ? "" : selectedDoctor,
+      scheduledAt: d.toISOString().slice(0, 16),
+    });
     setShowCreate(true);
   };
 
@@ -171,8 +209,8 @@ export default function AgendaReformulada() {
       return;
     }
     createMutation.mutate({
-      patientId: form.patientId,
-      doctorId: form.doctorId,
+      patientId: parseInt(form.patientId, 10),
+      doctorId: parseInt(form.doctorId, 10),
       scheduledAt: form.scheduledAt,
       durationMinutes: parseInt(form.durationMinutes),
       type: form.type,
@@ -228,6 +266,25 @@ export default function AgendaReformulada() {
           <Button variant="outline" size="sm" className="border-gray-300">
             <Settings className="h-4 w-4 mr-2" />Opções
           </Button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-4 xl:grid-cols-4">
+          <div className="rounded-2xl border border-gray-300 bg-white p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-500">Total no filtro</p>
+            <p className="mt-2 text-3xl font-semibold text-gray-900">{filteredAppointments.length}</p>
+          </div>
+          <div className="rounded-2xl border border-gray-300 bg-white p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-500">No dia</p>
+            <p className="mt-2 text-3xl font-semibold text-gray-900">{selectedDayAppointments.length}</p>
+          </div>
+          <div className="rounded-2xl border border-gray-300 bg-white p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-500">Próximos</p>
+            <p className="mt-2 text-3xl font-semibold text-gray-900">{upcomingAppointments.length}</p>
+          </div>
+          <div className="rounded-2xl border border-gray-300 bg-white p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-500">Histórico</p>
+            <p className="mt-2 text-3xl font-semibold text-gray-900">{pastAppointments.length}</p>
+          </div>
         </div>
 
         {/* Conteúdo principal por modo de visualização */}
@@ -311,6 +368,72 @@ export default function AgendaReformulada() {
           </div>
         )}
 
+        {viewMode === "week" && (
+          <div className="flex-1 flex flex-col min-w-0">
+            <div className="mb-3">
+              <h2 className="text-lg font-bold text-foreground">
+                Semana de {selectedDate.toLocaleDateString("pt-BR")}
+              </h2>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 7 }, (_, index) => {
+                const currentDate = new Date(selectedDate);
+                currentDate.setDate(selectedDate.getDate() - selectedDate.getDay() + index);
+                const items = filteredAppointments.filter(apt => isSameDay(new Date(apt.scheduledAt), currentDate));
+
+                return (
+                  <div key={currentDate.toISOString()} className="rounded-2xl border border-gray-300 bg-white p-4">
+                    <button
+                      className="w-full text-left"
+                      onClick={() => {
+                        setSelectedDate(currentDate);
+                        setViewMode("day");
+                      }}
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">
+                        {DAYS_PT[currentDate.getDay()]}
+                      </p>
+                      <p className="mt-1 text-base font-semibold text-gray-900">
+                        {currentDate.toLocaleDateString("pt-BR")}
+                      </p>
+                    </button>
+
+                    <div className="mt-4 space-y-3">
+                      {items.length === 0 ? (
+                        <p className="text-sm text-gray-500">Nenhum agendamento neste dia.</p>
+                      ) : (
+                        items.slice(0, 6).map(item => (
+                          <button
+                            key={item.id}
+                            className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-left hover:border-[#C9A55B]/40"
+                            onClick={() => setSelectedEvent(item)}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm font-semibold text-gray-900">
+                                {new Date(item.scheduledAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                              <Badge className="border border-[#C9A55B]/25 bg-[#C9A55B]/10 text-[#8A6526]">
+                                {STATUS_LABELS[item.status] ?? item.status}
+                              </Badge>
+                            </div>
+                            <p className="mt-2 text-sm text-gray-900">
+                              {patients?.find(p => p.id === item.patientId)?.fullName ?? `Paciente #${item.patientId}`}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {doctors?.find(d => d.id === item.doctorId)?.name ?? `Médico #${item.doctorId}`}
+                            </p>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {viewMode === "month" && (
           <div className="flex-1 flex flex-col min-w-0">
             <h2 className="text-lg font-bold text-foreground mb-4">{MONTHS_PT[calMonth]} {calYear}</h2>
@@ -356,8 +479,9 @@ export default function AgendaReformulada() {
               <SelectValue placeholder="Selecione um profissional" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="all">Todos os profissionais</SelectItem>
               {doctors?.map(doc => (
-                <SelectItem key={doc.id} value={doc.id}>{doc.name}</SelectItem>
+                <SelectItem key={doc.id} value={String(doc.id)}>{doc.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -365,7 +489,13 @@ export default function AgendaReformulada() {
 
         {/* Botão Hoje */}
         <Button 
-          onClick={() => setSelectedDate(new Date())}
+          onClick={() => {
+            const today = new Date();
+            setSelectedDate(today);
+            setCalMonth(today.getMonth());
+            setCalYear(today.getFullYear());
+            setViewMode("day");
+          }}
           className="btn-gold-gradient w-full"
         >
           Hoje
@@ -436,6 +566,79 @@ export default function AgendaReformulada() {
             <span className="text-gray-700">Fechado</span>
           </div>
         </div>
+
+        <div className="bg-white rounded-lg border border-gray-300 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Próximos agendamentos</p>
+          <div className="mt-3 space-y-3">
+            {upcomingAppointments.length === 0 ? (
+              <p className="text-sm text-gray-500">Nenhum agendamento futuro no filtro atual.</p>
+            ) : (
+              upcomingAppointments.map(item => (
+                <button
+                  key={item.id}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-left hover:border-[#C9A55B]/40"
+                  onClick={() => {
+                    const appointmentDate = new Date(item.scheduledAt);
+                    setSelectedDate(appointmentDate);
+                    setCalMonth(appointmentDate.getMonth());
+                    setCalYear(appointmentDate.getFullYear());
+                    setViewMode("day");
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-gray-900">
+                      {new Date(item.scheduledAt).toLocaleDateString("pt-BR")}
+                    </span>
+                    <span className="text-sm text-[#8A6526]">
+                      {new Date(item.scheduledAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-gray-900">
+                    {patients?.find(p => p.id === item.patientId)?.fullName ?? `Paciente #${item.patientId}`}
+                  </p>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-300 p-4">
+          <div className="flex items-center gap-2">
+            <History className="h-4 w-4 text-[#C9A55B]" />
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Histórico recente</p>
+          </div>
+          <div className="mt-3 space-y-3">
+            {pastAppointments.length === 0 ? (
+              <p className="text-sm text-gray-500">Nenhum atendimento anterior no filtro atual.</p>
+            ) : (
+              pastAppointments.map(item => (
+                <button
+                  key={item.id}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-left hover:border-[#C9A55B]/40"
+                  onClick={() => {
+                    const appointmentDate = new Date(item.scheduledAt);
+                    setSelectedDate(appointmentDate);
+                    setCalMonth(appointmentDate.getMonth());
+                    setCalYear(appointmentDate.getFullYear());
+                    setViewMode("day");
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-gray-900">
+                      {new Date(item.scheduledAt).toLocaleDateString("pt-BR")}
+                    </span>
+                    <Badge className="border border-gray-200 bg-white text-gray-700">
+                      {STATUS_LABELS[item.status] ?? item.status}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-sm text-gray-900">
+                    {patients?.find(p => p.id === item.patientId)?.fullName ?? `Paciente #${item.patientId}`}
+                  </p>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Dialog para criar agendamento */}
@@ -448,13 +651,13 @@ export default function AgendaReformulada() {
           <div className="space-y-4">
             <div>
               <Label className="text-sm font-semibold">Paciente *</Label>
-              <Select value={form.patientId} onValueChange={(val) => setForm({ ...form, patientId: val })}>
+              <Select value={form.patientId || undefined} onValueChange={(val) => setForm({ ...form, patientId: val })}>
                 <SelectTrigger className="border-gray-300 mt-1">
                   <SelectValue placeholder="Selecione um paciente" />
                 </SelectTrigger>
                 <SelectContent>
                   {patients?.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.fullName}</SelectItem>
+                    <SelectItem key={p.id} value={String(p.id)}>{p.fullName}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -462,13 +665,13 @@ export default function AgendaReformulada() {
 
             <div>
               <Label className="text-sm font-semibold">Profissional *</Label>
-              <Select value={form.doctorId} onValueChange={(val) => setForm({ ...form, doctorId: val })}>
+              <Select value={form.doctorId || undefined} onValueChange={(val) => setForm({ ...form, doctorId: val })}>
                 <SelectTrigger className="border-gray-300 mt-1">
                   <SelectValue placeholder="Selecione um profissional" />
                 </SelectTrigger>
                 <SelectContent>
                   {doctors?.map(d => (
-                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                    <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -536,6 +739,65 @@ export default function AgendaReformulada() {
             <Button onClick={handleCreateAppointment} className="btn-gold-gradient" disabled={createMutation.isPending}>
               {createMutation.isPending ? "Salvando..." : "Agendar"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Detalhes do agendamento</DialogTitle>
+          </DialogHeader>
+
+          {selectedEvent && (
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Paciente</p>
+                  <p className="mt-2 text-sm font-semibold text-gray-900">
+                    {selectedEvent.patientName ?? getPatientName(selectedEvent.patientId)}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Profissional</p>
+                  <p className="mt-2 text-sm font-semibold text-gray-900">
+                    {selectedEvent.doctorName ?? getDoctorName(selectedEvent.doctorId)}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Data</p>
+                  <p className="mt-2 text-sm font-semibold text-gray-900">
+                    {new Date(selectedEvent.scheduledAt).toLocaleDateString("pt-BR")}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Horário</p>
+                  <p className="mt-2 text-sm font-semibold text-gray-900">
+                    {new Date(selectedEvent.scheduledAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Badge className="border border-[#C9A55B]/25 bg-[#C9A55B]/10 text-[#8A6526]">
+                  {STATUS_LABELS[selectedEvent.status] ?? selectedEvent.status}
+                </Badge>
+                <Badge className="border border-gray-200 bg-white text-gray-700">
+                  {selectedEvent.type ?? "Consulta"}
+                </Badge>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Observações</p>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-gray-800">
+                  {selectedEvent.notes || "Nenhuma observação registrada para este agendamento."}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedEvent(null)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

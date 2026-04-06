@@ -71,6 +71,17 @@
   --panel-highlight: linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.05) 45%, rgba(247, 215, 145, 0.12) 80%, rgba(255, 255, 255, 0.14));
   --menu-active-fill: linear-gradient(90deg, rgba(227, 197, 134, 0.1), rgba(255, 241, 208, 0.95), rgba(227, 197, 134, 0.18));
   --menu-hover-fill: linear-gradient(90deg, rgba(201, 165, 91, 0.06), rgba(255, 250, 238, 0.8), rgba(201, 165, 91, 0.12));
+  --menu-rail-glow: linear-gradient(180deg, rgba(241, 215, 145, 0), rgba(241, 215, 145, 0.88), rgba(201, 165, 91, 0));
+  --sidebar-wallpaper:
+    radial-gradient(circle at 16% 18%, rgba(255, 248, 225, 0.6), transparent 18%),
+    linear-gradient(132deg, transparent 0 16%, rgba(241, 215, 145, 0.18) 28%, rgba(201, 165, 91, 0.06) 38%, transparent 54%),
+    linear-gradient(164deg, transparent 0 58%, rgba(201, 165, 91, 0.08) 73%, rgba(241, 215, 145, 0.22) 82%, transparent 100%);
+  --main-wallpaper:
+    radial-gradient(circle at 82% 16%, rgba(255, 236, 187, 0.22), transparent 18%),
+    radial-gradient(circle at 16% 86%, rgba(201, 165, 91, 0.12), transparent 22%),
+    linear-gradient(110deg, transparent 0 52%, rgba(241, 215, 145, 0.16) 66%, rgba(201, 165, 91, 0.06) 74%, transparent 86%);
+  --hero-chip-fill: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 245, 224, 0.55));
+  --hero-chip-border: rgba(201, 165, 91, 0.28);
 }
 
 /* Modo Escuro */
@@ -104,6 +115,17 @@
   --panel-highlight: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.02) 45%, rgba(201, 165, 91, 0.1) 82%, rgba(255, 255, 255, 0.05));
   --menu-active-fill: linear-gradient(90deg, rgba(120, 92, 38, 0.42), rgba(32, 29, 25, 0.96), rgba(201, 165, 91, 0.18));
   --menu-hover-fill: linear-gradient(90deg, rgba(201, 165, 91, 0.08), rgba(26, 24, 22, 0.88), rgba(201, 165, 91, 0.12));
+  --menu-rail-glow: linear-gradient(180deg, rgba(201, 165, 91, 0), rgba(241, 215, 145, 0.9), rgba(201, 165, 91, 0));
+  --sidebar-wallpaper:
+    radial-gradient(circle at 14% 14%, rgba(255, 231, 173, 0.12), transparent 18%),
+    linear-gradient(132deg, transparent 0 14%, rgba(201, 165, 91, 0.12) 28%, rgba(241, 215, 145, 0.05) 36%, transparent 54%),
+    linear-gradient(164deg, transparent 0 60%, rgba(201, 165, 91, 0.08) 74%, rgba(241, 215, 145, 0.12) 84%, transparent 100%);
+  --main-wallpaper:
+    radial-gradient(circle at 84% 12%, rgba(241, 215, 145, 0.16), transparent 16%),
+    radial-gradient(circle at 12% 86%, rgba(201, 165, 91, 0.08), transparent 20%),
+    linear-gradient(112deg, transparent 0 48%, rgba(201, 165, 91, 0.1) 64%, rgba(241, 215, 145, 0.06) 72%, transparent 86%);
+  --hero-chip-fill: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(201, 165, 91, 0.08));
+  --hero-chip-border: rgba(201, 165, 91, 0.2);
 }
 
 /* Aplicar tema ao body */
@@ -532,8 +554,20 @@ body::after {
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(circle at 12% 100%, rgba(201, 165, 91, 0.14), transparent 22%),
-    radial-gradient(circle at 100% 6%, rgba(241, 215, 145, 0.16), transparent 20%);
+      radial-gradient(circle at 12% 100%, rgba(201, 165, 91, 0.14), transparent 22%),
+      radial-gradient(circle at 100% 6%, rgba(241, 215, 145, 0.16), transparent 20%);
+}
+
+.app-shell::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    linear-gradient(124deg, transparent 0 62%, rgba(201, 165, 91, 0.07) 73%, rgba(241, 215, 145, 0.18) 79%, transparent 86%),
+    linear-gradient(194deg, transparent 0 72%, rgba(201, 165, 91, 0.05) 82%, rgba(255, 239, 199, 0.12) 88%, transparent 100%);
+  opacity: 0.9;
 }
 
 .app-sidebar {
@@ -569,6 +603,53 @@ body::after {
   opacity: 0.95;
 }
 
+.app-sidebar [data-sidebar="sidebar-inner"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--sidebar-wallpaper);
+  mix-blend-mode: screen;
+  opacity: 0.9;
+}
+
+.app-sidebar-content {
+  position: relative;
+}
+
+.app-sidebar-content::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 12px 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 12%),
+    linear-gradient(160deg, transparent 0 62%, rgba(201, 165, 91, 0.08) 76%, rgba(241, 215, 145, 0.16) 84%, transparent 100%);
+  opacity: 0.9;
+}
+
+.app-sidebar-section {
+  position: relative;
+  padding: 0.35rem 0.2rem 0.3rem;
+  border: 1px solid rgba(201, 165, 91, 0.12);
+  border-radius: 1.35rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.04)),
+    linear-gradient(145deg, transparent 0 58%, rgba(241, 215, 145, 0.08) 74%, transparent 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 18px 40px rgba(90, 63, 18, 0.06);
+}
+
+.dark .app-sidebar-section {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
+    linear-gradient(145deg, transparent 0 58%, rgba(201, 165, 91, 0.08) 74%, transparent 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 20px 42px rgba(0, 0, 0, 0.25);
+}
+
 .app-brand-mark {
   position: relative;
   border-radius: 1rem;
@@ -582,22 +663,91 @@ body::after {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 14px 28px rgba(0, 0, 0, 0.35);
 }
 
+.app-brand-mark::after {
+  content: "";
+  position: absolute;
+  inset: 8% auto auto -18%;
+  width: 56%;
+  height: 120%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+  transform: rotate(16deg);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
 .app-sidebar-button {
   min-height: 2.75rem;
   border: 1px solid transparent;
   border-radius: 0.95rem;
   position: relative;
+  overflow: hidden;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease;
+}
+
+.app-sidebar-button::before {
+  content: "";
+  position: absolute;
+  left: 0.35rem;
+  top: 0.45rem;
+  bottom: 0.45rem;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--menu-rail-glow);
+  opacity: 0;
+  transform: scaleY(0.35);
+  transform-origin: center;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.app-sidebar-button::after {
+  content: "";
+  position: absolute;
+  inset: -180% auto auto -30%;
+  width: 40%;
+  height: 340%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.34), transparent);
+  transform: rotate(18deg);
+  opacity: 0;
+  transition: opacity 180ms ease, transform 420ms ease;
 }
 
 .app-sidebar-button:hover {
   border-color: rgba(201, 165, 91, 0.22);
   background: var(--menu-hover-fill);
+  box-shadow:
+    0 10px 24px rgba(201, 165, 91, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  transform: translateX(3px);
+}
+
+.app-sidebar-button:hover::before,
+.app-sidebar-button[data-active="true"]::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+.app-sidebar-button:hover::after {
+  opacity: 0.85;
+  transform: translateX(175%) rotate(18deg);
 }
 
 .app-sidebar-button[data-active="true"] {
   background: var(--menu-active-fill);
   border-color: rgba(201, 165, 91, 0.36);
-  box-shadow: 0 12px 28px rgba(201, 165, 91, 0.12);
+  box-shadow:
+    0 12px 28px rgba(201, 165, 91, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.34);
+  transform: translateX(4px);
+}
+
+.app-sidebar-button[data-active="true"]::after {
+  opacity: 0.75;
+  transform: translateX(150%) rotate(18deg);
 }
 
 .app-sidebar-section-label {
@@ -605,7 +755,7 @@ body::after {
   font-size: 0.68rem;
   letter-spacing: 0.32em;
   text-transform: uppercase;
-  padding: 0.25rem 0.75rem;
+  padding: 0.35rem 0.85rem 0.45rem;
 }
 
 .app-sidebar-user {
@@ -632,9 +782,60 @@ body::after {
   background: linear-gradient(180deg, rgba(9, 9, 9, 0.86), rgba(9, 9, 9, 0.58));
 }
 
+.app-main-header::after {
+  content: "";
+  position: absolute;
+  left: 1.5rem;
+  right: 1.5rem;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201, 165, 91, 0.68), transparent);
+  pointer-events: none;
+}
+
 .app-main-shell {
   position: relative;
   z-index: 1;
+}
+
+.app-main-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--main-wallpaper);
+  opacity: 0.95;
+}
+
+.app-main-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(255, 234, 185, 0.18), transparent 16%),
+    linear-gradient(118deg, transparent 0 60%, rgba(241, 215, 145, 0.12) 72%, rgba(201, 165, 91, 0.05) 78%, transparent 88%);
+  opacity: 0.9;
+}
+
+.app-main-shell > * {
+  position: relative;
+}
+
+.app-main-content {
+  position: relative;
+}
+
+.app-main-content::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 20% 72%, rgba(255, 244, 214, 0.2), transparent 18%),
+    linear-gradient(196deg, transparent 0 56%, rgba(241, 215, 145, 0.18) 67%, rgba(201, 165, 91, 0.06) 74%, transparent 84%),
+    linear-gradient(164deg, transparent 0 64%, rgba(241, 215, 145, 0.22) 76%, transparent 88%);
+  opacity: 0.9;
 }
 
 .theme-toggle-premium {
@@ -665,6 +866,21 @@ body::after {
   background: var(--panel-highlight);
 }
 
+[data-slot="card"]::after {
+  content: "";
+  position: absolute;
+  right: -6%;
+  bottom: -24%;
+  width: 72%;
+  height: 76%;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 24% 44%, rgba(255, 238, 196, 0.24), transparent 18%),
+    linear-gradient(112deg, transparent 0 40%, rgba(201, 165, 91, 0.1) 52%, rgba(241, 215, 145, 0.22) 62%, transparent 78%);
+  opacity: 0.72;
+  transform: rotate(-5deg);
+}
+
 [data-slot="card"] > * {
   position: relative;
 }
@@ -676,6 +892,12 @@ body::after {
 
 [data-slot="button"][class*="bg-primary"] {
   box-shadow: 0 12px 24px rgba(201, 165, 91, 0.24);
+}
+
+.app-hero-chip {
+  background: var(--hero-chip-fill);
+  border: 1px solid var(--hero-chip-border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42), 0 12px 28px rgba(201, 165, 91, 0.12);
 }
 
 /* Responsividade */

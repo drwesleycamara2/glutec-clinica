@@ -123,13 +123,13 @@ export default function AceitarConvite() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#F7F4EE] relative overflow-hidden">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background relative overflow-hidden">
       <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#F1D791]" />
       <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-[#F1D791] via-[#C9A55B] to-[#8A6526]" />
 
       <div className="relative z-10 w-full max-w-md px-4">
-        <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-2xl border border-[#C9A55B]/20 overflow-hidden">
-          <div className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#8A6526] px-8 py-7 text-center">
+        <div className="overflow-hidden rounded-[2rem] border border-gold/20 bg-white/80 shadow-[0_38px_90px_rgba(90,63,18,0.18)] backdrop-blur-xl dark:bg-black/45">
+          <div className="bg-[linear-gradient(135deg,#6F4D17_0%,#B8863B_26%,#F1D791_50%,#C89D49_72%,#6F4D17_100%)] px-8 py-7 text-center">
             <img src="/logo-glutee.svg" alt="Glutec" className="h-12 mx-auto mb-2" />
             <h1 className="text-white text-xl font-bold">Ativar Conta</h1>
             <p className="text-white/80 text-sm mt-1">Glutec Clínica</p>
@@ -233,12 +233,9 @@ export default function AceitarConvite() {
 
                   <Button
                     type="submit"
+                    variant="premium"
                     disabled={loading || password.length < 8 || password !== confirmPassword}
-                    className="w-full h-12 text-base font-semibold text-white border-none"
-                    style={{
-                      background: "linear-gradient(135deg, #8A6526 0%, #C9A55B 30%, #F1D791 50%, #B8863B 75%, #8A6526 100%)",
-                      boxShadow: "0 4px 15px rgba(201, 165, 91, 0.35)",
-                    }}
+                    className="w-full h-12 text-base font-semibold"
                   >
                     {loading ? (
                       <span className="flex items-center gap-2">
