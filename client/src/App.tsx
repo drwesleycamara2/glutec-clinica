@@ -20,7 +20,7 @@ import Orcamentos from "./pages/Orcamentos";
 import Financeiro from "./pages/Financeiro";
 import Estoque from "./pages/Estoque";
 import NfseEmissao from "./pages/NfseEmissao";
-import ConfiguracoesFiscais from "./pages/ConfiguracoesFiscaisPage";
+import ConfiguracoesFiscais from "./pages/ConfiguracoesFiscaisNacional";
 import EvolucaoClinica from "./pages/EvolucaoClinica";
 import Documentos from "./pages/Documentos";
 import Fotos from "./pages/Fotos";
