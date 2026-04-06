@@ -1,6 +1,12 @@
 import { getDb } from "./db";
 import { eq, like, and, gte, lte, desc } from "drizzle-orm";
 import { sql } from "drizzle-orm";
+import {
+  emitNfseWithNationalApi,
+  fetchMunicipalParameters,
+  testNationalApiConnection,
+} from "./lib/nfse-nacional";
+import { encryptSensitiveValue, maskStoredValue } from "./lib/secure-storage";
 
 function unwrapRows<T = any>(result: any): T[] {
   if (Array.isArray(result) && Array.isArray(result[0])) {
@@ -546,6 +552,31 @@ function normalizeNfseRow(row: any) {
   };
 }
 
+async function logNfseEvent(
+  nfseId: number,
+  event: string,
+  params: {
+    status?: string | null;
+    message?: string | null;
+    xmlRequest?: string | null;
+    xmlResponse?: string | null;
+    userId?: number | null;
+  } = {},
+) {
+  const db = await getDb();
+  if (!db) return;
+
+  await db.insert(sql`nfse_events`).values({
+    nfseId,
+    event,
+    status: params.status ?? null,
+    message: params.message ?? null,
+    xmlRequest: params.xmlRequest ?? null,
+    xmlResponse: params.xmlResponse ?? null,
+    userId: params.userId ?? null,
+  });
+}
+
 export async function getFiscalSettings() {
   const db = await getDb();
   if (!db) return null;
@@ -562,6 +593,9 @@ export async function getFiscalSettings() {
     municipioIncidencia: fiscal.municipioIncidencia ?? fiscal.municipio ?? null,
     ufIncidencia: fiscal.ufIncidencia ?? fiscal.uf ?? null,
     provedor: fiscal.provedor ?? "nfse_nacional",
+    certificadoConfigurado: Boolean(fiscal.certificadoDigital && fiscal.certificadoSenha),
+    certificadoDigital: maskStoredValue(fiscal.certificadoDigital),
+    certificadoSenha: maskStoredValue(fiscal.certificadoSenha),
   };
 }
 
@@ -581,6 +615,13 @@ export async function upsertFiscalSettings(data: any) {
     ufIncidencia: data.ufIncidencia ?? data.uf ?? null,
     provedor: data.provedor ?? "nfse_nacional",
     ativo: data.cnpj && data.razaoSocial ? 1 : 0,
+    inscricaoMunicipal: data.inscricaoMunicipal ?? null,
+    inscricaoEstadual: data.inscricaoEstadual ?? null,
+    codigoMunicipio: data.codigoMunicipio ?? null,
+    codigoServico: data.codigoServico ?? data.codigoTributacaoNacional ?? null,
+    itemListaServico: data.itemListaServico ?? null,
+    cnaeServico: data.cnaeServico ?? null,
+    webserviceUrl: data.webserviceUrl ?? null,
   };
   
   if (existing) {
@@ -590,6 +631,102 @@ export async function upsertFiscalSettings(data: any) {
   }
   
   return { success: true };
+}
+
+async function getRawFiscalConfig() {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from fiscal_config
+    limit 1
+  `));
+
+  return rows[0] ?? null;
+}
+
+export async function saveFiscalCertificate(data: {
+  fileName: string;
+  mimeType?: string | null;
+  fileBase64: string;
+  password: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const existing = await getRawFiscalConfig();
+  if (!existing?.id) {
+    throw new Error("Salve primeiro os dados fiscais da clínica antes de enviar o certificado A1.");
+  }
+
+  const cleanedBase64 = String(data.fileBase64 ?? "").trim();
+  if (!cleanedBase64) {
+    throw new Error("Arquivo do certificado inválido.");
+  }
+
+  await db.update(sql`fiscal_config`).set({
+    certificadoDigital: encryptSensitiveValue(cleanedBase64),
+    certificadoSenha: encryptSensitiveValue(data.password),
+    certificadoArquivoNome: data.fileName,
+    certificadoMimeType: data.mimeType ?? null,
+    certificadoAtualizadoEm: new Date(),
+  }).where(eq(sql`id`, existing.id));
+
+  return {
+    success: true,
+    certificadoConfigurado: true,
+    fileName: data.fileName,
+  };
+}
+
+export async function testFiscalNationalApi(ambiente?: "homologacao" | "producao") {
+  const fiscal = await getRawFiscalConfig();
+  if (!fiscal) {
+    throw new Error("Configure primeiro os dados fiscais da clínica.");
+  }
+
+  return testNationalApiConnection(
+    {
+      ...fiscal,
+      ambiente: ambiente ?? fiscal.ambiente ?? "homologacao",
+      optanteSimplesNacional: Boolean(fiscal.optanteSimplesNacional),
+    },
+    ambiente ?? fiscal.ambiente ?? "homologacao",
+  );
+}
+
+export async function syncFiscalMunicipalParameters(ambiente?: "homologacao" | "producao") {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const fiscal = await getRawFiscalConfig();
+  if (!fiscal?.codigoMunicipio) {
+    throw new Error("Informe o código IBGE do município para sincronizar os parâmetros oficiais.");
+  }
+
+  const params = await fetchMunicipalParameters(
+    fiscal.codigoMunicipio,
+    ambiente ?? fiscal.ambiente ?? "homologacao",
+  );
+
+  const source = params?.convenio || params?.prestador || params?.parametros || params?.data || params;
+
+  if (source && typeof source === "object") {
+    await db.update(sql`fiscal_config`).set({
+      municipio: source.municipio ?? fiscal.municipio ?? null,
+      uf: source.uf ?? fiscal.uf ?? null,
+      codigoMunicipio: source.codigoMunicipio ?? fiscal.codigoMunicipio ?? null,
+      codigoServico: source.codigoServico ?? fiscal.codigoServico ?? null,
+      itemListaServico: source.itemListaServico ?? fiscal.itemListaServico ?? null,
+      webserviceUrl: source.webserviceUrl ?? fiscal.webserviceUrl ?? null,
+    }).where(eq(sql`id`, fiscal.id));
+  }
+
+  return {
+    success: true,
+    parametros: params,
+  };
 }
 
 // ─── NFSE ────────────────────────────────────────────────────────────────────
@@ -720,6 +857,80 @@ export async function cancelNfse(nfseId: number, reason: string) {
     dataCancelamento: new Date(),
   }).where(eq(sql`id`, nfseId));
   return { success: true };
+}
+
+export async function emitNfseThroughNationalApi(nfseId: number, userId?: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const current = await db.select().from(sql`nfse`).where(eq(sql`id`, nfseId)).limit(1);
+  if (!current[0]) throw new Error("NFS-e não encontrada.");
+
+  const fiscal = await getRawFiscalConfig();
+  if (!fiscal) {
+    throw new Error("Configure os dados fiscais da clínica antes de emitir a NFS-e.");
+  }
+
+  try {
+    const result = await emitNfseWithNationalApi(
+      {
+        ...fiscal,
+        optanteSimplesNacional: Boolean(fiscal.optanteSimplesNacional),
+      },
+      current[0] as any,
+    );
+
+    await db.update(sql`nfse`).set({
+      status: result.status,
+      numeroNfse: result.numeroNfse ?? null,
+      chaveAcesso: result.chaveAcesso ?? null,
+      protocolo: result.protocolo ?? null,
+      numeroDps: result.numeroDps ?? null,
+      codigoVerificacao: result.codigoVerificacao ?? null,
+      linkNfse: result.linkNfse ?? null,
+      xmlEnviado: result.xmlEnviado,
+      xmlRetorno: result.xmlRetorno,
+      xmlNfse: result.xmlNfse,
+      erroMensagem: null,
+      tentativas: sql`tentativas + 1`,
+      updatedAt: new Date(),
+    }).where(eq(sql`id`, nfseId));
+
+    await logNfseEvent(nfseId, "emissao", {
+      status: result.status,
+      message: result.message,
+      xmlRequest: result.xmlEnviado,
+      xmlResponse: result.xmlRetorno,
+      userId,
+    });
+
+    return {
+      success: true,
+      status: result.status,
+      message: result.message,
+      chaveAcesso: result.chaveAcesso,
+      numeroNfse: result.numeroNfse,
+      protocolo: result.protocolo,
+      linkNfse: result.linkNfse,
+    };
+  } catch (error: any) {
+    const message = error?.message || "Falha ao emitir a NFS-e na API nacional.";
+
+    await db.update(sql`nfse`).set({
+      status: "erro",
+      erroMensagem: message,
+      tentativas: sql`tentativas + 1`,
+      updatedAt: new Date(),
+    }).where(eq(sql`id`, nfseId));
+
+    await logNfseEvent(nfseId, "erro", {
+      status: "erro",
+      message,
+      userId,
+    });
+
+    throw new Error(message);
+  }
 }
 
 // ─── BUDGETS ─────────────────────────────────────────────────────────────────

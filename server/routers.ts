@@ -670,6 +670,9 @@ export const appRouter = router({
         cnpj: z.string().optional(),
         razaoSocial: z.string().optional(),
         nomeFantasia: z.string().optional(),
+        inscricaoMunicipal: z.string().optional(),
+        inscricaoEstadual: z.string().optional(),
+        codigoMunicipio: z.string().optional(),
         telefone: z.string().optional(),
         email: z.string().optional(),
         cep: z.string().optional(),
@@ -691,11 +694,45 @@ export const appRouter = router({
         ufIncidencia: z.string().optional(),
         descricaoServicoPadrao: z.string().optional(),
         textoLegalFixo: z.string().optional(),
+        codigoServico: z.string().optional(),
+        itemListaServico: z.string().optional(),
+        cnaeServico: z.string().optional(),
+        webserviceUrl: z.string().optional(),
         ambiente: z.enum(['homologacao', 'producao']).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
         return dbComplete.upsertFiscalSettings(input);
+      }),
+
+    uploadCertificate: protectedProcedure
+      .input(z.object({
+        fileName: z.string().min(1),
+        mimeType: z.string().optional(),
+        fileBase64: z.string().min(16),
+        password: z.string().min(1),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+        return dbComplete.saveFiscalCertificate(input);
+      }),
+
+    testNationalApi: protectedProcedure
+      .input(z.object({
+        ambiente: z.enum(['homologacao', 'producao']).optional(),
+      }).optional())
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+        return dbComplete.testFiscalNationalApi(input?.ambiente);
+      }),
+
+    syncMunicipalParameters: protectedProcedure
+      .input(z.object({
+        ambiente: z.enum(['homologacao', 'producao']).optional(),
+      }).optional())
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+        return dbComplete.syncFiscalMunicipalParameters(input?.ambiente);
       }),
   }),
 
@@ -737,7 +774,7 @@ export const appRouter = router({
     emit: protectedProcedure
       .input(z.object({ nfseId: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        return dbComplete.emitNfse(input.nfseId);
+        return dbComplete.emitNfseThroughNationalApi(input.nfseId, ctx.user.id);
       }),
 
     cancel: protectedProcedure
