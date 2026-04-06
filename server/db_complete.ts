@@ -2,16 +2,37 @@ import { getDb } from "./db";
 import { eq, like, and, gte, lte, desc } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 
+function unwrapRows<T = any>(result: any): T[] {
+  if (Array.isArray(result) && Array.isArray(result[0])) {
+    return result[0] as T[];
+  }
+
+  return (result ?? []) as T[];
+}
+
 // ─── PATIENTS ────────────────────────────────────────────────────────────────
-export async function listPatients(query?: string, limit: number = 100) {
+export async function listPatients(query?: string, limit: number = 5000) {
   const db = await getDb();
   if (!db) return [];
-  
-  let query_obj = db.select().from(sql`patients`);
-  if (query) {
-    query_obj = query_obj.where(like(sql`fullName`, `%${query}%`));
-  }
-  const rows = await query_obj.limit(limit);
+
+  const normalizedQuery = query?.trim();
+  const rows = unwrapRows<any>(normalizedQuery
+    ? await db.execute(sql`
+        select *
+        from patients
+        where fullName like ${`%${normalizedQuery}%`}
+           or cpf like ${`%${normalizedQuery}%`}
+           or phone like ${`%${normalizedQuery}%`}
+        order by fullName asc
+        limit ${limit}
+      `)
+    : await db.execute(sql`
+        select *
+        from patients
+        order by fullName asc
+        limit ${limit}
+      `));
+
   return rows.map((row: any) => {
     let addressData: Record<string, string> = {};
     if (typeof row.address === "string" && row.address.trim().startsWith("{")) {
@@ -49,9 +70,35 @@ export async function createPatient(data: any, userId: number) {
 export async function getPatientById(id: number) {
   const db = await getDb();
   if (!db) return null;
-  
-  const result = await db.select().from(sql`patients`).where(eq(sql`id`, id)).limit(1);
-  return result[0];
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from patients
+    where id = ${id}
+    limit 1
+  `));
+
+  const row = rows[0];
+  if (!row) return null;
+
+  let addressData: Record<string, string> = {};
+  if (typeof row.address === "string" && row.address.trim().startsWith("{")) {
+    try {
+      addressData = JSON.parse(row.address);
+    } catch {
+      addressData = {};
+    }
+  }
+
+  return {
+    ...row,
+    name: row.fullName ?? "",
+    zipCode: addressData.zip ?? "",
+    city: addressData.city ?? "",
+    state: addressData.state ?? "",
+    neighborhood: addressData.neighborhood ?? "",
+    address: addressData.street ?? row.address ?? "",
+  };
 }
 
 // ─── APPOINTMENTS ────────────────────────────────────────────────────────────
@@ -69,12 +116,14 @@ export async function createAppointment(data: any, userId: number) {
 export async function getAppointmentsByDateRange(from: string, to: string) {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(sql`appointments`)
-    .where(and(
-      gte(sql`scheduledAt`, from),
-      lte(sql`scheduledAt`, to)
-    ));
+
+  return unwrapRows<any>(await db.execute(sql`
+    select *
+    from appointments
+    where scheduledAt >= ${from}
+      and scheduledAt <= ${to}
+    order by scheduledAt asc
+  `));
 }
 
 export async function updateAppointmentStatus(appointmentId: number, status: string) {
@@ -359,14 +408,23 @@ export async function createInventoryMovement(data: any, userId: number) {
 export async function getPatientPhotos(patientId: number, category?: string) {
   const db = await getDb();
   if (!db) return [];
-  
-  let query = db.select().from(sql`patient_photos`).where(eq(sql`patientId`, patientId));
-  
+
   if (category) {
-    query = query.where(eq(sql`category`, category));
+    return unwrapRows<any>(await db.execute(sql`
+      select *
+      from patient_photos
+      where patientId = ${patientId}
+        and category = ${category}
+      order by coalesce(takenAt, createdAt) desc, id desc
+    `));
   }
-  
-  return query.orderBy(desc(sql`createdAt`));
+
+  return unwrapRows<any>(await db.execute(sql`
+    select *
+    from patient_photos
+    where patientId = ${patientId}
+    order by coalesce(takenAt, createdAt) desc, id desc
+  `));
 }
 
 export async function uploadPatientPhoto(data: any, userId: number) {
@@ -383,8 +441,11 @@ export async function uploadPatientPhoto(data: any, userId: number) {
 export async function deletePatientPhoto(photoId: number) {
   const db = await getDb();
   if (!db) return;
-  
-  await db.delete(sql`patient_photos`).where(eq(sql`id`, photoId));
+
+  await db.execute(sql`
+    delete from patient_photos
+    where id = ${photoId}
+  `);
   return { success: true };
 }
 
@@ -452,6 +513,25 @@ function centsToDecimal(value: unknown): number {
 function inferDocumentType(document: string | null | undefined): "cpf" | "cnpj" {
   const digits = String(document ?? "").replace(/\D/g, "");
   return digits.length > 11 ? "cnpj" : "cpf";
+}
+
+function formatPaymentDescription(formaPagamento: string | null | undefined, detalhesPagamento: string | null | undefined) {
+  const normalized = String(formaPagamento ?? "").trim().toLowerCase();
+  const details = String(detalhesPagamento ?? "").trim();
+
+  const labels: Record<string, string> = {
+    pix: "Pix",
+    dinheiro: "Dinheiro",
+    cartao_credito: "Cartão de crédito",
+    cartao_debito: "Cartão de débito",
+    boleto: "Boleto",
+    transferencia: "Transferência bancária",
+    financiamento: "Financiamento",
+    outro: "Outro",
+  };
+
+  const baseLabel = labels[normalized] ?? (normalized ? normalized.replace(/_/g, " ") : "Forma de pagamento não informada");
+  return details ? `${baseLabel} ${details}`.trim() : baseLabel;
 }
 
 function normalizeNfseRow(row: any) {
@@ -539,9 +619,14 @@ export async function createNfse(data: any, userId: number) {
   const valorIss = Number((baseCalculo * aliquota).toFixed(2));
   const valorLiquidoNfse = Number((baseCalculo - valorIss).toFixed(2));
   const dataCompetencia = data.dataCompetencia || new Date().toISOString().slice(0, 10);
-  const descricaoServico = data.complementoDescricao
-    ? `${data.descricaoServico}\n\n${data.complementoDescricao}`
-    : data.descricaoServico;
+  const paymentDescription = formatPaymentDescription(data.formaPagamento, data.detalhesPagamento);
+  const descricaoServico = [
+    data.descricaoServico,
+    data.complementoDescricao || null,
+    `Pagamento efetuado via: ${paymentDescription}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
   const tomadorEndereco = JSON.stringify({
     cep: data.tomadorCep || null,
     municipio: data.tomadorMunicipio || null,
@@ -759,8 +844,14 @@ export async function invokeAI(messages: any[]) {
 export async function getDoctors() {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(sql`users`).where(eq(sql`role`, 'medico'));
+
+  return unwrapRows<any>(await db.execute(sql`
+    select *
+    from users
+    where (role = 'medico' or role = 'admin')
+      and status = 'active'
+    order by name asc
+  `));
 }
 
 export async function getDashboardStats() {

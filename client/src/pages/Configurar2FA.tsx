@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AlertCircle, Loader2, ShieldCheck, Download, CheckCircle2, ArrowRight } from "lucide-react";
@@ -8,7 +7,6 @@ import { trpc } from "@/_core/trpc";
 type Step = "intro" | "qrcode" | "verify" | "backup" | "done";
 
 export default function Configurar2FA() {
-  const [, setLocation] = useLocation();
   const [step, setStep] = useState<Step>("intro");
   const [secret, setSecret] = useState("");
   const [qrCode, setQrCode] = useState("");
@@ -76,10 +74,6 @@ export default function Configurar2FA() {
     setBackupSaved(true);
   };
 
-  const handleSkip = () => {
-    setLocation("/");
-  };
-
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#F7F4EE] relative overflow-hidden px-4">
       <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#F1D791]" />
@@ -143,9 +137,6 @@ export default function Configurar2FA() {
                     ) : (
                       <span className="flex items-center gap-2">Configurar agora <ArrowRight className="h-4 w-4" /></span>
                     )}
-                  </Button>
-                  <Button onClick={handleSkip} variant="outline" className="h-11 border-[#E0D8CC]">
-                    Depois
                   </Button>
                 </div>
               </div>
@@ -248,7 +239,9 @@ export default function Configurar2FA() {
                     {backupSaved ? "Baixado!" : "Baixar códigos (.txt)"}
                   </Button>
                   <Button
-                    onClick={() => setLocation("/")}
+                    onClick={() => {
+                      window.location.href = "/";
+                    }}
                     disabled={!backupSaved}
                     className="w-full h-11 font-semibold text-white border-none"
                     style={{ background: backupSaved ? "linear-gradient(135deg, #8A6526 0%, #C9A55B 50%, #8A6526 100%)" : undefined }}

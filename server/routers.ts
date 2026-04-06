@@ -1,4 +1,4 @@
-import { COOKIE_NAME } from "@shared/const";
+﻿import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
@@ -7,21 +7,49 @@ import * as db from "./db";
 import * as dbComplete from "./db_complete";
 import { TRPCError } from "@trpc/server";
 import { clinicalEvolutionRouter } from "./routers/clinical-evolution";
+import { twoFactorRouter } from "./routers/auth-secure";
+import { generateSecureToken } from "./_core/auth";
+import { inviteEmailTemplate, sendEmail } from "./_core/mailer";
+
+function getAppBaseUrl(req: { headers: Record<string, unknown>; secure?: boolean }) {
+  if (process.env.APP_URL) return process.env.APP_URL;
+
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  const forwardedHost = req.headers["x-forwarded-host"];
+  const host = forwardedHost || req.headers.host;
+  const protocol = forwardedProto || (req.secure ? "https" : "http");
+
+  if (Array.isArray(host)) {
+    return `${Array.isArray(protocol) ? protocol[0] : protocol}://${host[0]}`;
+  }
+
+  return `${Array.isArray(protocol) ? protocol[0] : protocol}://${host || "localhost:3000"}`;
+}
 
 export const appRouter = router({
   system: systemRouter,
-  
-  // ─── AUTH ────────────────────────────────────────────────────────────────
+
+  // AUTH
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
+    updateMe: protectedProcedure
+      .input(z.object({
+        name: z.string().optional(),
+        specialty: z.string().optional(),
+        crm: z.string().optional(),
+        phone: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await dbComplete.updateUserProfile(ctx.user.id, input);
+        return { success: true };
+      }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
   }),
-
-  // ─── ICD-10 ──────────────────────────────────────────────────────────────
+  twoFactor: twoFactorRouter,
   icd10: router({
     search: publicProcedure
       .input(z.object({ query: z.string().min(1), limit: z.number().optional() }))
@@ -52,7 +80,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── AUDIO ───────────────────────────────────────────────────────────────
+  // â”€â”€â”€ AUDIO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   audio: router({
     createTranscription: protectedProcedure
       .input(z.object({ audioUrl: z.string(), audioKey: z.string(), medicalRecordId: z.number().optional() }))
@@ -82,10 +110,10 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── CLINICAL EVOLUTION ──────────────────────────────────────────────────
+  // â”€â”€â”€ CLINICAL EVOLUTION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   clinicalEvolution: clinicalEvolutionRouter,
 
-  // ─── ADMIN ───────────────────────────────────────────────────────────────
+  // â”€â”€â”€ ADMIN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   admin: router({
     getUsers: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
@@ -125,13 +153,52 @@ export const appRouter = router({
       .input(z.object({
         email: z.string().email(),
         name: z.string(),
-        role: z.enum(['user', 'admin']),
+        role: z.enum(['user', 'admin', 'medico', 'recepcionista', 'enfermeiro']),
         permissions: z.string(),
       }))
       .mutation(async ({ ctx, input }) => {
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
-        await db.inviteUser(input);
-        return { success: true };
+
+        const normalizedEmail = input.email.toLowerCase().trim();
+        const existingUser = await db.getUserByEmail(normalizedEmail);
+        if (existingUser && existingUser.status === 'active' && ((existingUser as any).passwordHash || (existingUser as any).password)) {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Ja existe um usuario ativo com este e-mail.' });
+        }
+
+        await db.inviteUser({
+          email: normalizedEmail,
+          name: input.name,
+          role: input.role,
+          permissions: input.permissions,
+        });
+
+        const token = generateSecureToken(32);
+        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+        await db.createInvitation({
+          email: normalizedEmail,
+          name: input.name,
+          role: input.role,
+          token,
+          invitedById: ctx.user.id,
+          expiresAt,
+        });
+
+        const acceptUrl = `${getAppBaseUrl(ctx.req)}/aceitar-convite?token=${token}`;
+        const { subject, html } = inviteEmailTemplate({
+          name: input.name,
+          inviterName: ctx.user.name || 'Administrador',
+          role: input.role,
+          acceptUrl,
+          expiresIn: '48 horas',
+        });
+
+        const emailResult = await sendEmail({ to: normalizedEmail, subject, html });
+        return {
+          success: true,
+          emailSent: emailResult.success,
+          manualLink: emailResult.success ? null : acceptUrl,
+          warning: emailResult.success ? null : `E-mail nao enviado: ${emailResult.error}`,
+        };
       }),
 
     updateUserStatus: protectedProcedure
@@ -214,7 +281,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── PATIENTS ────────────────────────────────────────────────────────────
+  // â”€â”€â”€ PATIENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   patients: router({
     list: protectedProcedure
       .input(z.object({ query: z.string().optional(), limit: z.number().optional() }))
@@ -255,7 +322,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── APPOINTMENTS ────────────────────────────────────────────────────────
+  // â”€â”€â”€ APPOINTMENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   appointments: router({
     create: protectedProcedure
       .input(z.object({
@@ -291,7 +358,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── PRESCRIPTIONS ───────────────────────────────────────────────────────
+  // â”€â”€â”€ PRESCRIPTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   prescriptions: router({
     create: protectedProcedure
       .input(z.object({
@@ -324,7 +391,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── EXAM REQUESTS ───────────────────────────────────────────────────────
+  // â”€â”€â”€ EXAM REQUESTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   exams: router({
     create: protectedProcedure
       .input(z.object({
@@ -358,7 +425,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── FINANCIAL ───────────────────────────────────────────────────────────
+  // â”€â”€â”€ FINANCIAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   financial: router({
     create: protectedProcedure
       .input(z.object({
@@ -388,7 +455,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── CATALOG ─────────────────────────────────────────────────────────────
+  // â”€â”€â”€ CATALOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   catalog: router({
     listProcedures: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listProcedures();
@@ -467,7 +534,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── INVENTORY ───────────────────────────────────────────────────────────
+  // â”€â”€â”€ INVENTORY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   inventory: router({
     listProducts: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listInventoryProducts();
@@ -509,7 +576,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── PHOTOS ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€ PHOTOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   photos: router({
     getByPatient: protectedProcedure
       .input(z.object({
@@ -539,7 +606,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── CHAT ────────────────────────────────────────────────────────────────
+  // â”€â”€â”€ CHAT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   chat: router({
     getMessages: protectedProcedure
       .input(z.object({
@@ -560,7 +627,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── CLINIC ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€ CLINIC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   clinic: router({
     get: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.getClinicSettings();
@@ -592,7 +659,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── FISCAL ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€ FISCAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   fiscal: router({
     get: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.getFiscalSettings();
@@ -632,7 +699,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── NFSE ────────────────────────────────────────────────────────────────
+  // â”€â”€â”€ NFSE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   nfse: router({
     list: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listNfse();
@@ -683,7 +750,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── BUDGETS ─────────────────────────────────────────────────────────────
+  // â”€â”€â”€ BUDGETS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   budgets: router({
     list: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listBudgets();
@@ -717,7 +784,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── CRM ─────────────────────────────────────────────────────────────────
+  // â”€â”€â”€ CRM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   crm: router({
     list: protectedProcedure
       .input(z.object({ limit: z.number().optional() }))
@@ -748,7 +815,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── SIGNATURES ───────────────────────────────────────────────────────────
+  // â”€â”€â”€ SIGNATURES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   signatures: router({
     sendForSignature: protectedProcedure
       .input(z.object({
@@ -760,7 +827,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── TEMPLATES ────────────────────────────────────────────────────────────
+  // â”€â”€â”€ TEMPLATES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   templates: router({
     list: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listTemplates();
@@ -781,14 +848,14 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── MEDICAL RECORDS ──────────────────────────────────────────────────────
+  // â”€â”€â”€ MEDICAL RECORDS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   medicalRecords: router({
     listTemplates: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listMedicalRecordTemplates();
     }),
   }),
 
-  // ─── WHATSAPP ─────────────────────────────────────────────────────────────
+  // â”€â”€â”€ WHATSAPP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   whatsapp: router({
     sendMessage: protectedProcedure
       .input(z.object({
@@ -800,7 +867,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── AI ───────────────────────────────────────────────────────────────────
+  // â”€â”€â”€ AI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   ai: router({
     chat: protectedProcedure
       .input(z.object({
@@ -814,7 +881,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── RETROACTIVE APPOINTMENTS ──────────────────────────────────────────
+  // â”€â”€â”€ RETROACTIVE APPOINTMENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   retroactiveAppointments: router({
     create: protectedProcedure
       .input(z.object({
@@ -824,7 +891,7 @@ export const appRouter = router({
         durationMinutes: z.number(),
         type: z.string(),
         notes: z.string().optional(),
-        retroactiveJustification: z.string().min(10, "Justificativa deve ter no mínimo 10 caracteres"),
+        retroactiveJustification: z.string().min(10, "Justificativa deve ter no mÃ­nimo 10 caracteres"),
         originalAppointmentDate: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -840,7 +907,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── ADVANCED PHOTO GALLERY ────────────────────────────────────────────
+  // â”€â”€â”€ ADVANCED PHOTO GALLERY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   photoGallery: router({
     createFolder: protectedProcedure
       .input(z.object({
@@ -888,7 +955,7 @@ export const appRouter = router({
         mimeType: z.string(),
       }))
       .mutation(async ({ ctx, input }) => {
-        // Aqui você faria upload para storage e obteria photoUrl e photoKey
+        // Aqui vocÃª faria upload para storage e obteria photoUrl e photoKey
         const special = await import("./features_special");
         return special.uploadPhotoToFolder(
           input.patientId,
@@ -922,7 +989,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── INTELLIGENT PATIENT SEARCH ────────────────────────────────────────
+  // â”€â”€â”€ INTELLIGENT PATIENT SEARCH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   patientSearch: router({
     autocomplete: protectedProcedure
       .input(z.object({
@@ -935,7 +1002,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── CUSTOMIZABLE PERMISSIONS ──────────────────────────────────────────
+  // â”€â”€â”€ CUSTOMIZABLE PERMISSIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   permissions: router({
     checkPermission: protectedProcedure
       .input(z.object({
@@ -1014,3 +1081,7 @@ export const appRouter = router({
 });
 
 export type AppRouter = typeof appRouter;
+
+
+
+

@@ -62,6 +62,22 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   erro: { label: "Erro", color: "bg-[#2F2F2F]/10 text-[#2F2F2F]" },
 };
 
+function getPaymentDescription(formaPagamento: string, detalhesPagamento?: string) {
+  const labels: Record<string, string> = {
+    pix: "Pix",
+    dinheiro: "Dinheiro",
+    cartao_credito: "Cartão de crédito",
+    cartao_debito: "Cartão de débito",
+    boleto: "Boleto",
+    transferencia: "Transferência bancária",
+    financiamento: "Financiamento",
+    outro: "Outro",
+  };
+
+  const baseLabel = labels[formaPagamento] ?? formaPagamento.replace(/_/g, " ");
+  return detalhesPagamento?.trim() ? `${baseLabel} ${detalhesPagamento.trim()}` : baseLabel;
+}
+
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 interface NfseForm {
@@ -133,7 +149,7 @@ export default function NfseEmissao() {
   // Queries
   const { data: fiscalSettings } = trpc.fiscal.get.useQuery();
   const { data: nfseList, isLoading: loadingList, refetch } = trpc.nfse.list.useQuery({});
-  const { data: patients } = trpc.patients.list.useQuery({ limit: 500 });
+  const { data: patients } = trpc.patients.list.useQuery({ limit: 5000 });
 
   // Mutations
   const createMutation = trpc.nfse.create.useMutation({
@@ -767,7 +783,7 @@ export default function NfseEmissao() {
             <p className="text-sm">{form.descricaoServico}</p>
             {form.complementoDescricao && <p className="text-xs text-muted-foreground mt-1">{form.complementoDescricao}</p>}
             <p className="text-xs text-muted-foreground mt-1">
-              Pagamento: {form.formaPagamento.replace(/_/g, " ")} {form.detalhesPagamento ? `- ${form.detalhesPagamento}` : ""}
+              Pagamento efetuado via: {getPaymentDescription(form.formaPagamento, form.detalhesPagamento)}
             </p>
           </div>
 

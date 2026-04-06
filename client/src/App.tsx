@@ -1,7 +1,8 @@
-import { Toaster } from "@/components/ui/sonner";
+﻿import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
+import { useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Dashboard from "./pages/Dashboard.premium";
@@ -28,8 +29,18 @@ import Relatorios from "./pages/Relatorios";
 import Chat from "./pages/Chat";
 import Perfil from "./pages/Perfil";
 import DashboardLayout from "./components/DashboardLayoutPremium";
+import Login from "./pages/Login";
+import AceitarConvite from "./pages/AceitarConvite";
+import VerificarDoisFatores from "./pages/VerificarDoisFatores";
+import Configurar2FA from "./pages/Configurar2FA";
+import TrocarSenha from "./pages/TrocarSenha";
+import { useAuth } from "./_core/hooks/useAuth";
+import { canAccessModule, getModuleForPath } from "./lib/access";
 
-function Router() {
+const publicPaths = ["/login", "/aceitar-convite", "/verificar-2fa"];
+const sessionSetupPaths = ["/configurar-2fa", "/trocar-senha"];
+
+function ProtectedRoutes() {
   return (
     <DashboardLayout>
       <Switch>
@@ -63,13 +74,72 @@ function Router() {
   );
 }
 
+function ProtectedEntry() {
+  const { user } = useAuth();
+  if (!user || user.mustChangePassword || !user.twoFactorEnabled) return null;
+  return <ProtectedRoutes />;
+}
+
+function Router() {
+  const [location, setLocation] = useLocation();
+  const { loading, user } = useAuth();
+
+  useEffect(() => {
+    if (loading) return;
+
+    const isPublicPath = publicPaths.some(path => location === path || location.startsWith(`${path}?`));
+    const isSessionSetupPath = sessionSetupPaths.some(
+      path => location === path || location.startsWith(`${path}?`)
+    );
+
+    if (!user) {
+      if (!isPublicPath) {
+        setLocation("/login");
+      }
+      return;
+    }
+
+    if (user.mustChangePassword && location !== "/trocar-senha") {
+      setLocation("/trocar-senha");
+      return;
+    }
+
+    if (!user.twoFactorEnabled && location !== "/configurar-2fa") {
+      setLocation("/configurar-2fa");
+      return;
+    }
+
+    const moduleId = getModuleForPath(location);
+    if (moduleId && !canAccessModule(user, moduleId)) {
+      setLocation("/");
+      return;
+    }
+
+    if ((isPublicPath || isSessionSetupPath) && location !== "/configurar-2fa" && location !== "/trocar-senha") {
+      setLocation("/");
+    }
+  }, [loading, location, setLocation, user]);
+
+  if (loading) {
+    return <div className="min-h-screen bg-[#F7F4EE]" />;
+  }
+
+  return (
+    <Switch>
+      <Route path="/login" component={Login} />
+      <Route path="/aceitar-convite" component={AceitarConvite} />
+      <Route path="/verificar-2fa" component={VerificarDoisFatores} />
+      <Route path="/configurar-2fa" component={Configurar2FA} />
+      <Route path="/trocar-senha" component={TrocarSenha} />
+      <Route component={ProtectedEntry} />
+    </Switch>
+  );
+}
+
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        switchable
-      >
+      <ThemeProvider defaultTheme="light" switchable>
         <TooltipProvider>
           <Toaster />
           <Router />

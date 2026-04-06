@@ -5,7 +5,7 @@
  * e integração com 2FA (TOTP).
  */
 
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { randomBytes } from "crypto";
 import type { Request } from "express";

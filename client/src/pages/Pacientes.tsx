@@ -85,7 +85,7 @@ export default function Pacientes() {
 
   const { data: patients, isLoading, refetch } = trpc.patients.list.useQuery({
     query: debouncedSearch || undefined,
-    limit: 50,
+    limit: 5000,
   });
 
   const createMutation = trpc.patients.create.useMutation({

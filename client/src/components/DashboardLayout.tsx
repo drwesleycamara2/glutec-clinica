@@ -109,7 +109,7 @@ export default function DashboardLayout({
           
           <Button
             onClick={() => {
-              window.location.href = "/api/auth/bypass";
+              window.location.href = "/login";
             }}
             size="lg"
             className="w-full h-14 text-lg font-semibold text-white shadow-lg transition-all transform hover:scale-[1.02] active:scale-[0.98] border-none"

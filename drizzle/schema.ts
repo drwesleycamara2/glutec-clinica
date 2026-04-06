@@ -16,11 +16,14 @@ export const users = mysqlTable("users", {
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  role: mysqlEnum("role", ["user", "admin", "medico", "recepcionista", "enfermeiro"]).default("user").notNull(),
   status: mysqlEnum("status", ["active", "inactive", "pending_password_change"]).default("active").notNull(),
   permissions: text("permissions"), // JSON string of allowed modules
   password: text("password"), // For local password fallback if needed, though Manus uses OAuth
   mustChangePassword: int("mustChangePassword").default(0).notNull(),
+  twoFactorSecret: text("twoFactorSecret"),
+  twoFactorEnabled: int("twoFactorEnabled").default(0).notNull(),
+  twoFactorBackupCodes: text("twoFactorBackupCodes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),

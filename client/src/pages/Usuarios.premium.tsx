@@ -1,68 +1,73 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { PremiumButton, PremiumCard, PremiumInput } from "@/components/premium";
-import { 
-  Users, 
-  User, 
-  Shield, 
-  Stethoscope, 
-  ClipboardList, 
-  UserCheck, 
-  Loader2, 
-  Edit, 
-  UserPlus, 
-  Trash2, 
-  Lock, 
+import { AVAILABLE_MODULES } from "@/lib/access";
+import {
+  Users,
+  User,
+  Shield,
+  Stethoscope,
+  ClipboardList,
+  UserCheck,
+  Loader2,
+  UserPlus,
+  Trash2,
+  Lock,
   Unlock,
   CheckCircle2,
-  XCircle
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
 const ROLE_CONFIG = {
   admin: { label: "Administrador", icon: Shield, color: "text-[#6B6B6B] bg-[#6B6B6B]/10" },
-  medico: { label: "Médico", icon: Stethoscope, color: "text-[#C9A55B] bg-[#C9A55B]/10" },
+  medico: { label: "Medico", icon: Stethoscope, color: "text-[#C9A55B] bg-[#C9A55B]/10" },
   enfermeiro: { label: "Enfermeiro", icon: UserCheck, color: "text-[#C9A55B] bg-[#C9A55B]/10" },
   recepcionista: { label: "Recepcionista", icon: ClipboardList, color: "text-yellow-500 bg-yellow-500/10" },
-  user: { label: "Usuário", icon: User, color: "text-gray-500 bg-gray-500/10" },
+  user: { label: "Usuario", icon: User, color: "text-gray-500 bg-gray-500/10" },
 };
 
-const MODULES = [
-  { id: 'agenda', label: 'Agenda' },
-  { id: 'pacientes', label: 'Pacientes' },
-  { id: 'prontuarios', label: 'Prontuários' },
-  { id: 'financeiro', label: 'Financeiro' },
-  { id: 'estoque', label: 'Estoque' },
-  { id: 'configuracoes', label: 'Configurações' },
-];
+const MODULES = AVAILABLE_MODULES;
 
 export default function UsuariosPremium() {
   const { user: currentUser } = useAuth();
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<any>(null);
   const [inviteForm, setInviteForm] = useState({ email: "", name: "", role: "user", permissions: [] as string[] });
 
   const { data: users, isLoading, refetch } = trpc.admin.getUsers.useQuery();
 
   const inviteMutation = trpc.admin.inviteUser.useMutation({
-    onSuccess: () => {
-      toast.success("Usuário convidado com sucesso!");
+    onSuccess: result => {
+      toast.success(result.emailSent ? "Convite enviado com sucesso!" : "Convite criado com link manual.");
+      if (result.manualLink) {
+        navigator.clipboard?.writeText(result.manualLink);
+        toast.info("O link de convite foi copiado para a area de transferencia.");
+      }
+      if (result.warning) {
+        toast.warning(result.warning);
+      }
       setIsInviteModalOpen(false);
       setInviteForm({ email: "", name: "", role: "user", permissions: [] });
       refetch();
     },
-    onError: (err) => toast.error(err.message),
+    onError: err => toast.error(err.message),
   });
 
   const updateStatusMutation = trpc.admin.updateUserStatus.useMutation({
-    onSuccess: () => { toast.success("Status atualizado!"); refetch(); },
-    onError: (err) => toast.error(err.message),
+    onSuccess: () => {
+      toast.success("Status atualizado!");
+      refetch();
+    },
+    onError: err => toast.error(err.message),
   });
 
   const deleteMutation = trpc.admin.deleteUser.useMutation({
-    onSuccess: () => { toast.success("Usuário removido!"); refetch(); },
-    onError: (err) => toast.error(err.message),
+    onSuccess: () => {
+      toast.success("Usuario removido!");
+      refetch();
+    },
+    onError: err => toast.error(err.message),
   });
 
   const handleInvite = (e: React.FormEvent) => {
@@ -80,48 +85,44 @@ export default function UsuariosPremium() {
       ...prev,
       permissions: prev.permissions.includes(moduleId)
         ? prev.permissions.filter(id => id !== moduleId)
-        : [...prev.permissions, moduleId]
+        : [...prev.permissions, moduleId],
     }));
   };
 
-  if (isLoading) return (
-    <div className="flex items-center justify-center py-20">
-      <Loader2 className="h-10 w-10 animate-spin text-accent" />
-    </div>
-  );
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-10 w-10 animate-spin text-accent" />
+      </div>
+    );
+  }
 
   const SUPER_ADMIN_EMAIL = "contato@drwesleycamara.com.br";
   const isSuperAdmin = currentUser?.email === SUPER_ADMIN_EMAIL;
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 pb-6 border-b border-gold">
+      <div className="flex flex-col items-start justify-between gap-6 border-b border-gold pb-6 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-4xl font-light text-text-primary tracking-tight">
-            Gestão de <span className="font-semibold text-accent">Acessos</span>
+          <h1 className="text-4xl font-light tracking-tight text-text-primary">
+            Gestao de <span className="font-semibold text-accent">Acessos</span>
           </h1>
-          <p className="text-sm text-text-tertiary font-medium mt-2 uppercase tracking-widest">
+          <p className="mt-2 text-sm font-medium uppercase tracking-widest text-text-tertiary">
             Controle total sobre quem acessa o sistema
           </p>
         </div>
-        {isSuperAdmin && (
-          <PremiumButton
-            variant="primary"
-            icon={<UserPlus size={18} />}
-            onClick={() => setIsInviteModalOpen(true)}
-          >
-            Convidar Usuário
+        {isSuperAdmin ? (
+          <PremiumButton variant="primary" icon={<UserPlus size={18} />} onClick={() => setIsInviteModalOpen(true)}>
+            Convidar Usuario
           </PremiumButton>
-        )}
+        ) : null}
       </div>
 
-      {/* Lista de Usuários */}
       <div className="grid grid-cols-1 gap-4">
         {!users || users.length === 0 ? (
           <PremiumCard borderGold className="py-20 text-center">
-            <Users size={48} className="mx-auto text-text-tertiary/20 mb-4" />
-            <p className="text-text-secondary">Nenhum usuário cadastrado.</p>
+            <Users size={48} className="mx-auto mb-4 text-text-tertiary/20" />
+            <p className="text-text-secondary">Nenhum usuario cadastrado.</p>
           </PremiumCard>
         ) : (
           users.map((u: any) => {
@@ -132,35 +133,34 @@ export default function UsuariosPremium() {
 
             return (
               <PremiumCard key={u.id} borderGold className="group">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="flex flex-col justify-between gap-6 md:flex-row md:items-center">
                   <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-full bg-accent-hover flex items-center justify-center border border-gold/30">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full border border-gold/30 bg-accent-hover">
                       <User className="text-accent" size={24} />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="font-semibold text-text-primary">{u.name || "Sem nome"}</h3>
-                        {isSelf && <span className="text-[10px] bg-accent/20 text-accent px-2 py-0.5 rounded-full uppercase font-bold">Você</span>}
-                        {isTargetSuperAdmin && <Shield size={14} className="text-accent" />}
+                        {isSelf ? <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-bold uppercase text-accent">Voce</span> : null}
+                        {isTargetSuperAdmin ? <Shield size={14} className="text-accent" /> : null}
                       </div>
                       <p className="text-sm text-text-tertiary">{u.email}</p>
                     </div>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-3">
-                    <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${roleInfo.color}`}>
+                    <div className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${roleInfo.color}`}>
                       <RoleIcon size={14} />
                       {roleInfo.label}
                     </div>
-                    
-                    <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${u.status === 'active' ? 'text-[#C9A55B] bg-[#C9A55B]/10' : 'text-[#6B6B6B] bg-[#6B6B6B]/10'}`}>
+                    <div className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${u.status === 'active' ? 'text-[#C9A55B] bg-[#C9A55B]/10' : 'text-[#6B6B6B] bg-[#6B6B6B]/10'}`}>
                       {u.status === 'active' ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
                       {u.status === 'active' ? 'Ativo' : 'Inativo'}
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {isSuperAdmin && !isTargetSuperAdmin && (
+                    {isSuperAdmin && !isTargetSuperAdmin ? (
                       <>
                         <PremiumButton
                           variant="outline"
@@ -173,10 +173,10 @@ export default function UsuariosPremium() {
                         <PremiumButton
                           variant="outline"
                           size="sm"
-                          className="text-[#6B6B6B] hover:bg-[#6B6B6B]/10 border-[#6B6B6B]/30"
+                          className="border-[#6B6B6B]/30 text-[#6B6B6B] hover:bg-[#6B6B6B]/10"
                           icon={<Trash2 size={14} />}
                           onClick={() => {
-                            if (confirm("Tem certeza que deseja remover este usuário permanentemente?")) {
+                            if (confirm('Tem certeza que deseja remover este usuario permanentemente?')) {
                               deleteMutation.mutate({ userId: u.id });
                             }
                           }}
@@ -184,29 +184,28 @@ export default function UsuariosPremium() {
                           Remover
                         </PremiumButton>
                       </>
-                    )}
+                    ) : null}
                   </div>
                 </div>
-                
-                {/* Permissões */}
-                <div className="mt-4 pt-4 border-t border-gold/10">
-                  <p className="text-[10px] uppercase tracking-widest text-text-tertiary font-bold mb-2">Módulos Autorizados</p>
+
+                <div className="mt-4 border-t border-gold/10 pt-4">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-text-tertiary">Modulos Autorizados</p>
                   <div className="flex flex-wrap gap-2">
                     {u.role === 'admin' ? (
-                      <span className="text-xs text-accent font-medium">Acesso Total (Administrador)</span>
+                      <span className="text-xs font-medium text-accent">Acesso total (Administrador)</span>
                     ) : (
                       (() => {
                         try {
                           const perms = JSON.parse(u.permissions || '[]');
-                          return perms.length > 0 
+                          return perms.length > 0
                             ? perms.map((p: string) => (
-                                <span key={p} className="text-[10px] bg-surface-alt border border-gold/20 px-2 py-0.5 rounded text-text-secondary">
+                                <span key={p} className="rounded border border-gold/20 bg-surface-alt px-2 py-0.5 text-[10px] text-text-secondary">
                                   {MODULES.find(m => m.id === p)?.label || p}
                                 </span>
                               ))
-                            : <span className="text-xs text-text-tertiary italic">Nenhum módulo autorizado</span>;
+                            : <span className="text-xs italic text-text-tertiary">Nenhum modulo autorizado</span>;
                         } catch {
-                          return <span className="text-xs text-text-tertiary italic">Nenhum módulo autorizado</span>;
+                          return <span className="text-xs italic text-text-tertiary">Nenhum modulo autorizado</span>;
                         }
                       })()
                     )}
@@ -218,14 +217,13 @@ export default function UsuariosPremium() {
         )}
       </div>
 
-      {/* Modal de Convite */}
-      {isInviteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <PremiumCard borderGold className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6 pb-4 border-b border-gold">
-              <h2 className="text-xl font-semibold text-text-primary flex items-center gap-3">
+      {isInviteModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <PremiumCard borderGold className="max-h-[90vh] w-full max-w-2xl overflow-y-auto">
+            <div className="mb-6 flex items-center justify-between border-b border-gold pb-4">
+              <h2 className="flex items-center gap-3 text-xl font-semibold text-text-primary">
                 <UserPlus className="text-accent" />
-                Convidar Novo Usuário
+                Convidar Novo Usuario
               </h2>
               <button onClick={() => setIsInviteModalOpen(false)} className="text-text-tertiary hover:text-accent">
                 <XCircle size={24} />
@@ -233,17 +231,17 @@ export default function UsuariosPremium() {
             </div>
 
             <form onSubmit={handleInvite} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <PremiumInput
                   label="Nome Completo"
-                  placeholder="Ex: Dr. João Silva"
+                  placeholder="Ex: Dra. Joana Silva"
                   value={inviteForm.name}
                   onChange={e => setInviteForm(prev => ({ ...prev, name: e.target.value }))}
                   required
                 />
                 <PremiumInput
                   label="E-mail de Acesso"
-                  placeholder="joao@exemplo.com"
+                  placeholder="joana@exemplo.com"
                   type="email"
                   value={inviteForm.email}
                   onChange={e => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
@@ -252,16 +250,16 @@ export default function UsuariosPremium() {
               </div>
 
               <div>
-                <label className="text-sm font-medium text-text-primary mb-2 block">Perfil de Acesso</label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <label className="mb-2 block text-sm font-medium text-text-primary">Perfil de Acesso</label>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                   {Object.entries(ROLE_CONFIG).map(([key, info]) => (
                     <button
                       key={key}
                       type="button"
                       onClick={() => setInviteForm(prev => ({ ...prev, role: key }))}
-                      className={`flex flex-col items-center gap-2 p-3 rounded-lg border transition-all ${
-                        inviteForm.role === key 
-                          ? 'border-accent bg-accent/10 text-accent' 
+                      className={`flex flex-col items-center gap-2 rounded-lg border p-3 transition-all ${
+                        inviteForm.role === key
+                          ? 'border-accent bg-accent/10 text-accent'
                           : 'border-gold/20 bg-surface-alt text-text-tertiary hover:border-gold/50'
                       }`}
                     >
@@ -272,34 +270,34 @@ export default function UsuariosPremium() {
                 </div>
               </div>
 
-              {inviteForm.role !== 'admin' && (
+              {inviteForm.role !== 'admin' ? (
                 <div>
-                  <label className="text-sm font-medium text-text-primary mb-2 block">Módulos Autorizados</label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {MODULES.map(module => (
+                  <label className="mb-2 block text-sm font-medium text-text-primary">Modulos autorizados</label>
+                  <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                    {MODULES.filter(module => module.id !== 'usuarios' && module.id !== 'fiscal').map(module => (
                       <button
                         key={module.id}
                         type="button"
                         onClick={() => togglePermission(module.id)}
-                        className={`flex items-center gap-2 p-2 rounded border text-xs transition-all ${
+                        className={`flex items-center gap-2 rounded border p-2 text-xs transition-all ${
                           inviteForm.permissions.includes(module.id)
                             ? 'border-accent bg-accent/5 text-accent'
                             : 'border-gold/10 bg-surface-alt text-text-tertiary'
                         }`}
                       >
-                        <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                        <div className={`flex h-4 w-4 items-center justify-center rounded border ${
                           inviteForm.permissions.includes(module.id) ? 'border-accent bg-accent' : 'border-gold/30'
                         }`}>
-                          {inviteForm.permissions.includes(module.id) && <CheckCircle2 size={10} className="text-black" />}
+                          {inviteForm.permissions.includes(module.id) ? <CheckCircle2 size={10} className="text-black" /> : null}
                         </div>
                         {module.label}
                       </button>
                     ))}
                   </div>
                 </div>
-              )}
+              ) : null}
 
-              <div className="pt-6 border-t border-gold/10 flex justify-end gap-3">
+              <div className="flex justify-end gap-3 border-t border-gold/10 pt-6">
                 <PremiumButton variant="outline" type="button" onClick={() => setIsInviteModalOpen(false)}>
                   Cancelar
                 </PremiumButton>
@@ -310,7 +308,7 @@ export default function UsuariosPremium() {
             </form>
           </PremiumCard>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
