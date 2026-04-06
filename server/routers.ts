@@ -757,6 +757,7 @@ export const appRouter = router({
         tomadorNumero: z.string().optional(),
         tomadorComplemento: z.string().optional(),
         patientId: z.number().optional(),
+        budgetId: z.number().optional(),
         descricaoServico: z.string(),
         complementoDescricao: z.string().optional(),
         valorServico: z.number().min(1),
@@ -818,6 +819,18 @@ export const appRouter = router({
       .input(z.object({ budgetId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         return dbComplete.approveBudget(input.budgetId);
+      }),
+
+    emitNfse: protectedProcedure
+      .input(z.object({
+        budgetId: z.number(),
+        formaPagamento: z.enum(["pix", "dinheiro", "cartao_credito", "cartao_debito", "boleto", "transferencia", "financiamento", "outro"]).default("pix"),
+        detalhesPagamento: z.string().optional(),
+        dataCompetencia: z.string().optional(),
+        ambiente: z.enum(['homologacao', 'producao']).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return dbComplete.emitBudgetNfse(input.budgetId, input, ctx.user.id);
       }),
   }),
 

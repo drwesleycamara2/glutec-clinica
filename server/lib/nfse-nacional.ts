@@ -1,6 +1,10 @@
 import axios from "axios";
+import fs from "fs";
 import https from "https";
+import os from "os";
+import path from "path";
 import { createHash } from "crypto";
+import { execFileSync } from "child_process";
 import { decryptSensitiveValue } from "./secure-storage";
 
 export type NfseAmbiente = "homologacao" | "producao";
@@ -114,6 +118,63 @@ function getCertificateBundle(fiscal: FiscalLike) {
     pfx: Buffer.from(pfxBase64, "base64"),
     passphrase,
   };
+}
+
+function extractPemBlock(content: string, label: string) {
+  const regex = new RegExp(
+    `-----BEGIN ${label}-----[\\s\\S]+?-----END ${label}-----`,
+    "g",
+  );
+  const matches = content.match(regex);
+  return matches ?? [];
+}
+
+function getHttpsAgentFromCertificate(fiscal: FiscalLike) {
+  const { pfx, passphrase } = getCertificateBundle(fiscal);
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "glutec-pfx-"));
+  const pfxPath = path.join(tempDir, "certificado.pfx");
+
+  try {
+    fs.writeFileSync(pfxPath, pfx);
+
+    const pem = execFileSync(
+      "openssl",
+      [
+        "pkcs12",
+        "-legacy",
+        "-in",
+        pfxPath,
+        "-nodes",
+        "-passin",
+        "env:GLUTEC_PFX_PASSWORD",
+      ],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GLUTEC_PFX_PASSWORD: passphrase,
+        },
+      },
+    );
+
+    const privateKey =
+      extractPemBlock(pem, "PRIVATE KEY")[0] ||
+      extractPemBlock(pem, "RSA PRIVATE KEY")[0];
+    const certificates = extractPemBlock(pem, "CERTIFICATE");
+
+    if (!privateKey || certificates.length === 0) {
+      throw new Error("Não foi possível converter o certificado A1 para PEM.");
+    }
+
+    return new https.Agent({
+      key: privateKey,
+      cert: certificates.join("\n"),
+      rejectUnauthorized: true,
+      minVersion: "TLSv1.2",
+    });
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 }
 
 function extractTagValue(xml: string, tagName: string) {
@@ -243,16 +304,10 @@ export async function fetchMunicipalParameters(
 
 export async function testNationalApiConnection(fiscal: FiscalLike, ambiente: NfseAmbiente) {
   const baseUrl = (fiscal.webserviceUrl || DEFAULT_BASE_URLS[ambiente]).replace(/\/+$/, "");
-  const { pfx, passphrase } = getCertificateBundle(fiscal);
 
   const response = await axios.head(`${baseUrl}/dps/000000000000000000000000000000000000000`, {
     timeout: 30000,
-    httpsAgent: new https.Agent({
-      pfx,
-      passphrase,
-      rejectUnauthorized: true,
-      minVersion: "TLSv1.2",
-    }),
+    httpsAgent: getHttpsAgentFromCertificate(fiscal),
     validateStatus: () => true,
     headers: {
       Accept: "application/xml, application/json, */*",
@@ -273,17 +328,11 @@ export async function testNationalApiConnection(fiscal: FiscalLike, ambiente: Nf
 export async function emitNfseWithNationalApi(fiscal: FiscalLike, nfse: NfseLike) {
   const ambiente = fiscal.ambiente === "producao" ? "producao" : "homologacao";
   const baseUrl = (fiscal.webserviceUrl || DEFAULT_BASE_URLS[ambiente]).replace(/\/+$/, "");
-  const { pfx, passphrase } = getCertificateBundle(fiscal);
   const xml = buildDpsXml(fiscal, nfse);
 
   const response = await axios.post(`${baseUrl}/nfse`, xml, {
     timeout: 45000,
-    httpsAgent: new https.Agent({
-      pfx,
-      passphrase,
-      rejectUnauthorized: true,
-      minVersion: "TLSv1.2",
-    }),
+    httpsAgent: getHttpsAgentFromCertificate(fiscal),
     validateStatus: () => true,
     headers: {
       "Content-Type": "application/xml",
