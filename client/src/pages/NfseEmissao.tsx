@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+﻿import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +33,7 @@ import {
   Printer,
 } from "lucide-react";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function formatCurrency(cents: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
@@ -55,10 +55,10 @@ function formatCpfCnpj(value: string): string {
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
   rascunho: { label: "Rascunho", color: "bg-[#F1D791]/30 text-[#8A6526]" },
-  aguardando: { label: "Aguardando Emissão", color: "bg-[#C9A55B]/15 text-[#6B5B2A]" },
+  aguardando: { label: "Aguardando EmissÃ£o", color: "bg-[#C9A55B]/15 text-[#6B5B2A]" },
   autorizada: { label: "Autorizada", color: "bg-[#C9A55B]/15 text-[#6B5B2A]" },
   cancelada: { label: "Cancelada", color: "bg-[#2F2F2F]/10 text-[#2F2F2F]" },
-  substituida: { label: "Substituída", color: "bg-[#C9A55B]/10 text-[#8A6526]" },
+  substituida: { label: "SubstituÃ­da", color: "bg-[#C9A55B]/10 text-[#8A6526]" },
   erro: { label: "Erro", color: "bg-[#2F2F2F]/10 text-[#2F2F2F]" },
 };
 
@@ -66,10 +66,10 @@ function getPaymentDescription(formaPagamento: string, detalhesPagamento?: strin
   const labels: Record<string, string> = {
     pix: "Pix",
     dinheiro: "Dinheiro",
-    cartao_credito: "Cartão de crédito",
-    cartao_debito: "Cartão de débito",
+    cartao_credito: "CartÃ£o de crÃ©dito",
+    cartao_debito: "CartÃ£o de dÃ©bito",
     boleto: "Boleto",
-    transferencia: "Transferência bancária",
+    transferencia: "TransferÃªncia bancÃ¡ria",
     financiamento: "Financiamento",
     outro: "Outro",
   };
@@ -78,7 +78,9 @@ function getPaymentDescription(formaPagamento: string, detalhesPagamento?: strin
   return detalhesPagamento?.trim() ? `${baseLabel} ${detalhesPagamento.trim()}` : baseLabel;
 }
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
+const DEFAULT_SERVICE_DESCRIPTION = "Referente a procedimentos mÃ©dicos ambulatoriais.";
+
+// â”€â”€â”€ Tipos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface NfseForm {
   // Etapa 1 - Pessoas
@@ -96,7 +98,7 @@ interface NfseForm {
   tomadorNumero: string;
   tomadorComplemento: string;
   patientId?: number;
-  // Etapa 2 - Serviço
+  // Etapa 2 - ServiÃ§o
   descricaoServico: string;
   complementoDescricao: string;
   // Etapa 3 - Valores
@@ -123,7 +125,7 @@ const initialForm: NfseForm = {
   tomadorLogradouro: "",
   tomadorNumero: "",
   tomadorComplemento: "",
-  descricaoServico: "Procedimentos Médicos Ambulatoriais",
+  descricaoServico: DEFAULT_SERVICE_DESCRIPTION,
   complementoDescricao: "",
   valorServico: "",
   valorDeducao: "",
@@ -133,7 +135,7 @@ const initialForm: NfseForm = {
   ambiente: "homologacao",
 };
 
-// ─── Componente Principal ─────────────────────────────────────────────────────
+// â”€â”€â”€ Componente Principal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function NfseEmissao() {
   const [activeTab, setActiveTab] = useState<"emitir" | "historico">("emitir");
@@ -145,11 +147,17 @@ export default function NfseEmissao() {
   const [showCancelar, setShowCancelar] = useState(false);
   const [motivoCancelamento, setMotivoCancelamento] = useState("");
   const [patientSearch, setPatientSearch] = useState("");
+  const currentMonthKey = new Date().toISOString().slice(0, 7);
+  const [confirmedAliquotaMonth, setConfirmedAliquotaMonth] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return window.localStorage.getItem("glutec-nfse-simples-confirmed-month") || "";
+  });
 
   // Queries
   const { data: fiscalSettings } = trpc.fiscal.get.useQuery();
   const { data: nfseList, isLoading: loadingList, refetch } = trpc.nfse.list.useQuery({});
   const { data: patients } = trpc.patients.list.useQuery({ limit: 5000 });
+  const needsAliquotaConfirmation = confirmedAliquotaMonth !== currentMonthKey;
 
   // Mutations
   const createMutation = trpc.nfse.create.useMutation({
@@ -166,7 +174,7 @@ export default function NfseEmissao() {
 
   const emitMutation = trpc.nfse.emit.useMutation({
     onSuccess: (data) => {
-      toast.success(data.message || "NFS-e preparada para emissão manual no portal nacional.");
+      toast.success(data.message || "NFS-e preparada para emissÃ£o manual no portal nacional.");
       refetch();
       setShowEmitir(false);
     },
@@ -238,13 +246,26 @@ export default function NfseEmissao() {
   const valorDescontoCents = parseCurrencyInput(form.valorDescontoIncondicionado);
   const valorLiquido = valorServicoCents - valorDeducaoCents - valorDescontoCents;
 
-  // Validações por etapa
+  // ValidaÃ§Ãµes por etapa
   const isStep1Valid = form.tomadorDocumento.replace(/\D/g, "").length >= 11 && form.tomadorNome.length >= 3 && (form.tomadorEmail || form.tomadorTelefone);
   const isStep2Valid = form.descricaoServico.length >= 5;
   const isStep3Valid = valorServicoCents > 0;
 
+  const confirmAliquotaForCurrentMonth = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("glutec-nfse-simples-confirmed-month", currentMonthKey);
+    }
+    setConfirmedAliquotaMonth(currentMonthKey);
+    toast.success("Aliquota do Simples Nacional confirmada para este mes.");
+  };
+
   // Submeter NFS-e
   const handleSubmit = () => {
+    if (needsAliquotaConfirmation) {
+      toast.error("Confirme primeiro se a aliquota do Simples Nacional deste mes esta atualizada.");
+      return;
+    }
+
     createMutation.mutate({
       tomadorDocumento: form.tomadorDocumento.replace(/\D/g, ""),
       tomadorTipoDocumento: form.tomadorTipoDocumento,
@@ -259,7 +280,7 @@ export default function NfseEmissao() {
       tomadorNumero: form.tomadorNumero || undefined,
       tomadorComplemento: form.tomadorComplemento || undefined,
       patientId: form.patientId,
-      descricaoServico: form.descricaoServico,
+      descricaoServico: form.descricaoServico || DEFAULT_SERVICE_DESCRIPTION,
       complementoDescricao: form.complementoDescricao || undefined,
       valorServico: valorServicoCents,
       valorDeducao: valorDeducaoCents || undefined,
@@ -271,16 +292,16 @@ export default function NfseEmissao() {
     });
   };
 
-  // ─── Etapa 1: Pessoas ───────────────────────────────────────────────────────
+  // â”€â”€â”€ Etapa 1: Pessoas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const renderStep1 = () => (
     <div className="space-y-6">
-      {/* Data de Competência */}
+      {/* Data de CompetÃªncia */}
       <Card className="border shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <Clock className="h-4 w-4 text-primary" />
-            Data de Competência
+            Data de CompetÃªncia
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -290,7 +311,7 @@ export default function NfseEmissao() {
             onChange={(e) => setForm({ ...form, dataCompetencia: e.target.value })}
             className="max-w-xs"
           />
-          <p className="text-xs text-muted-foreground mt-1">Data em que o serviço foi prestado</p>
+          <p className="text-xs text-muted-foreground mt-1">Data em que o serviÃ§o foi prestado</p>
         </CardContent>
       </Card>
 
@@ -306,15 +327,15 @@ export default function NfseEmissao() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <p className="text-xs text-muted-foreground">CNPJ</p>
-              <p className="text-sm font-medium">{fiscalSettings?.cnpj ? formatCpfCnpj(fiscalSettings.cnpj) : "Não configurado"}</p>
+              <p className="text-sm font-medium">{fiscalSettings?.cnpj ? formatCpfCnpj(fiscalSettings.cnpj) : "NÃ£o configurado"}</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Razão Social</p>
-              <p className="text-sm font-medium">{fiscalSettings?.razaoSocial || "Não configurado"}</p>
+              <p className="text-xs text-muted-foreground">RazÃ£o Social</p>
+              <p className="text-sm font-medium">{fiscalSettings?.razaoSocial || "NÃ£o configurado"}</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Município</p>
-              <p className="text-sm font-medium">{fiscalSettings?.municipio || "Mogi Guaçu"}/{fiscalSettings?.uf || "SP"}</p>
+              <p className="text-xs text-muted-foreground">MunicÃ­pio</p>
+              <p className="text-sm font-medium">{fiscalSettings?.municipio || "Mogi GuaÃ§u"}/{fiscalSettings?.uf || "SP"}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Regime</p>
@@ -325,19 +346,19 @@ export default function NfseEmissao() {
             <div className="mt-3 p-2 bg-yellow-50 rounded border border-yellow-200">
               <p className="text-xs text-yellow-800 flex items-center gap-1">
                 <AlertTriangle className="h-3 w-3" />
-                Configure os dados fiscais em Configurações Fiscais antes de emitir.
+                Configure os dados fiscais em ConfiguraÃ§Ãµes Fiscais antes de emitir.
               </p>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Tomador do Serviço */}
+      {/* Tomador do ServiÃ§o */}
       <Card className="border shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <Users className="h-4 w-4 text-primary" />
-            Tomador do Serviço
+            Tomador do ServiÃ§o
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -375,8 +396,8 @@ export default function NfseEmissao() {
               <Select value={form.tomadorTipoDocumento} onValueChange={(v) => setForm({ ...form, tomadorTipoDocumento: v as any })}>
                 <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cpf">CPF (Pessoa Física)</SelectItem>
-                  <SelectItem value="cnpj">CNPJ (Pessoa Jurídica)</SelectItem>
+                  <SelectItem value="cpf">CPF (Pessoa FÃ­sica)</SelectItem>
+                  <SelectItem value="cnpj">CNPJ (Pessoa JurÃ­dica)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -391,7 +412,7 @@ export default function NfseEmissao() {
               />
             </div>
             <div className="md:col-span-2">
-              <Label className="text-xs">Nome Completo / Razão Social *</Label>
+              <Label className="text-xs">Nome Completo / RazÃ£o Social *</Label>
               <Input
                 className="mt-1"
                 placeholder="Nome completo do tomador"
@@ -420,10 +441,10 @@ export default function NfseEmissao() {
             </div>
           </div>
 
-          {/* Endereço */}
+          {/* EndereÃ§o */}
           <div className="pt-2 border-t">
             <p className="text-xs font-medium text-muted-foreground mb-3 flex items-center gap-1">
-              <MapPin className="h-3 w-3" /> Endereço do Tomador
+              <MapPin className="h-3 w-3" /> EndereÃ§o do Tomador
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
@@ -437,7 +458,7 @@ export default function NfseEmissao() {
                 />
               </div>
               <div>
-                <Label className="text-xs">Município</Label>
+                <Label className="text-xs">MunicÃ­pio</Label>
                 <Input className="mt-1" value={form.tomadorMunicipio} onChange={(e) => setForm({ ...form, tomadorMunicipio: e.target.value })} />
               </div>
               <div>
@@ -454,7 +475,7 @@ export default function NfseEmissao() {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <Label className="text-xs">Número</Label>
+                  <Label className="text-xs">NÃºmero</Label>
                   <Input className="mt-1" value={form.tomadorNumero} onChange={(e) => setForm({ ...form, tomadorNumero: e.target.value })} />
                 </div>
                 <div>
@@ -476,7 +497,7 @@ export default function NfseEmissao() {
     </div>
   );
 
-  // ─── Etapa 2: Serviço ──────────────────────────────────────────────────────
+  // â”€â”€â”€ Etapa 2: ServiÃ§o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const renderStep2 = () => (
     <div className="space-y-6">
@@ -484,54 +505,54 @@ export default function NfseEmissao() {
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <FileText className="h-4 w-4 text-primary" />
-            Dados do Serviço
+            Dados do ServiÃ§o
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Local da Prestação (fixo) */}
+          {/* Local da PrestaÃ§Ã£o (fixo) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-muted/30 rounded">
             <div>
-              <p className="text-xs text-muted-foreground">Local da Prestação</p>
-              <p className="text-sm font-medium">Brasil - {fiscalSettings?.municipioIncidencia || "Mogi Guaçu"}/{fiscalSettings?.ufIncidencia || "SP"}</p>
+              <p className="text-xs text-muted-foreground">Local da PrestaÃ§Ã£o</p>
+              <p className="text-sm font-medium">Brasil - {fiscalSettings?.municipioIncidencia || "Mogi GuaÃ§u"}/{fiscalSettings?.ufIncidencia || "SP"}</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Código de Tributação Nacional</p>
+              <p className="text-xs text-muted-foreground">CÃ³digo de TributaÃ§Ã£o Nacional</p>
               <p className="text-sm font-medium">{fiscalSettings?.codigoTributacaoNacional || "04.03.03"}</p>
-              <p className="text-xs text-muted-foreground">{fiscalSettings?.descricaoTributacao || "Clínicas, sanatórios, manicômios, casas de saúde, prontos-socorros, ambulatórios e congêneres"}</p>
+              <p className="text-xs text-muted-foreground">{fiscalSettings?.descricaoTributacao || "ClÃ­nicas, sanatÃ³rios, manicÃ´mios, casas de saÃºde, prontos-socorros, ambulatÃ³rios e congÃªneres"}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Item NBS</p>
-              <p className="text-sm font-medium">{fiscalSettings?.itemNbs || "123012100"} - {fiscalSettings?.descricaoNbs || "Serviços de clínica médica"}</p>
+              <p className="text-sm font-medium">{fiscalSettings?.itemNbs || "123012100"} - {fiscalSettings?.descricaoNbs || "ServiÃ§os de clÃ­nica mÃ©dica"}</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Município de Incidência ISSQN</p>
-              <p className="text-sm font-medium">{fiscalSettings?.municipioIncidencia || "Mogi Guaçu"}/{fiscalSettings?.ufIncidencia || "SP"}</p>
+              <p className="text-xs text-muted-foreground">MunicÃ­pio de IncidÃªncia ISSQN</p>
+              <p className="text-sm font-medium">{fiscalSettings?.municipioIncidencia || "Mogi GuaÃ§u"}/{fiscalSettings?.ufIncidencia || "SP"}</p>
             </div>
           </div>
 
-          {/* Descrição do Serviço */}
+          {/* DescriÃ§Ã£o do ServiÃ§o */}
           <div>
-            <Label className="text-xs">Descrição do Serviço *</Label>
+            <Label className="text-xs">DescriÃ§Ã£o do ServiÃ§o *</Label>
             <Input
               className="mt-1"
               value={form.descricaoServico}
               onChange={(e) => setForm({ ...form, descricaoServico: e.target.value })}
-              placeholder="Procedimentos Médicos Ambulatoriais"
+              placeholder="Procedimentos MÃ©dicos Ambulatoriais"
             />
           </div>
 
           {/* Complemento */}
           <div>
-            <Label className="text-xs">Complemento da Descrição</Label>
+            <Label className="text-xs">Complemento da DescriÃ§Ã£o</Label>
             <Textarea
               className="mt-1"
               rows={3}
               value={form.complementoDescricao}
               onChange={(e) => setForm({ ...form, complementoDescricao: e.target.value })}
-              placeholder="Forma de pagamento (Pix, cartão, financiamento...), parcelas, etc."
+              placeholder="Forma de pagamento (Pix, cartÃ£o, financiamento...), parcelas, etc."
             />
             <p className="text-xs text-muted-foreground mt-1">
-              Informe a forma de pagamento, número de parcelas, ou detalhes do financiamento.
+              Informe a forma de pagamento, nÃºmero de parcelas, ou detalhes do financiamento.
             </p>
           </div>
 
@@ -544,10 +565,10 @@ export default function NfseEmissao() {
                 <SelectContent>
                   <SelectItem value="pix">Pix</SelectItem>
                   <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                  <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
-                  <SelectItem value="cartao_debito">Cartão de Débito</SelectItem>
+                  <SelectItem value="cartao_credito">CartÃ£o de CrÃ©dito</SelectItem>
+                  <SelectItem value="cartao_debito">CartÃ£o de DÃ©bito</SelectItem>
                   <SelectItem value="boleto">Boleto</SelectItem>
-                  <SelectItem value="transferencia">Transferência</SelectItem>
+                  <SelectItem value="transferencia">TransferÃªncia</SelectItem>
                   <SelectItem value="financiamento">Financiamento</SelectItem>
                   <SelectItem value="outro">Outro</SelectItem>
                 </SelectContent>
@@ -566,9 +587,9 @@ export default function NfseEmissao() {
 
           {/* Texto Legal (somente leitura) */}
           <div className="p-3 bg-[#C9A55B]/5 rounded border border-[#C9A55B]/20">
-            <p className="text-xs font-medium text-[#8A6526] mb-1">Texto Legal (incluído automaticamente)</p>
+            <p className="text-xs font-medium text-[#8A6526] mb-1">Texto Legal (incluÃ­do automaticamente)</p>
             <p className="text-xs text-[#8A6526]">
-              {fiscalSettings?.textoLegalFixo || "NÃO SUJEITO A RETENCAO A SEGURIDADE SOCIAL, CONFORME ART-31 DA LEI-8.212/91, OS/INSS-209/99, IN/INSS-DC-100/03 E IN 971/09 ART.120 INCISO III. OS SERVICOS ACIMA DESCRITOS FORAM PRESTADOS PESSOALMENTE PELO(S) SOCIO(S) E SEM O CONCURSO DE EMPREGADOS OU OUTROS CONTRIBUINTES INDIVIDUAIS"}
+              {fiscalSettings?.textoLegalFixo || "NÃƒO SUJEITO A RETENCAO A SEGURIDADE SOCIAL, CONFORME ART-31 DA LEI-8.212/91, OS/INSS-209/99, IN/INSS-DC-100/03 E IN 971/09 ART.120 INCISO III. OS SERVICOS ACIMA DESCRITOS FORAM PRESTADOS PESSOALMENTE PELO(S) SOCIO(S) E SEM O CONCURSO DE EMPREGADOS OU OUTROS CONTRIBUINTES INDIVIDUAIS"}
             </p>
           </div>
         </CardContent>
@@ -576,22 +597,22 @@ export default function NfseEmissao() {
     </div>
   );
 
-  // ─── Etapa 3: Valores e Tributação ──────────────────────────────────────────
+  // â”€â”€â”€ Etapa 3: Valores e TributaÃ§Ã£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const renderStep3 = () => (
     <div className="space-y-6">
-      {/* Valores do Serviço */}
+      {/* Valores do ServiÃ§o */}
       <Card className="border shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <DollarSign className="h-4 w-4 text-primary" />
-            Valores do Serviço Prestado
+            Valores do ServiÃ§o Prestado
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label className="text-xs">Valor do Serviço Prestado (R$) *</Label>
+              <Label className="text-xs">Valor do ServiÃ§o Prestado (R$) *</Label>
               <Input
                 className="mt-1 text-lg font-semibold"
                 placeholder="0,00"
@@ -600,7 +621,7 @@ export default function NfseEmissao() {
               />
             </div>
             <div>
-              <Label className="text-xs">Dedução (R$)</Label>
+              <Label className="text-xs">DeduÃ§Ã£o (R$)</Label>
               <Input
                 className="mt-1"
                 placeholder="0,00"
@@ -619,7 +640,7 @@ export default function NfseEmissao() {
             </div>
             <div className="flex items-end">
               <div className="p-3 bg-[#C9A55B]/5 rounded border border-[#C9A55B]/25 w-full">
-                <p className="text-xs text-[#6B5B2A]">Valor Líquido</p>
+                <p className="text-xs text-[#6B5B2A]">Valor LÃ­quido</p>
                 <p className="text-lg font-bold text-[#6B5B2A]">{formatCurrency(valorLiquido)}</p>
               </div>
             </div>
@@ -627,68 +648,86 @@ export default function NfseEmissao() {
         </CardContent>
       </Card>
 
-      {/* Tributação Municipal */}
+      {/* TributaÃ§Ã£o Municipal */}
       <Card className="border shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <Calculator className="h-4 w-4 text-primary" />
-            Tributação Municipal
+            TributaÃ§Ã£o Municipal
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-muted/30 rounded">
             <div>
-              <p className="text-xs text-muted-foreground">Tributação ISSQN</p>
-              <p className="text-sm font-medium">Operação Tributável</p>
+              <p className="text-xs text-muted-foreground">TributaÃ§Ã£o ISSQN</p>
+              <p className="text-sm font-medium">OperaÃ§Ã£o TributÃ¡vel</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Regime Especial de Tributação</p>
+              <p className="text-xs text-muted-foreground">Regime Especial de TributaÃ§Ã£o</p>
               <p className="text-sm font-medium">Nenhum</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Retenção ISSQN pelo Tomador</p>
-              <p className="text-sm font-medium">Não</p>
+              <p className="text-xs text-muted-foreground">RetenÃ§Ã£o ISSQN pelo Tomador</p>
+              <p className="text-sm font-medium">NÃ£o</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Benefício Municipal</p>
-              <p className="text-sm font-medium">Não</p>
+              <p className="text-xs text-muted-foreground">BenefÃ­cio Municipal</p>
+              <p className="text-sm font-medium">NÃ£o</p>
             </div>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            Alíquota, base de cálculo e valor do ISSQN são calculados automaticamente pelo portal.
+            AlÃ­quota, base de cÃ¡lculo e valor do ISSQN sÃ£o calculados automaticamente pelo portal.
           </p>
         </CardContent>
       </Card>
 
-      {/* Tributação Federal */}
+      {/* TributaÃ§Ã£o Federal */}
       <Card className="border shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <Building2 className="h-4 w-4 text-primary" />
-            Tributação Federal
+            TributaÃ§Ã£o Federal
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-muted/30 rounded">
             <div>
               <p className="text-xs text-muted-foreground">PIS/COFINS</p>
-              <p className="text-sm font-medium">Nenhum - Não Retidos</p>
+              <p className="text-sm font-medium">Nenhum - NÃ£o Retidos</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">IRRF</p>
               <p className="text-sm font-medium">R$ 0,00</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Contribuições Sociais Retidas</p>
+              <p className="text-xs text-muted-foreground">ContribuiÃ§Ãµes Sociais Retidas</p>
               <p className="text-sm font-medium">R$ 0,00</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Contribuição Previdenciária Retida</p>
+              <p className="text-xs text-muted-foreground">ContribuiÃ§Ã£o PrevidenciÃ¡ria Retida</p>
               <p className="text-sm font-medium">R$ 0,00</p>
             </div>
           </div>
         </CardContent>
       </Card>
+
+      {needsAliquotaConfirmation && (
+        <Card className="border-amber-200 bg-amber-50 shadow-sm">
+          <CardContent className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-amber-900">
+                Confirme a aliquota do Simples Nacional deste mes
+              </p>
+              <p className="text-xs text-amber-800">
+                Antes da primeira emissao de {new Date(`${currentMonthKey}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}, confirme se o percentual informado ainda esta correto.
+              </p>
+            </div>
+            <Button type="button" variant="outline" onClick={confirmAliquotaForCurrentMonth}>
+              Confirmar aliquota atual
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Valor Aproximado dos Tributos */}
       <Card className="border shadow-sm">
@@ -702,7 +741,7 @@ export default function NfseEmissao() {
           <div className="p-3 bg-amber-50 rounded border border-amber-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-amber-700">Alíquota Simples Nacional</p>
+                <p className="text-xs text-amber-700">AlÃ­quota Simples Nacional</p>
                 <p className="text-sm font-bold text-amber-800">{fiscalSettings?.aliquotaSimplesNacional || "18,63"}%</p>
               </div>
               <div className="text-right">
@@ -718,7 +757,7 @@ export default function NfseEmissao() {
     </div>
   );
 
-  // ─── Etapa 4: Conferência e Emissão ─────────────────────────────────────────
+  // â”€â”€â”€ Etapa 4: ConferÃªncia e EmissÃ£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const renderStep4 = () => (
     <div className="space-y-6">
@@ -726,25 +765,25 @@ export default function NfseEmissao() {
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <FileCheck className="h-4 w-4 text-primary" />
-            Conferência dos Dados - NFS-e
+            ConferÃªncia dos Dados - NFS-e
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Ambiente */}
           <div className="flex items-center justify-between p-3 rounded border">
             <div className="flex items-center gap-2">
-              <Label className="text-sm font-medium">Ambiente de Emissão</Label>
+              <Label className="text-sm font-medium">Ambiente de EmissÃ£o</Label>
               <Badge className={form.ambiente === "producao" ? "bg-[#C9A55B]/15 text-[#6B5B2A]" : "bg-[#F1D791]/30 text-[#8A6526]"}>
-                {form.ambiente === "producao" ? "Produção" : "Homologação"}
+                {form.ambiente === "producao" ? "ProduÃ§Ã£o" : "HomologaÃ§Ã£o"}
               </Badge>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Homologação</span>
+              <span className="text-xs text-muted-foreground">HomologaÃ§Ã£o</span>
               <Switch
                 checked={form.ambiente === "producao"}
                 onCheckedChange={(v) => setForm({ ...form, ambiente: v ? "producao" : "homologacao" })}
               />
-              <span className="text-xs text-muted-foreground">Produção</span>
+              <span className="text-xs text-muted-foreground">ProduÃ§Ã£o</span>
             </div>
           </div>
 
@@ -752,7 +791,7 @@ export default function NfseEmissao() {
             <div className="p-3 bg-[#6B6B6B]/5 rounded border border-[#6B6B6B]/25">
               <p className="text-xs text-[#2F2F2F] flex items-center gap-1 font-medium">
                 <AlertTriangle className="h-3 w-3" />
-                ATENÇÃO: Esta NFS-e será emitida em ambiente de PRODUÇÃO e terá valor fiscal real.
+                ATENÃ‡ÃƒO: Esta NFS-e serÃ¡ emitida em ambiente de PRODUÃ‡ÃƒO e terÃ¡ valor fiscal real.
               </p>
             </div>
           )}
@@ -762,9 +801,9 @@ export default function NfseEmissao() {
             {/* Emitente */}
             <div className="p-3 bg-muted/30 rounded">
               <p className="text-xs font-medium text-muted-foreground mb-2">EMITENTE</p>
-              <p className="text-sm font-medium">{fiscalSettings?.razaoSocial || "Não configurado"}</p>
+              <p className="text-sm font-medium">{fiscalSettings?.razaoSocial || "NÃ£o configurado"}</p>
               <p className="text-xs text-muted-foreground">{fiscalSettings?.cnpj ? formatCpfCnpj(fiscalSettings.cnpj) : "-"}</p>
-              <p className="text-xs text-muted-foreground">{fiscalSettings?.municipio || "Mogi Guaçu"}/{fiscalSettings?.uf || "SP"}</p>
+              <p className="text-xs text-muted-foreground">{fiscalSettings?.municipio || "Mogi GuaÃ§u"}/{fiscalSettings?.uf || "SP"}</p>
             </div>
 
             {/* Tomador */}
@@ -777,13 +816,13 @@ export default function NfseEmissao() {
             </div>
           </div>
 
-          {/* Serviço */}
+          {/* ServiÃ§o */}
           <div className="p-3 bg-muted/30 rounded">
-            <p className="text-xs font-medium text-muted-foreground mb-2">SERVIÇO</p>
+            <p className="text-xs font-medium text-muted-foreground mb-2">SERVIÃ‡O</p>
             <p className="text-sm">{form.descricaoServico}</p>
             {form.complementoDescricao && <p className="text-xs text-muted-foreground mt-1">{form.complementoDescricao}</p>}
             <p className="text-xs text-muted-foreground mt-1">
-              Pagamento efetuado via: {getPaymentDescription(form.formaPagamento, form.detalhesPagamento)}
+              Forma de Pagamento: {getPaymentDescription(form.formaPagamento, form.detalhesPagamento)}
             </p>
           </div>
 
@@ -792,11 +831,11 @@ export default function NfseEmissao() {
             <p className="text-xs font-medium text-[#6B5B2A] mb-3">VALORES</p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div>
-                <p className="text-xs text-[#8A6526]">Serviço</p>
+                <p className="text-xs text-[#8A6526]">ServiÃ§o</p>
                 <p className="text-sm font-bold text-[#6B5B2A]">{formatCurrency(valorServicoCents)}</p>
               </div>
               <div>
-                <p className="text-xs text-[#8A6526]">Dedução</p>
+                <p className="text-xs text-[#8A6526]">DeduÃ§Ã£o</p>
                 <p className="text-sm font-medium text-[#6B5B2A]">{formatCurrency(valorDeducaoCents)}</p>
               </div>
               <div>
@@ -804,7 +843,7 @@ export default function NfseEmissao() {
                 <p className="text-sm font-medium text-[#6B5B2A]">{formatCurrency(valorDescontoCents)}</p>
               </div>
               <div>
-                <p className="text-xs text-[#8A6526]">Valor Líquido</p>
+                <p className="text-xs text-[#8A6526]">Valor LÃ­quido</p>
                 <p className="text-lg font-bold text-green-900">{formatCurrency(valorLiquido)}</p>
               </div>
             </div>
@@ -812,7 +851,7 @@ export default function NfseEmissao() {
 
           {/* Data */}
           <div className="flex items-center gap-4 text-sm">
-            <span className="text-muted-foreground">Data de Competência:</span>
+            <span className="text-muted-foreground">Data de CompetÃªncia:</span>
             <span className="font-medium">{new Date(form.dataCompetencia + "T12:00:00").toLocaleDateString("pt-BR")}</span>
           </div>
         </CardContent>
@@ -820,7 +859,7 @@ export default function NfseEmissao() {
     </div>
   );
 
-  // ─── Histórico ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€ HistÃ³rico â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const renderHistorico = () => (
     <div className="space-y-4">
@@ -849,13 +888,13 @@ export default function NfseEmissao() {
                         <span className="font-semibold text-sm">{nfse.tomadorNome}</span>
                         <Badge className={st.color}>{st.label}</Badge>
                         {nfse.ambiente === "homologacao" && (
-                          <Badge variant="outline" className="text-xs">Homologação</Badge>
+                          <Badge variant="outline" className="text-xs">HomologaÃ§Ã£o</Badge>
                         )}
                       </div>
                       <div className="flex items-center gap-4 text-xs text-muted-foreground">
                         <span>{nfse.tomadorTipoDocumento?.toUpperCase()}: {formatCpfCnpj(nfse.tomadorDocumento)}</span>
                         <span>{new Date(nfse.createdAt).toLocaleDateString("pt-BR")}</span>
-                        {nfse.numeroNfse && <span>Nº {nfse.numeroNfse}</span>}
+                        {nfse.numeroNfse && <span>NÂº {nfse.numeroNfse}</span>}
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -903,16 +942,16 @@ export default function NfseEmissao() {
     </div>
   );
 
-  // ─── Steps Navigation ───────────────────────────────────────────────────────
+  // â”€â”€â”€ Steps Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const steps = [
     { num: 1, label: "Pessoas", icon: Users },
-    { num: 2, label: "Serviço", icon: FileText },
+    { num: 2, label: "ServiÃ§o", icon: FileText },
     { num: 3, label: "Valores", icon: DollarSign },
     { num: 4, label: "Emitir", icon: CheckCircle2 },
   ];
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
+  // â”€â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   return (
     <div className="space-y-6">
@@ -920,10 +959,10 @@ export default function NfseEmissao() {
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
             <Receipt className="h-6 w-6 text-primary" />
-            NFS-e - Nota Fiscal de Serviço Eletrônica
+            NFS-e - Nota Fiscal de ServiÃ§o EletrÃ´nica
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Emissão conforme Portal Nacional NFS-e (nfse.gov.br)
+            EmissÃ£o conforme Portal Nacional NFS-e (nfse.gov.br)
           </p>
         </div>
       </div>
@@ -934,7 +973,7 @@ export default function NfseEmissao() {
             <Plus className="h-4 w-4" />Emitir NFS-e
           </TabsTrigger>
           <TabsTrigger value="historico" className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />Histórico
+            <FileText className="h-4 w-4" />HistÃ³rico
           </TabsTrigger>
         </TabsList>
 
@@ -990,7 +1029,7 @@ export default function NfseEmissao() {
                 }
                 className="btn-gold-gradient"
               >
-                Próximo<ChevronRight className="h-4 w-4 ml-1" />
+                PrÃ³ximo<ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             ) : (
               <Button
@@ -1020,7 +1059,7 @@ export default function NfseEmissao() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Receipt className="h-5 w-5" />
-              Detalhes da NFS-e {selectedNfse?.numeroNfse ? `Nº ${selectedNfse.numeroNfse}` : "(Rascunho)"}
+              Detalhes da NFS-e {selectedNfse?.numeroNfse ? `NÂº ${selectedNfse.numeroNfse}` : "(Rascunho)"}
             </DialogTitle>
           </DialogHeader>
           {selectedNfse && (
@@ -1029,13 +1068,13 @@ export default function NfseEmissao() {
                 <Badge className={STATUS_MAP[selectedNfse.status]?.color || "bg-gray-100"}>
                   {STATUS_MAP[selectedNfse.status]?.label || selectedNfse.status}
                 </Badge>
-                {selectedNfse.ambiente === "homologacao" && <Badge variant="outline">Homologação</Badge>}
+                {selectedNfse.ambiente === "homologacao" && <Badge variant="outline">HomologaÃ§Ã£o</Badge>}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-muted-foreground">Emitente</p>
-                  <p className="text-sm font-medium">{fiscalSettings?.razaoSocial || "Emitente não configurado"}</p>
+                  <p className="text-sm font-medium">{fiscalSettings?.razaoSocial || "Emitente nÃ£o configurado"}</p>
                   <p className="text-xs text-muted-foreground">{fiscalSettings?.cnpj ? formatCpfCnpj(fiscalSettings.cnpj) : "-"}</p>
                 </div>
                 <div>
@@ -1046,21 +1085,21 @@ export default function NfseEmissao() {
               </div>
 
               <div>
-                <p className="text-xs text-muted-foreground">Descrição do Serviço</p>
+                <p className="text-xs text-muted-foreground">DescriÃ§Ã£o do ServiÃ§o</p>
                 <p className="text-sm whitespace-pre-wrap">{selectedNfse.descricaoServico}</p>
               </div>
 
               <div className="grid grid-cols-3 gap-4 p-3 bg-[#C9A55B]/5 rounded">
                 <div>
-                  <p className="text-xs text-[#8A6526]">Valor do Serviço</p>
+                  <p className="text-xs text-[#8A6526]">Valor do ServiÃ§o</p>
                   <p className="text-sm font-bold text-[#6B5B2A]">{formatCurrency(selectedNfse.valorServico)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-[#8A6526]">Deduções</p>
+                  <p className="text-xs text-[#8A6526]">DeduÃ§Ãµes</p>
                   <p className="text-sm font-medium text-[#6B5B2A]">{formatCurrency((selectedNfse.valorDeducao || 0) + (selectedNfse.valorDescontoIncondicionado || 0))}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-[#8A6526]">Valor Líquido</p>
+                  <p className="text-xs text-[#8A6526]">Valor LÃ­quido</p>
                   <p className="text-sm font-bold text-green-900">{formatCurrency(selectedNfse.valorLiquido)}</p>
                 </div>
               </div>
@@ -1071,7 +1110,7 @@ export default function NfseEmissao() {
                   <p className="text-xs font-mono">{selectedNfse.chaveAcesso}</p>
                   {selectedNfse.codigoVerificacao && (
                     <>
-                      <p className="text-xs text-muted-foreground mt-1">Código de Verificação</p>
+                      <p className="text-xs text-muted-foreground mt-1">CÃ³digo de VerificaÃ§Ã£o</p>
                       <p className="text-xs font-mono">{selectedNfse.codigoVerificacao}</p>
                     </>
                   )}
@@ -1079,7 +1118,7 @@ export default function NfseEmissao() {
               )}
 
               <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                <span>Competência: {selectedNfse.dataCompetencia}</span>
+                <span>CompetÃªncia: {selectedNfse.dataCompetencia}</span>
                 <span>Criada: {new Date(selectedNfse.createdAt).toLocaleString("pt-BR")}</span>
               </div>
             </div>
@@ -1098,7 +1137,7 @@ export default function NfseEmissao() {
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm">
-              Tem certeza que deseja cancelar a NFS-e {selectedNfse?.numeroNfse ? `Nº ${selectedNfse.numeroNfse}` : ""} de <strong>{selectedNfse?.tomadorNome}</strong>?
+              Tem certeza que deseja cancelar a NFS-e {selectedNfse?.numeroNfse ? `NÂº ${selectedNfse.numeroNfse}` : ""} de <strong>{selectedNfse?.tomadorNome}</strong>?
             </p>
             <div>
               <Label>Motivo do Cancelamento *</Label>
@@ -1126,3 +1165,4 @@ export default function NfseEmissao() {
     </div>
   );
 }
+
