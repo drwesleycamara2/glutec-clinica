@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,6 +34,7 @@ interface EvolucaoClinicaTabProps {
 }
 
 export function EvolucaoClinicaTab({ patientId, patientName }: EvolucaoClinicaTabProps) {
+  const draftStorageKey = useMemo(() => `glutec:evolucao-draft:${patientId}`, [patientId]);
   const [evolucoes, setEvolucoes] = useState<Evolucao[]>([]);
   const [currentEvolucao, setCurrentEvolucao] = useState<Evolucao>({
     icd10: null,
@@ -44,9 +45,44 @@ export function EvolucaoClinicaTab({ patientId, patientName }: EvolucaoClinicaTa
     signatureStatus: "pendente",
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [lastAutoSaveAt, setLastAutoSaveAt] = useState<string | null>(null);
   const [showSignatureDialog, setShowSignatureDialog] = useState(false);
   const [signaturePassword, setSignaturePassword] = useState("");
   const [selectedEvolucaoForSignature, setSelectedEvolucaoForSignature] = useState<Evolucao | null>(null);
+
+  useEffect(() => {
+    const savedDraft = localStorage.getItem(draftStorageKey);
+    if (!savedDraft) return;
+
+    try {
+      const parsed = JSON.parse(savedDraft) as Evolucao;
+      setCurrentEvolucao((current) => ({ ...current, ...parsed }));
+      setLastAutoSaveAt(new Date().toISOString());
+      toast.info("Rascunho automático recuperado.");
+    } catch {
+      localStorage.removeItem(draftStorageKey);
+    }
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    const hasContent =
+      Boolean(currentEvolucao.icd10) ||
+      currentEvolucao.clinicalNotes.trim().length > 0 ||
+      currentEvolucao.audioTranscription.trim().length > 0;
+
+    if (!hasContent) {
+      localStorage.removeItem(draftStorageKey);
+      setLastAutoSaveAt(null);
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      localStorage.setItem(draftStorageKey, JSON.stringify(currentEvolucao));
+      setLastAutoSaveAt(new Date().toISOString());
+    }, 800);
+
+    return () => window.clearTimeout(timeout);
+  }, [currentEvolucao, draftStorageKey]);
 
   const handleSave = async () => {
     if (!currentEvolucao.icd10) {
@@ -80,6 +116,8 @@ export function EvolucaoClinicaTab({ patientId, patientName }: EvolucaoClinicaTa
         professional: "Dr. Médico",
         signatureStatus: "pendente",
       });
+      localStorage.removeItem(draftStorageKey);
+      setLastAutoSaveAt(null);
     } catch (error) {
       console.error("Error saving evolucao:", error);
       toast.error("Erro ao salvar evolução clínica");
@@ -244,6 +282,14 @@ export function EvolucaoClinicaTab({ patientId, patientName }: EvolucaoClinicaTa
 
           {/* Audio Recording */}
           <div>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <Label className="text-xs font-medium">Atendimento por voz</Label>
+              <span className="text-[11px] text-muted-foreground">
+                {lastAutoSaveAt
+                  ? `Rascunho salvo automaticamente às ${new Date(lastAutoSaveAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
+                  : "O texto é salvo automaticamente como rascunho."}
+              </span>
+            </div>
             <AudioRecorder
               onTranscriptionComplete={(transcription) =>
                 setCurrentEvolucao({
@@ -557,3 +603,4 @@ export function EvolucaoClinicaTab({ patientId, patientName }: EvolucaoClinicaTa
     </div>
   );
 }
+

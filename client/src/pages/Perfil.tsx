@@ -30,6 +30,7 @@ const ROLE_CONFIG = {
 
 export default function Perfil() {
   const { user, refresh } = useAuth();
+  const utils = trpc.useUtils();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     name: (user as any)?.name ?? "",
@@ -40,6 +41,13 @@ export default function Perfil() {
 
   const updateMutation = trpc.auth.updateMe.useMutation({
     onSuccess: async () => {
+      utils.auth.me.setData(undefined, {
+        ...(user as any),
+        name: form.name || (user as any)?.name || null,
+        specialty: form.specialty || null,
+        crm: form.crm || null,
+        phone: form.phone || null,
+      });
       await refresh();
       toast.success("Perfil atualizado com sucesso!");
       setEditing(false);

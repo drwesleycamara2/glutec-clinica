@@ -108,6 +108,7 @@ async function fileToBase64(file: File) {
 
 export default function ConfiguracoesFiscaisNacional() {
   const { data: fiscal, isLoading, refetch } = trpc.fiscal.get.useQuery();
+  const utils = trpc.useUtils();
   const [form, setForm] = useState<FiscalForm>(initialForm);
   const [certificateFile, setCertificateFile] = useState<File | null>(null);
   const [certificatePassword, setCertificatePassword] = useState("");
@@ -122,6 +123,10 @@ export default function ConfiguracoesFiscaisNacional() {
 
   const uploadCertificateMutation = trpc.fiscal.uploadCertificate.useMutation({
     onSuccess: () => {
+      utils.fiscal.get.setData(undefined, (current: any) => ({
+        ...(current ?? fiscal ?? {}),
+        certificadoConfigurado: true,
+      }));
       toast.success("Certificado A1 salvo com sucesso.");
       setCertificateFile(null);
       setCertificatePassword("");

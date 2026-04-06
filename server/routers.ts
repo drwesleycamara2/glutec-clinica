@@ -330,6 +330,7 @@ export const appRouter = router({
         doctorId: z.number(),
         scheduledAt: z.string(),
         durationMinutes: z.number(),
+        room: z.string().min(1),
         type: z.string(),
         notes: z.string().optional(),
         isRetroactive: z.boolean().optional(),
@@ -355,6 +356,38 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         return dbComplete.updateAppointmentStatus(input.appointmentId, input.status);
+      }),
+  }),
+
+  appointmentBlocks: router({
+    list: protectedProcedure
+      .input(z.object({
+        from: z.string(),
+        to: z.string(),
+      }))
+      .query(async ({ input }) => {
+        return dbComplete.listAppointmentBlocks(input.from, input.to);
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        title: z.string().min(1),
+        notes: z.string().optional(),
+        room: z.string().optional(),
+        doctorId: z.number().optional(),
+        startsAt: z.string(),
+        endsAt: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return dbComplete.createAppointmentBlock(input, ctx.user.id);
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({
+        blockId: z.number(),
+      }))
+      .mutation(async ({ input }) => {
+        return dbComplete.deleteAppointmentBlock(input.blockId);
       }),
   }),
 
