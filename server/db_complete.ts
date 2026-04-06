@@ -111,12 +111,86 @@ export async function getPatientById(id: number) {
 export async function createAppointment(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
-  const result = await db.insert(sql`appointments`).values({
-    ...data,
-    createdBy: userId,
-  });
-  return result[0];
+
+  const scheduledAt = new Date(data.scheduledAt);
+  if (Number.isNaN(scheduledAt.getTime())) {
+    throw new Error("Data e hora do agendamento inválidas.");
+  }
+
+  const duration = Math.max(5, Number(data.durationMinutes || data.duration || 30));
+  const endsAt = new Date(scheduledAt.getTime() + duration * 60 * 1000);
+  const room = String(data.room ?? "").trim();
+
+  if (!room) {
+    throw new Error("Informe a sala do atendimento.");
+  }
+
+  const conflictingBlocks = unwrapRows<any>(await db.execute(sql`
+    select *
+    from appointment_blocks
+    where active = true
+      and startsAt < ${endsAt}
+      and endsAt > ${scheduledAt}
+      and (room is null or room = ${room})
+      and (doctorId is null or doctorId = ${data.doctorId})
+    limit 1
+  `));
+
+  if (conflictingBlocks[0]) {
+    throw new Error("Existe um bloqueio de agenda para este período.");
+  }
+
+  const conflictingAppointments = unwrapRows<any>(await db.execute(sql`
+    select *
+    from appointments
+    where status not in ('cancelada', 'falta')
+      and room = ${room}
+      and scheduledAt < ${endsAt}
+      and date_add(scheduledAt, interval duration minute) > ${scheduledAt}
+    limit 1
+  `));
+
+  if (conflictingAppointments[0]) {
+    throw new Error("Já existe um agendamento nesta sala para o horário informado.");
+  }
+
+  const result = await db.execute(sql`
+    insert into appointments (
+      patientId,
+      doctorId,
+      scheduledAt,
+      duration,
+      type,
+      status,
+      notes,
+      room,
+      createdBy
+    ) values (
+      ${data.patientId},
+      ${data.doctorId},
+      ${scheduledAt},
+      ${duration},
+      ${data.type ?? "consulta"},
+      'agendada',
+      ${data.notes ?? null},
+      ${room},
+      ${userId}
+    )
+  `);
+
+  const insertedId =
+    typeof result[0] === "number"
+      ? result[0]
+      : result[0]?.insertId ?? result[0]?.id;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from appointments
+    where id = ${insertedId}
+    limit 1
+  `));
+
+  return rows[0] ?? { success: true };
 }
 
 export async function getAppointmentsByDateRange(from: string, to: string) {
@@ -137,6 +211,80 @@ export async function updateAppointmentStatus(appointmentId: number, status: str
   if (!db) return;
   
   await db.update(sql`appointments`).set({ status }).where(eq(sql`id`, appointmentId));
+  return { success: true };
+}
+
+export async function listAppointmentBlocks(from: string, to: string) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return unwrapRows<any>(await db.execute(sql`
+    select *
+    from appointment_blocks
+    where active = true
+      and startsAt <= ${to}
+      and endsAt >= ${from}
+    order by startsAt asc
+  `));
+}
+
+export async function createAppointmentBlock(data: any, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const startsAt = new Date(data.startsAt);
+  const endsAt = new Date(data.endsAt);
+  if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) {
+    throw new Error("Período de bloqueio inválido.");
+  }
+
+  const result = await db.execute(sql`
+    insert into appointment_blocks (
+      title,
+      notes,
+      room,
+      doctorId,
+      startsAt,
+      endsAt,
+      createdBy,
+      active
+    ) values (
+      ${data.title || "Bloqueio de agenda"},
+      ${data.notes ?? null},
+      ${data.room || null},
+      ${data.doctorId || null},
+      ${startsAt},
+      ${endsAt},
+      ${userId},
+      true
+    )
+  `);
+
+  const insertedId =
+    typeof result[0] === "number"
+      ? result[0]
+      : result[0]?.insertId ?? result[0]?.id;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from appointment_blocks
+    where id = ${insertedId}
+    limit 1
+  `));
+
+  return rows[0] ?? { success: true };
+}
+
+export async function deleteAppointmentBlock(blockId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  await db.execute(sql`
+    update appointment_blocks
+    set active = false
+    where id = ${blockId}
+  `);
+
   return { success: true };
 }
 

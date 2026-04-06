@@ -1,4 +1,4 @@
-import { useAuth } from "@/_core/hooks/useAuth";
+﻿import { useAuth } from "@/_core/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -66,13 +66,13 @@ const menuSections: MenuSection[] = [
       { icon: LayoutDashboard, label: "Dashboard", path: "/" },
       { icon: CalendarDays, label: "Agenda", path: "/agenda", moduleId: "agenda" },
       { icon: Users, label: "Pacientes", path: "/pacientes", moduleId: "pacientes" },
-      { icon: ClipboardList, label: "Prontuarios", path: "/prontuarios", moduleId: "prontuarios" },
+      { icon: ClipboardList, label: "Prontuários", path: "/prontuarios", moduleId: "prontuarios" },
       { icon: Camera, label: "Fotos", path: "/fotos", moduleId: "fotos" },
       { icon: Files, label: "Documentos", path: "/documentos", moduleId: "documentos" },
-      { icon: FileText, label: "Prescricoes", path: "/prescricoes", moduleId: "prescricoes" },
+      { icon: FileText, label: "Prescrições", path: "/prescricoes", moduleId: "prescricoes" },
       { icon: Stethoscope, label: "Exames", path: "/exames", moduleId: "exames" },
       { icon: ShieldCheck, label: "Assinaturas", path: "/assinaturas", moduleId: "assinaturas" },
-      { icon: Receipt, label: "Orcamentos", path: "/orcamentos", moduleId: "orcamentos" },
+      { icon: Receipt, label: "Orçamentos", path: "/orcamentos", moduleId: "orcamentos" },
     ],
   },
   {
@@ -82,11 +82,11 @@ const menuSections: MenuSection[] = [
       { icon: Wallet, label: "Financeiro", path: "/financeiro", moduleId: "financeiro" },
       { icon: Package, label: "Estoque", path: "/estoque", moduleId: "estoque" },
       { icon: MessageSquareText, label: "CRM", path: "/crm", moduleId: "crm" },
-      { icon: BarChart3, label: "Relatorios", path: "/relatorios", moduleId: "relatorios" },
+      { icon: BarChart3, label: "Relatórios", path: "/relatorios", moduleId: "relatorios" },
       { icon: MessageSquareText, label: "Chat", path: "/chat", moduleId: "chat" },
       { icon: UserCircle2, label: "Perfil", path: "/perfil", moduleId: "perfil" },
-      { icon: ShieldCheck, label: "Usuarios", path: "/usuarios", adminOnly: true, moduleId: "usuarios" },
-      { icon: Settings, label: "Configuracoes", path: "/configuracoes", moduleId: "configuracoes" },
+      { icon: ShieldCheck, label: "Usuários", path: "/usuarios", adminOnly: true, moduleId: "usuarios" },
+      { icon: Settings, label: "Configurações", path: "/configuracoes", moduleId: "configuracoes" },
     ],
   },
 ];
@@ -254,7 +254,7 @@ function DashboardLayoutPremiumContent({
               <button
                 onClick={toggleSidebar}
                 className="app-brand-mark flex h-12 w-12 items-center justify-center p-2.5 transition-transform hover:-translate-y-0.5"
-                aria-label="Alternar navegacao"
+                aria-label="Alternar navegação"
               >
                 <img src="/logo-glutee-white.png" alt="Clínica Glutée" className="h-full w-full object-contain" />
               </button>
@@ -295,7 +295,12 @@ function DashboardLayoutPremiumContent({
             ))}
           </SidebarContent>
 
-          <SidebarFooter className="p-3">
+          <SidebarFooter className="space-y-3 p-3">
+            {!isCollapsed ? (
+              <div className="rounded-2xl border border-gold/15 bg-background/50 px-3 py-2 text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
+                Versão 1.0
+              </div>
+            ) : null}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="app-sidebar-user flex w-full items-center gap-3 rounded-2xl px-2 py-2 text-left transition-colors hover:bg-accent/10 group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -309,7 +314,7 @@ function DashboardLayoutPremiumContent({
                       {user?.name || "Equipe Glutec"}
                     </p>
                     <p className="mt-1 truncate text-[11px] uppercase tracking-[0.2em] text-text-tertiary">
-                      {user?.role === "admin" ? "Administrador" : "Equipe clinica"}
+                      {user?.role === "admin" ? "Administrador" : "Equipe clínica"}
                     </p>
                   </div>
                 </button>
@@ -349,10 +354,10 @@ function DashboardLayoutPremiumContent({
             </div>
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-[0.34em] text-text-tertiary">
-                Plataforma clinica premium
+                Clínica Premium
               </p>
               <p className="truncate text-lg font-semibold text-text-primary">
-                Ambiente de atendimento e gestão centralizados
+                Ambiente de atendimento e gestão centralizado
               </p>
             </div>
           </div>
@@ -387,3 +392,4 @@ function DashboardLayoutPremiumContent({
     </>
   );
 }
+
