@@ -123,10 +123,6 @@ export default function ConfiguracoesFiscaisNacional() {
 
   const uploadCertificateMutation = trpc.fiscal.uploadCertificate.useMutation({
     onSuccess: () => {
-      utils.fiscal.get.setData(undefined, (current: any) => ({
-        ...(current ?? fiscal ?? {}),
-        certificadoConfigurado: true,
-      }));
       toast.success("Certificado A1 salvo com sucesso.");
       setCertificateFile(null);
       setCertificatePassword("");
@@ -467,7 +463,7 @@ export default function ConfiguracoesFiscaisNacional() {
               <Input className="mt-1" value={form.codigoTributacaoNacional} onChange={(e) => setField("codigoTributacaoNacional", e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">Código do serviço</Label>
+              <Label className="text-xs">Código do serviço <span className="text-muted-foreground">(opcional)</span></Label>
               <Input className="mt-1" value={form.codigoServico} onChange={(e) => setField("codigoServico", e.target.value)} />
             </div>
             <div>
@@ -479,7 +475,7 @@ export default function ConfiguracoesFiscaisNacional() {
               <Input className="mt-1" value={form.cnaeServico} onChange={(e) => setField("cnaeServico", e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">Alíquota ISS (%)</Label>
+              <Label className="text-xs">Alíquota ISS (%) <span className="text-muted-foreground">(opcional)</span></Label>
               <Input className="mt-1" value={form.aliquotaIss} onChange={(e) => setField("aliquotaIss", e.target.value)} />
             </div>
             <div>
@@ -566,6 +562,9 @@ export default function ConfiguracoesFiscaisNacional() {
           <div className="rounded-lg border border-border/70 bg-background/60 p-4 text-sm">
             A forma de pagamento escolhida na emissão será anexada automaticamente ao texto com o padrão:
             <strong> Pagamento efetuado via: ...</strong>
+          </div>
+          <div className="rounded-lg border border-[#C9A55B]/20 bg-[#C9A55B]/8 p-4 text-sm text-muted-foreground">
+            Se o portal nacional da sua prefeitura não exigir esses campos no preenchimento manual, você pode manter código do serviço e alíquota de ISS em branco no sistema.
           </div>
         </CardContent>
       </Card>

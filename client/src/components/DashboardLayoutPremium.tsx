@@ -67,7 +67,7 @@ const menuSections: MenuSection[] = [
       { icon: CalendarDays, label: "Agenda", path: "/agenda", moduleId: "agenda" },
       { icon: Users, label: "Pacientes", path: "/pacientes", moduleId: "pacientes" },
       { icon: ClipboardList, label: "Prontuários", path: "/prontuarios", moduleId: "prontuarios" },
-      { icon: Camera, label: "Fotos", path: "/fotos", moduleId: "fotos" },
+      { icon: Camera, label: "Imagens", path: "/fotos", moduleId: "fotos" },
       { icon: Files, label: "Documentos", path: "/documentos", moduleId: "documentos" },
       { icon: FileText, label: "Prescrições", path: "/prescricoes", moduleId: "prescricoes" },
       { icon: Stethoscope, label: "Exames", path: "/exames", moduleId: "exames" },
