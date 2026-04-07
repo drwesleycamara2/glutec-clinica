@@ -32,8 +32,20 @@ export function AudioRecorder({ onTranscriptionComplete, medicalRecordId }: Audi
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
     };
-  }, []);
+  }, [audioUrl]);
+
+  const blobToBase64 = async (blob: Blob) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = String(reader.result ?? "");
+        resolve(result.includes(",") ? result.split(",")[1] : result);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
 
   const startRecording = async () => {
     try {
@@ -97,19 +109,22 @@ export function AudioRecorder({ onTranscriptionComplete, medicalRecordId }: Audi
 
     try {
       const audioKey = `audio/${Date.now()}-${Math.random().toString(36).substring(7)}.webm`;
-      
-      // Upload audio to storage
-      const formData = new FormData();
-      formData.append('file', audioBlob, 'audio.webm');
-      formData.append('key', audioKey);
-      
+      const fileBase64 = await blobToBase64(audioBlob);
+
       const uploadResponse = await fetch('/api/upload', {
         method: 'POST',
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: audioKey,
+          mimeType: audioBlob.type || "audio/webm",
+          fileName: "audio.webm",
+          fileBase64,
+        }),
       });
       
       if (!uploadResponse.ok) {
-        throw new Error('Upload failed');
+        const detail = await uploadResponse.text().catch(() => "");
+        throw new Error(detail || "Falha no upload do áudio");
       }
       
       const uploadData = await uploadResponse.json();
@@ -127,7 +142,7 @@ export function AudioRecorder({ onTranscriptionComplete, medicalRecordId }: Audi
               transcribeAudio(result.id, url);
             }
           },
-          onError: (error) => {
+          onError: () => {
             toast.error("Erro ao criar registro de áudio");
             setIsTranscribing(false);
           },

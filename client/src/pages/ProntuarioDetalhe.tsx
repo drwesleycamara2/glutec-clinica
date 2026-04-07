@@ -15,11 +15,95 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Plus, FileText, Activity, Stethoscope, ClipboardList, Loader2,
   Calendar, User, ShieldCheck, FileDown, UserCheck, Copy, Link2, Paperclip,
-  FlaskConical, Package, Save, Upload, Trash2, Search, CheckCircle2,
+  FlaskConical, Package, Save, Upload, Trash2, Search, CheckCircle2, History, FolderOpen, ImageIcon,
 } from "lucide-react";
 import { AllergyAlert } from "@/components/AllergyAlert";
 import { ExportProntuarioButton } from "@/components/ExportProntuario";
 import { EvolucaoClinicaTab } from "@/components/EvolucaoClinicaTab";
+const DEFAULT_ANAMNESE_QUESTIONS = [
+  { text: "Estado civil", type: "text", options: [] },
+  { text: "Profissão *", type: "text", options: [] },
+  { text: "Cidade e estado em que mora: *", type: "text", options: [] },
+  { text: "Peso atual aproximado em Kg *", type: "text", options: [] },
+  { text: "Sua estatura aproximada (em metros) *", type: "text", options: [] },
+  { text: "Tem alergia a algum medicamento, alimento ou substância? *", type: "radio", options: ["Sim", "Não"] },
+  { text: "Se sim, qual alergia? *", type: "text", options: [] },
+  { text: "É fumante? *", type: "radio", options: ["Sim", "Não"] },
+  { text: "Consome bebida alcoólica? *", type: "radio", options: ["Sim, muito e com frequência", "Bebo pouco, socialmente", "Não bebo"] },
+  { text: "Usa alguma droga ilícita? *", type: "radio", options: ["Sim", "Não"] },
+  { text: "Se sim, qual droga? *", type: "text", options: [] },
+  { text: "Usa algum tipo de hormônio? *", type: "radio", options: ["Sim", "Não"] },
+  { text: "Se sim, quais hormônios? *", type: "text", options: [] },
+  { text: "Faz uso de anticoagulante? (ou AAS?) *", type: "radio", options: ["Sim", "Não"] },
+  { text: "Toma vitamina D? Qual a dose e em que frequência? *", type: "text", options: [] },
+  { text: "Faz uso de medicamentos regularmente? *", type: "radio", options: ["Sim", "Não"] },
+  { text: "Se sim, liste os medicamentos de uso regular: *", type: "text", options: [] },
+  { text: "Selecione os problemas de saúde que tem atualmente *", type: "checkbox", options: ["Nenhum problema de saúde", "Diabetes", "Pressão alta", "Problemas no coração ou arritmias", "Problema nos rins ou no fígado", "Tumores", "Alterações psiquiátricas", "Outros problemas de saúde"] },
+  { text: "Se marcou outros problemas de saúde, descreva: *", type: "text", options: [] },
+  { text: "Teve gestações? Se sim, quando foi o último parto? *", type: "text", options: [] },
+  { text: "Está grávida ou amamentando? *", type: "radio", options: ["Sim", "Não"] },
+  { text: "Usa método anticoncepcional? Qual? *", type: "text", options: [] },
+  { text: "Já teve problemas de cicatrização, como queloides? *", type: "radio", options: ["Sim", "Não"] },
+  { text: "Já teve alguma reação ruim com anestesia? *", type: "radio", options: ["Sim", "Não"] },
+  { text: "Já teve alguma hemorragia? *", type: "radio", options: ["Sim", "Não"] },
+  { text: "Realiza atividade física regular? *", type: "radio", options: ["Sim, três ou mais vezes por semana", "Não realizo com frequência"] },
+  { text: "Qual atividade física realiza? *", type: "text", options: [] },
+  { text: "Você é muito sensível à dor? *", type: "radio", options: ["Sim", "Não"] },
+  { text: "Já teve trombose, embolia ou AVC? *", type: "radio", options: ["Sim", "Não"] },
+  { text: "Já teve ou trata arritmia cardíaca? *", type: "radio", options: ["Sim", "Não"] },
+  { text: "Tem ou já teve pedras nos rins? *", type: "radio", options: ["Sim", "Não"] },
+  { text: "Já realizou alguma cirurgia? *", type: "radio", options: ["Sim", "Não"] },
+  { text: "Se sim, quais cirurgias realizou? *", type: "text", options: [] },
+  { text: "Há algo que gostaria de informar ao médico?", type: "text", options: [] },
+].map((question, index) => ({
+  id: `default-${index + 1}`,
+  answer: "",
+  ...question,
+})) as Array<{
+  id: string;
+  text: string;
+  type: "text" | "radio" | "checkbox" | "select";
+  options: string[];
+  answer: string;
+}>;
+
+function buildHistorySummary(record: any) {
+  return [
+    record.chiefComplaint,
+    record.historyOfPresentIllness,
+    record.clinicalEvolution,
+    record.treatmentPlan,
+    record.pastMedicalHistory,
+    record.familyHistory,
+    record.socialHistory,
+    record.currentMedications,
+    record.allergies,
+    record.physicalExam,
+    record.diagnosis,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function groupDocumentsByType(documents: any[]) {
+  const labels: Record<string, string> = {
+    rg: "Documentos pessoais",
+    cpf: "Documentos pessoais",
+    convenio: "Documentos pessoais",
+    termo: "Contratos e termos",
+    exame_pdf: "Resultados de exames",
+    exame_imagem: "Resultados de exames",
+    video: "Vídeos",
+    outro: "Outros anexos",
+  };
+
+  return documents.reduce<Record<string, any[]>>((acc, document) => {
+    const key = labels[document.type] || "Outros anexos";
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(document);
+    return acc;
+  }, {});
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    ANAMNESE TAB
@@ -29,18 +113,7 @@ function AnamneseTab({ patientId }: { patientId: number }) {
   const { data: templates } = trpc.medicalRecords.listTemplates.useQuery();
   const [questions, setQuestions] = useState<Array<{
     id: string; text: string; type: "text" | "radio" | "checkbox" | "select"; options: string[]; answer: string;
-  }>>([
-    { id: "1", text: "Queixa principal", type: "text", options: [], answer: "" },
-    { id: "2", text: "Há quanto tempo apresenta os sintomas?", type: "radio", options: ["Menos de 1 semana", "1-4 semanas", "1-6 meses", "Mais de 6 meses"], answer: "" },
-    { id: "3", text: "Já realizou algum procedimento estético antes?", type: "radio", options: ["Sim", "Não"], answer: "" },
-    { id: "4", text: "Possui alergias conhecidas?", type: "radio", options: ["Sim", "Não"], answer: "" },
-    { id: "5", text: "Medicamentos em uso", type: "text", options: [], answer: "" },
-    { id: "6", text: "Antecedentes cirúrgicos", type: "text", options: [], answer: "" },
-    { id: "7", text: "Antecedentes familiares", type: "text", options: [], answer: "" },
-    { id: "8", text: "Tabagismo", type: "radio", options: ["Nunca", "Ex-fumante", "Fumante atual"], answer: "" },
-    { id: "9", text: "Etilismo", type: "radio", options: ["Nunca", "Social", "Frequente"], answer: "" },
-    { id: "10", text: "Hipercromia (Exame Físico Genital Feminino)", type: "radio", options: ["Severa", "Moderada", "Leve", "Sem hipercromia"], answer: "" },
-  ]);
+  }>>(DEFAULT_ANAMNESE_QUESTIONS);
 
   const applyTemplate = (templateId: number) => {
     const template = templates?.find(t => t.id === templateId);
@@ -340,32 +413,142 @@ function PrescricoesTab({ patientId }: { patientId: number }) {
    ANEXOS TAB
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function AnexosTab({ patientId }: { patientId: number }) {
-  const [anexos, setAnexos] = useState<Array<{ id: string; nome: string; tipo: string; data: string }>>([]);
+function HistoricoTab({ patientId }: { patientId: number }) {
+  const { data, isLoading } = trpc.medicalRecords.getHistory.useQuery({ patientId });
+  const records = data?.records ?? [];
+  const appointments = data?.appointments ?? [];
+  const documents = data?.documents ?? [];
+  const photos = data?.photos ?? [];
+
+  if (isLoading) {
+    return <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-[#C9A55B]" /></div>;
+  }
 
   return (
     <div className="space-y-4">
-      <Button size="sm" className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]"><Upload className="h-3.5 w-3.5 mr-1.5" />Upload de Arquivo</Button>
-      <Card className="border-border/50 border-dashed">
-        <CardContent className="p-8 text-center">
-          <Upload className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-          <p className="text-sm font-medium text-muted-foreground">Arraste arquivos aqui ou clique para enviar</p>
-          <p className="text-xs text-muted-foreground/60 mt-1">Documentos, prints, resultados de exames (PDF, JPG, PNG, DOCX)</p>
+      <div className="grid gap-3 md:grid-cols-4">
+        <Card className="border-border/50"><CardContent className="p-4"><p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Agendamentos</p><p className="mt-2 text-2xl font-semibold">{appointments.length}</p></CardContent></Card>
+        <Card className="border-border/50"><CardContent className="p-4"><p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Atendimentos</p><p className="mt-2 text-2xl font-semibold">{records.length}</p></CardContent></Card>
+        <Card className="border-border/50"><CardContent className="p-4"><p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Anexos</p><p className="mt-2 text-2xl font-semibold">{documents.length}</p></CardContent></Card>
+        <Card className="border-border/50"><CardContent className="p-4"><p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Imagens</p><p className="mt-2 text-2xl font-semibold">{photos.length}</p></CardContent></Card>
+      </div>
+
+      <Card className="border-border/50">
+        <CardHeader className="pb-3"><CardTitle className="text-sm font-semibold">Linha do tempo clínica</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          {appointments.length === 0 && records.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum histórico clínico importado foi encontrado para este paciente.</p>
+          ) : (
+            <>
+              {appointments.map((appointment: any) => (
+                <div key={`appointment-${appointment.id}`} className="rounded-xl border border-border/60 bg-background/60 p-4">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <p className="text-sm font-semibold">Agendamento em {new Date(appointment.scheduledAt).toLocaleString("pt-BR")}</p>
+                      <p className="text-xs text-muted-foreground">Status: {appointment.status} {appointment.room ? `• Sala ${appointment.room}` : ""}</p>
+                    </div>
+                    <Badge variant="outline">{appointment.type}</Badge>
+                  </div>
+                  {appointment.notes ? <p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground">{appointment.notes}</p> : null}
+                </div>
+              ))}
+              {records.map((record: any) => {
+                const summary = buildHistorySummary(record);
+                return (
+                  <div key={`record-${record.id}`} className="rounded-xl border border-[#C9A55B]/20 bg-[#C9A55B]/6 p-4">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div>
+                        <p className="text-sm font-semibold">Atendimento em {new Date(record.date || record.createdAt).toLocaleString("pt-BR")}</p>
+                        <p className="text-xs text-muted-foreground">{record.doctorName || "Profissional não identificado"}</p>
+                      </div>
+                      {record.icdCode ? <Badge className="bg-[#C9A55B]/15 text-[#8A6526]">CID {record.icdCode}</Badge> : null}
+                    </div>
+                    <p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground">{summary || "Sem resumo clínico estruturado no legado."}</p>
+                  </div>
+                );
+              })}
+            </>
+          )}
         </CardContent>
       </Card>
-      {anexos.length === 0 ? (
-        <p className="text-xs text-muted-foreground text-center py-4">Nenhum anexo adicionado ainda.</p>
-      ) : (
-        <div className="space-y-2">
-          {anexos.map((a) => (
-            <div key={a.id} className="flex items-center gap-3 p-3 rounded-md border border-border/50 hover:border-[#C9A55B]/30">
-              <Paperclip className="h-4 w-4 text-[#C9A55B] shrink-0" />
-              <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate">{a.nome}</p><p className="text-[10px] text-muted-foreground">{a.tipo} - {a.data}</p></div>
-              <Button size="sm" variant="ghost" className="text-[#6B6B6B] hover:text-[#8B8B8B]"><Trash2 className="h-3.5 w-3.5" /></Button>
-            </div>
-          ))}
+    </div>
+  );
+}
+
+function AnexosTab({ patientId }: { patientId: number }) {
+  const { data: documents, isLoading } = trpc.medicalRecords.getDocuments.useQuery({ patientId });
+  const { data: photos } = trpc.photos.getByPatient.useQuery({ patientId });
+  const groupedDocuments = useMemo(() => groupDocumentsByType(documents ?? []), [documents]);
+
+  if (isLoading) {
+    return <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-[#C9A55B]" /></div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <p className="text-sm font-semibold">Anexos importados do legado</p>
+          <p className="text-xs text-muted-foreground">Documentos, contratos, resultados de exames, imagens e vídeos vinculados ao paciente.</p>
         </div>
-      )}
+        <Button size="sm" className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]"><Upload className="h-3.5 w-3.5 mr-1.5" />Upload de arquivo</Button>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="space-y-4">
+          {Object.keys(groupedDocuments).length === 0 ? (
+            <Card className="border-border/50 border-dashed"><CardContent className="p-8 text-center"><FolderOpen className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" /><p className="text-sm font-medium text-muted-foreground">Nenhum documento importado para este paciente.</p></CardContent></Card>
+          ) : (
+            Object.entries(groupedDocuments).map(([groupName, items]) => (
+              <Card key={groupName} className="border-border/50">
+                <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-sm"><FolderOpen className="h-4 w-4 text-[#C9A55B]" />{groupName}</CardTitle></CardHeader>
+                <CardContent className="space-y-2">
+                  {items.map((document: any) => (
+                    <a key={document.id} href={document.fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 rounded-lg border border-border/60 p-3 transition-colors hover:border-[#C9A55B]/40 hover:bg-[#C9A55B]/6">
+                      <Paperclip className="h-4 w-4 text-[#C9A55B] shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{document.title || document.name}</p>
+                        <p className="text-[11px] text-muted-foreground">{document.description || document.type} • {new Date(document.createdAt).toLocaleDateString("pt-BR")}</p>
+                      </div>
+                      <FileDown className="h-4 w-4 text-muted-foreground" />
+                    </a>
+                  ))}
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </div>
+
+        <Card className="border-border/50">
+          <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-sm"><ImageIcon className="h-4 w-4 text-[#C9A55B]" />Imagens e vídeos</CardTitle></CardHeader>
+          <CardContent>
+            {!photos || photos.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhuma imagem importada foi encontrada para este paciente.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {photos.slice(0, 8).map((photo: any) => (
+                  <a key={photo.id} href={photo.photoUrl} target="_blank" rel="noopener noreferrer" className="overflow-hidden rounded-2xl border border-border/60 bg-background/60">
+                    <div className="aspect-[4/5] bg-muted">
+                      <img
+                        src={photo.thumbnailUrl || photo.photoUrl}
+                        alt={photo.description || "Imagem do paciente"}
+                        className="h-full w-full object-cover"
+                        onError={(event) => {
+                          event.currentTarget.src = "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000"><rect width="100%" height="100%" fill="#f5f1e8"/><text x="50%" y="50%" text-anchor="middle" fill="#8A6526" font-size="26" font-family="Arial">Imagem indisponível</text></svg>');
+                        }}
+                      />
+                    </div>
+                    <div className="p-3">
+                      <p className="truncate text-xs font-medium">{photo.description || photo.category || "Imagem clínica"}</p>
+                      <p className="text-[11px] text-muted-foreground">{new Date(photo.takenAt || photo.createdAt).toLocaleDateString("pt-BR")}</p>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -643,8 +826,11 @@ export default function ProntuarioDetalhe() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="anamnese" className="w-full">
+      <Tabs defaultValue="historico" className="w-full">
         <TabsList className="w-full justify-start flex-wrap bg-muted/50 h-auto p-1 gap-0.5">
+          <TabsTrigger value="historico" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+            <History className="h-3.5 w-3.5" />Histórico
+          </TabsTrigger>
           <TabsTrigger value="anamnese" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
             <ClipboardList className="h-3.5 w-3.5" />Anamnese
           </TabsTrigger>
@@ -668,6 +854,7 @@ export default function ProntuarioDetalhe() {
           </TabsTrigger>
         </TabsList>
 
+        <TabsContent value="historico" className="mt-4"><HistoricoTab patientId={patientId} /></TabsContent>
         <TabsContent value="anamnese" className="mt-4"><AnamneseTab patientId={patientId} /></TabsContent>
         <TabsContent value="evolucao" className="mt-4"><EvolucaoClinicaTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
         <TabsContent value="atestados" className="mt-4"><AtestadosTab patientId={patientId} patientName={patient.fullName} /></TabsContent>

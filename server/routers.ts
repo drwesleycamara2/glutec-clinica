@@ -418,6 +418,7 @@ export const appRouter = router({
       .input(z.object({
         name: z.string(),
         content: z.string(),
+        type: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         return dbComplete.createPrescriptionTemplate(input, ctx.user.id);
@@ -936,6 +937,16 @@ export const appRouter = router({
     listTemplates: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listMedicalRecordTemplates();
     }),
+    getHistory: protectedProcedure
+      .input(z.object({ patientId: z.number() }))
+      .query(async ({ input }) => {
+        return dbComplete.getPatientHistory(input.patientId);
+      }),
+    getDocuments: protectedProcedure
+      .input(z.object({ patientId: z.number() }))
+      .query(async ({ input }) => {
+        return dbComplete.getPatientDocuments(input.patientId);
+      }),
   }),
 
   // â”€â”€â”€ WHATSAPP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

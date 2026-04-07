@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import { getDb } from "./db";
 import { eq, like, and, gte, lte, desc } from "drizzle-orm";
 import { sql } from "drizzle-orm";
@@ -14,6 +16,54 @@ function unwrapRows<T = any>(result: any): T[] {
   }
 
   return (result ?? []) as T[];
+}
+function normalizeMediaUrl(value?: string | null) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("http://") || raw.startsWith("https://") || raw.startsWith("data:")) {
+    return raw;
+  }
+  return raw.startsWith("/") ? raw : `/${raw}`;
+}
+
+function inferExtensionFromMimeType(mimeType?: string | null) {
+  const normalized = String(mimeType ?? "").toLowerCase();
+  if (normalized.includes("png")) return "png";
+  if (normalized.includes("webp")) return "webp";
+  if (normalized.includes("gif")) return "gif";
+  if (normalized.includes("heic")) return "heic";
+  return "jpg";
+}
+
+function savePatientMediaToPublicDir(patientId: number, base64: string, mimeType?: string | null) {
+  const extension = inferExtensionFromMimeType(mimeType);
+  const relativeDir = path.join("imports", "manual", `patient-${patientId}`);
+  const absoluteDir = path.resolve(process.cwd(), "public", relativeDir);
+  fs.mkdirSync(absoluteDir, { recursive: true });
+
+  const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${extension}`;
+  const absolutePath = path.join(absoluteDir, fileName);
+  fs.writeFileSync(absolutePath, Buffer.from(base64, "base64"));
+
+  return {
+    photoUrl: normalizeMediaUrl(path.posix.join("/", relativeDir.replace(/\\/g, "/"), fileName)),
+    photoKey: path.posix.join(relativeDir.replace(/\\/g, "/"), fileName),
+  };
+}
+
+function normalizePhotoRow(row: any) {
+  return {
+    ...row,
+    photoUrl: normalizeMediaUrl(row.photoUrl),
+    thumbnailUrl: normalizeMediaUrl(row.thumbnailUrl ?? row.photoUrl),
+  };
+}
+
+function normalizeDocumentRow(row: any) {
+  return {
+    ...row,
+    fileUrl: normalizeMediaUrl(row.fileUrl),
+  };
 }
 
 // ─── PATIENTS ────────────────────────────────────────────────────────────────
@@ -310,17 +360,39 @@ export async function getPrescriptionsByPatient(patientId: number) {
 export async function listPrescriptionTemplates() {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(sql`medical_record_templates`).where(eq(sql`specialty`, 'Prescrição'));
+
+  const rows = await db.select().from(sql`medical_record_templates`).where(eq(sql`specialty`, 'Prescrição'));
+  return rows.map((row: any) => {
+    const sections = Array.isArray(row.sections)
+      ? row.sections
+      : typeof row.sections === "string"
+        ? JSON.parse(row.sections)
+        : [];
+    const firstSection = Array.isArray(sections) ? sections[0] : null;
+
+    return {
+      ...row,
+      type: row.description || "simples",
+      content: firstSection?.content || firstSection?.text || "",
+    };
+  });
 }
 
 export async function createPrescriptionTemplate(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
+
   const result = await db.insert(sql`medical_record_templates`).values({
-    ...data,
+    name: data.name,
     specialty: 'Prescrição',
+    description: data.type || "simples",
+    sections: JSON.stringify([
+      {
+        type: "richtext",
+        content: data.content ?? "",
+      },
+    ]),
+    active: true,
     createdBy: userId,
   });
   return result[0];
@@ -570,7 +642,7 @@ export async function getPatientPhotos(patientId: number, category?: string) {
       where patientId = ${patientId}
         and category = ${category}
       order by coalesce(takenAt, createdAt) desc, id desc
-    `));
+    `)).map(normalizePhotoRow);
   }
 
   return unwrapRows<any>(await db.execute(sql`
@@ -578,18 +650,37 @@ export async function getPatientPhotos(patientId: number, category?: string) {
     from patient_photos
     where patientId = ${patientId}
     order by coalesce(takenAt, createdAt) desc, id desc
-  `));
+  `)).map(normalizePhotoRow);
 }
 
 export async function uploadPatientPhoto(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
+
+  const stored = savePatientMediaToPublicDir(Number(data.patientId), String(data.base64 ?? ""), data.mimeType);
   const result = await db.insert(sql`patient_photos`).values({
-    ...data,
+    patientId: data.patientId,
+    category: data.category,
+    description: data.description ?? null,
+    photoUrl: stored.photoUrl,
+    thumbnailUrl: stored.photoUrl,
+    photoKey: stored.photoKey,
     uploadedBy: userId,
   });
-  return result[0];
+
+  const insertedId =
+    typeof result[0] === "number"
+      ? result[0]
+      : result[0]?.insertId ?? result[0]?.id;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from patient_photos
+    where id = ${insertedId}
+    limit 1
+  `));
+
+  return rows[0] ? normalizePhotoRow(rows[0]) : { success: true };
 }
 
 export async function deletePatientPhoto(photoId: number) {
@@ -601,6 +692,51 @@ export async function deletePatientPhoto(photoId: number) {
     where id = ${photoId}
   `);
   return { success: true };
+}
+
+export async function getPatientDocuments(patientId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from patient_documents
+    where patientId = ${patientId}
+    order by createdAt desc, id desc
+  `));
+
+  return rows.map(normalizeDocumentRow);
+}
+
+export async function getPatientHistory(patientId: number) {
+  const db = await getDb();
+  if (!db) return { appointments: [], records: [], documents: [], photos: [] };
+
+  const appointments = unwrapRows<any>(await db.execute(sql`
+    select a.*, u.name as doctorName
+    from appointments a
+    left join users u on u.id = a.doctorId
+    where a.patientId = ${patientId}
+    order by a.scheduledAt desc, a.id desc
+  `));
+
+  const records = unwrapRows<any>(await db.execute(sql`
+    select mr.*, u.name as doctorName
+    from medical_records mr
+    left join users u on u.id = mr.doctorId
+    where mr.patientId = ${patientId}
+    order by coalesce(mr.date, mr.createdAt) desc, mr.id desc
+  `));
+
+  const documents = await getPatientDocuments(patientId);
+  const photos = await getPatientPhotos(patientId);
+
+  return {
+    appointments,
+    records,
+    documents,
+    photos,
+  };
 }
 
 // ─── CHAT ────────────────────────────────────────────────────────────────────

@@ -172,7 +172,16 @@ export async function createAudioTranscription(data: InsertAudioTranscription) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const result = await db.insert(audioTranscriptions).values(data);
-  return result[0];
+  const insertId =
+    typeof result[0] === "number"
+      ? result[0]
+      : (result[0] as any)?.insertId ?? (result[0] as any)?.id;
+
+  if (!insertId) {
+    return result[0];
+  }
+
+  return { id: insertId };
 }
 
 export async function getAudioTranscriptionById(id: number) {

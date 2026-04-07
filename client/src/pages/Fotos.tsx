@@ -60,6 +60,18 @@ function formatPhotoDate(photo: any) {
   });
 }
 
+function getPhotoPreviewUrl(photo: any) {
+  return photo?.thumbnailUrl || photo?.photoUrl || "";
+}
+
+function handleBrokenPreview(event: React.SyntheticEvent<HTMLImageElement>) {
+  event.currentTarget.src =
+    "data:image/svg+xml;utf8," +
+    encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000"><rect width="100%" height="100%" fill="#f5f1e8"/><text x="50%" y="50%" text-anchor="middle" fill="#8A6526" font-size="28" font-family="Arial">Imagem indisponível</text></svg>`
+    );
+}
+
 export default function Fotos() {
   const [patientId, setPatientId] = useState("");
   const [patientSearch, setPatientSearch] = useState("");
@@ -157,7 +169,7 @@ export default function Fotos() {
         <div className="space-y-2">
           <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
             <Camera className="h-6 w-6 text-[#C9A55B]" />
-            Galeria clinica do paciente
+            Imagens do paciente
           </h1>
           <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
             Esta tela agora prioriza leitura profissional, comparacao visual e organizacao por data.
@@ -342,9 +354,10 @@ export default function Fotos() {
                 <div key={photo.id} className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-background/60">
                   <div className="aspect-[4/5] bg-muted">
                     <img
-                      src={photo.photoUrl}
+                      src={getPhotoPreviewUrl(photo)}
                       alt={photo.description ?? "Foto do paciente"}
                       className="h-full w-full object-cover"
+                      onError={handleBrokenPreview}
                     />
                   </div>
                   <div className="space-y-2 p-4">
@@ -407,11 +420,12 @@ export default function Fotos() {
                     return (
                       <div key={photo.id} className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-background/60">
                         <div className="group relative aspect-[4/5] bg-muted">
-                          <img
-                            src={photo.photoUrl}
-                            alt={photo.description ?? "Foto"}
-                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                          />
+                    <img
+                      src={getPhotoPreviewUrl(photo)}
+                      alt={photo.description ?? "Foto"}
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                      onError={handleBrokenPreview}
+                    />
                           <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/75 via-black/20 to-transparent p-3">
                             <Badge className="border-white/15 bg-white/10 text-white">{photo.category}</Badge>
                             <div className="flex gap-2">
