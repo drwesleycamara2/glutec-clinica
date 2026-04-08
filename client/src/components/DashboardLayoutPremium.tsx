@@ -1,6 +1,16 @@
 ﻿import { useAuth } from "@/_core/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -29,7 +39,7 @@ import {
   Files,
   LayoutDashboard,
   LogOut,
-  MessageSquareText,
+  MessageSquare,
   Package,
   Receipt,
   Settings,
@@ -45,6 +55,13 @@ import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { ThemeToggle } from "./ThemeToggle";
 import { Button } from "./ui/button";
 import { canAccessModule } from "@/lib/access";
+import {
+  CLINICAL_DRAFT_AUTOSAVE_EVENT,
+  CLINICAL_DRAFT_CHANGED_EVENT,
+  CLINICAL_LOCK_RETURN_TO_KEY,
+  readClinicalDraftMeta,
+  type ClinicalDraftMeta,
+} from "@/lib/clinicalSession";
 
 type MenuItem = {
   icon: React.ComponentType<{ className?: string }>;
@@ -81,9 +98,9 @@ const menuSections: MenuSection[] = [
       { icon: Wallet, label: "Fiscal", path: "/fiscal", adminOnly: true, moduleId: "fiscal" },
       { icon: Wallet, label: "Financeiro", path: "/financeiro", moduleId: "financeiro" },
       { icon: Package, label: "Estoque", path: "/estoque", moduleId: "estoque" },
-      { icon: MessageSquareText, label: "CRM", path: "/crm", moduleId: "crm" },
+      { icon: MessageSquare, label: "CRM", path: "/crm", moduleId: "crm" },
       { icon: BarChart3, label: "Relatórios", path: "/relatorios", moduleId: "relatorios" },
-      { icon: MessageSquareText, label: "Chat", path: "/chat", moduleId: "chat" },
+      { icon: MessageSquare, label: "Chat", path: "/chat", moduleId: "chat" },
       { icon: UserCircle2, label: "Perfil", path: "/perfil", moduleId: "perfil" },
       { icon: ShieldCheck, label: "Usuários", path: "/usuarios", adminOnly: true, moduleId: "usuarios" },
       { icon: Settings, label: "Configurações", path: "/configuracoes", moduleId: "configuracoes" },
@@ -197,8 +214,15 @@ function DashboardLayoutPremiumContent({
   const { state, toggleSidebar } = useSidebar();
   const { isMobile } = useIsMobile();
   const [isResizing, setIsResizing] = useState(false);
+  const [activeClinicalDraft, setActiveClinicalDraft] = useState<ClinicalDraftMeta | null>(() => readClinicalDraftMeta());
+  const [navigationPromptOpen, setNavigationPromptOpen] = useState(false);
+  const [pendingNavigationPath, setPendingNavigationPath] = useState<string | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isCollapsed = state === "collapsed";
+  const previousLocationRef = useRef(location);
+  const revertingNavigationRef = useRef(false);
+  const inactivityTimeoutRef = useRef<number | null>(null);
+  const activeDraftBasePath = activeClinicalDraft?.path.split("#")[0] ?? null;
 
   const sections = useMemo(
     () =>
@@ -216,6 +240,20 @@ function DashboardLayoutPremiumContent({
     () => sections.flatMap(section => section.items).find(item => matchesPath(location, item.path)),
     [location, sections]
   );
+
+  useEffect(() => {
+    const syncDraft = () => {
+      setActiveClinicalDraft(readClinicalDraftMeta());
+    };
+
+    syncDraft();
+    window.addEventListener(CLINICAL_DRAFT_CHANGED_EVENT, syncDraft as EventListener);
+    window.addEventListener("storage", syncDraft);
+    return () => {
+      window.removeEventListener(CLINICAL_DRAFT_CHANGED_EVENT, syncDraft as EventListener);
+      window.removeEventListener("storage", syncDraft);
+    };
+  }, []);
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -244,6 +282,86 @@ function DashboardLayoutPremiumContent({
       document.body.style.userSelect = "";
     };
   }, [isResizing, setSidebarWidth]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const handleTimeout = async () => {
+      if (activeClinicalDraft) {
+        window.dispatchEvent(new CustomEvent(CLINICAL_DRAFT_AUTOSAVE_EVENT));
+      }
+
+      window.localStorage.setItem(CLINICAL_LOCK_RETURN_TO_KEY, `${window.location.pathname}${window.location.search}${window.location.hash}`);
+      await logout();
+      setLocation(`/login?locked=1&returnTo=${encodeURIComponent(`${window.location.pathname}${window.location.search}${window.location.hash}`)}`);
+    };
+
+    const resetTimer = () => {
+      if (inactivityTimeoutRef.current) {
+        window.clearTimeout(inactivityTimeoutRef.current);
+      }
+      inactivityTimeoutRef.current = window.setTimeout(() => {
+        void handleTimeout();
+      }, 30 * 60 * 1000);
+    };
+
+    const events: Array<keyof WindowEventMap> = ["mousemove", "mousedown", "keydown", "scroll", "touchstart"];
+    events.forEach((eventName) => window.addEventListener(eventName, resetTimer, { passive: true }));
+    resetTimer();
+
+    return () => {
+      if (inactivityTimeoutRef.current) {
+        window.clearTimeout(inactivityTimeoutRef.current);
+      }
+      events.forEach((eventName) => window.removeEventListener(eventName, resetTimer));
+    };
+  }, [activeClinicalDraft, location, logout, setLocation, user]);
+
+  useEffect(() => {
+    if (!activeClinicalDraft) {
+      previousLocationRef.current = location;
+      return;
+    }
+
+    const previousLocation = previousLocationRef.current;
+    if (
+      previousLocation === activeDraftBasePath &&
+      location !== previousLocation &&
+      location !== activeDraftBasePath &&
+      !revertingNavigationRef.current
+    ) {
+      setPendingNavigationPath(location);
+      setNavigationPromptOpen(true);
+    }
+
+    previousLocationRef.current = location;
+    if (revertingNavigationRef.current) {
+      revertingNavigationRef.current = false;
+    }
+  }, [activeClinicalDraft, location]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!activeClinicalDraft || location !== activeDraftBasePath) return;
+      window.dispatchEvent(new CustomEvent(CLINICAL_DRAFT_AUTOSAVE_EVENT));
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [activeClinicalDraft, location]);
+
+  const navigateWithDraftProtection = (nextPath: string) => {
+    if (activeClinicalDraft && location === activeDraftBasePath && nextPath !== activeClinicalDraft.path) {
+      window.dispatchEvent(new CustomEvent(CLINICAL_DRAFT_AUTOSAVE_EVENT));
+      setPendingNavigationPath(nextPath);
+      setNavigationPromptOpen(true);
+      return;
+    }
+
+    setLocation(nextPath);
+  };
 
   return (
     <>
@@ -280,7 +398,7 @@ function DashboardLayoutPremiumContent({
                       <SidebarMenuItem key={item.path}>
                         <SidebarMenuButton
                           isActive={isActive}
-                          onClick={() => setLocation(item.path)}
+                          onClick={() => navigateWithDraftProtection(item.path)}
                           tooltip={item.label}
                           className="app-sidebar-button px-3 text-text-secondary"
                         >
@@ -320,7 +438,7 @@ function DashboardLayoutPremiumContent({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={() => setLocation("/perfil")} className="cursor-pointer">
+                <DropdownMenuItem onClick={() => navigateWithDraftProtection("/perfil")} className="cursor-pointer">
                   <UserCircle2 className="mr-2 h-4 w-4" />
                   <span>Meu perfil</span>
                 </DropdownMenuItem>
@@ -362,11 +480,11 @@ function DashboardLayoutPremiumContent({
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" className="rounded-xl px-4" onClick={() => setLocation("/pacientes")}>
+            <Button variant="outline" className="rounded-xl px-4" onClick={() => navigateWithDraftProtection("/pacientes")}>
               <Users className="h-4 w-4" />
               Novo Paciente
             </Button>
-            <Button variant="premium" className="rounded-xl px-4" onClick={() => setLocation("/agenda")}>
+            <Button variant="premium" className="rounded-xl px-4" onClick={() => navigateWithDraftProtection("/agenda")}>
               <CalendarDays className="h-4 w-4" />
               Nova Consulta
             </Button>
@@ -387,8 +505,60 @@ function DashboardLayoutPremiumContent({
           </div>
         )}
 
-        <main className="app-main-content flex-1 px-4 pb-6 pt-4 lg:px-6 lg:pb-8 lg:pt-6">{children}</main>
+        <main className="app-main-content flex-1 px-4 pb-6 pt-4 lg:px-6 lg:pb-8 lg:pt-6">
+          {activeClinicalDraft ? (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#C9A55B]/25 bg-[linear-gradient(135deg,rgba(201,165,91,0.12),rgba(255,255,255,0.04))] px-4 py-3 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+              <div>
+                <p className="font-semibold text-text-primary">Há um prontuário em aberto e não concluído.</p>
+                <p className="text-xs text-text-secondary">
+                  Paciente: {activeClinicalDraft.patientName} • Atualizado em {new Date(activeClinicalDraft.updatedAt).toLocaleString("pt-BR")}
+                </p>
+              </div>
+              <Button variant="outline" className="rounded-xl" onClick={() => navigateWithDraftProtection(activeClinicalDraft.path)}>
+                Voltar ao prontuário em aberto
+              </Button>
+            </div>
+          ) : null}
+          {children}
+        </main>
       </SidebarInset>
+
+      <AlertDialog open={navigationPromptOpen} onOpenChange={setNavigationPromptOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Há um atendimento em andamento</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vamos salvar provisoriamente o prontuário aberto antes de trocar de tela. Deseja continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setNavigationPromptOpen(false);
+                setPendingNavigationPath(null);
+                if (activeClinicalDraft) {
+                  revertingNavigationRef.current = true;
+                  setLocation(activeClinicalDraft.path);
+                }
+              }}
+            >
+              Permanecer no atendimento
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setNavigationPromptOpen(false);
+                const nextPath = pendingNavigationPath;
+                setPendingNavigationPath(null);
+                if (nextPath) {
+                  setLocation(nextPath);
+                }
+              }}
+            >
+              Salvar e continuar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

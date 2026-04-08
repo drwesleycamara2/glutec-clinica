@@ -13,8 +13,9 @@ import Prontuarios from "./pages/Prontuarios";
 import PacienteDetalhe from "./pages/PacienteDetalhe";
 import ProntuarioDetalhe from "./pages/ProntuarioDetalhe";
 import Configuracoes from "./pages/Configuracoes";
+import Templates from "./pages/Templates";
 import Prescricoes from "./pages/Prescricoes";
-import Exames from "./pages/Exames";
+import Exames from "./pages/ExamesClinicos";
 import Assinaturas from "./pages/Assinaturas";
 import Orcamentos from "./pages/Orcamentos";
 import Financeiro from "./pages/Financeiro";
@@ -26,6 +27,8 @@ import Documentos from "./pages/Documentos";
 import Fotos from "./pages/Fotos";
 import CRM from "./pages/CRM";
 import Relatorios from "./pages/Relatorios";
+import RelatorioProntuario from "./pages/RelatorioProntuario";
+import PortabilidadeDados from "./pages/PortabilidadeDados";
 import Chat from "./pages/Chat";
 import Perfil from "./pages/Perfil";
 import DashboardLayout from "./components/DashboardLayoutPremium";
@@ -63,10 +66,13 @@ function ProtectedRoutes() {
         <Route path="/documentos" component={Documentos} />
         <Route path="/fotos" component={Fotos} />
         <Route path="/crm" component={CRM} />
+        <Route path="/relatorios/prontuario" component={RelatorioProntuario} />
+        <Route path="/relatorios/portabilidade" component={PortabilidadeDados} />
         <Route path="/relatorios" component={Relatorios} />
         <Route path="/chat" component={Chat} />
         <Route path="/perfil" component={Perfil} />
         <Route path="/configuracoes" component={Configuracoes} />
+        <Route path="/templates" component={Templates} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

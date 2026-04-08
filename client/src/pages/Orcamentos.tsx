@@ -31,7 +31,7 @@ import {
   Receipt,
   Send,
   Trash2,
-  TriangleAlert,
+  AlertTriangle,
   WalletCards,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -706,7 +706,7 @@ export default function Orcamentos() {
       {!fiscalReady ? (
         <Card className="border-amber-200 bg-amber-50/80 dark:border-amber-900/50 dark:bg-amber-950/20">
           <CardContent className="flex items-start gap-3 py-4">
-            <TriangleAlert className="mt-0.5 h-5 w-5 text-amber-700 dark:text-amber-300" />
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-700 dark:text-amber-300" />
             <div className="space-y-1">
               <p className="font-medium text-amber-900 dark:text-amber-100">
                 A configuracao fiscal ainda precisa de confirmacao final.

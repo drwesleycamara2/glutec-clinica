@@ -8,8 +8,11 @@ import * as dbComplete from "./db_complete";
 import { TRPCError } from "@trpc/server";
 import { clinicalEvolutionRouter } from "./routers/clinical-evolution";
 import { twoFactorRouter } from "./routers/auth-secure";
-import { generateSecureToken } from "./_core/auth";
+import { generateSecureToken, verifyPassword } from "./_core/auth";
 import { inviteEmailTemplate, sendEmail } from "./_core/mailer";
+import { verifyTotpCode } from "./_core/totp";
+import { createAuditLog } from "./features_special";
+import { generateSecureSystemExport } from "./lib/system-export";
 
 function getAppBaseUrl(req: { headers: Record<string, unknown>; secure?: boolean }) {
   if (process.env.APP_URL) return process.env.APP_URL;
@@ -147,6 +150,63 @@ export const appRouter = router({
       .query(async ({ ctx, input }) => {
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
         return dbComplete.getAuditLogs(input.limit);
+      }),
+
+    generateSystemExport: protectedProcedure
+      .input(z.object({
+        currentPassword: z.string().min(1),
+        exportPassword: z.string().min(12),
+        includeFiles: z.boolean().default(false),
+        securityCode: z.string().optional(),
+        reason: z.string().max(500).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+
+        const user = await db.getUserById(ctx.user.id);
+        const storedPasswordHash = (user as any)?.passwordHash ?? (user as any)?.password;
+        if (!user || !storedPasswordHash) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Usuário inválido." });
+        }
+
+        const passwordOk = await verifyPassword(input.currentPassword, storedPasswordHash);
+        if (!passwordOk) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Senha atual incorreta." });
+        }
+
+        if (user.twoFactorEnabled) {
+          if (!input.securityCode || !user.twoFactorSecret || !verifyTotpCode(input.securityCode, user.twoFactorSecret)) {
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "Informe um código válido do autenticador para exportar os dados.",
+            });
+          }
+        }
+
+        const exported = await generateSecureSystemExport({
+          exportPassword: input.exportPassword,
+          includeFiles: input.includeFiles,
+          reason: input.reason,
+          requestedBy: {
+            id: ctx.user.id,
+            name: ctx.user.name,
+            email: ctx.user.email,
+          },
+        });
+
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "system_export_generated",
+          entityType: "system_export",
+          entityId: 0,
+          details: `Exportação completa do sistema gerada. Tabelas: ${exported.tableCount}, registros: ${exported.rowCount}, arquivos: ${exported.fileCount}. Motivo: ${input.reason || "não informado"}.`,
+          ipAddress: ctx.req.ip || null,
+        });
+
+        return {
+          ...exported,
+          downloadUrl: `/api/admin/system-export/${exported.token}`,
+        };
       }),
 
     inviteUser: protectedProcedure
@@ -411,7 +471,7 @@ export const appRouter = router({
       }),
 
     listTemplates: protectedProcedure.query(async ({ ctx }) => {
-      return dbComplete.listPrescriptionTemplates();
+      return dbComplete.listPrescriptionTemplatesNormalized();
     }),
 
     createTemplate: protectedProcedure
@@ -421,7 +481,7 @@ export const appRouter = router({
         type: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        return dbComplete.createPrescriptionTemplate(input, ctx.user.id);
+        return dbComplete.createPrescriptionTemplateNormalized(input, ctx.user.id);
       }),
   }),
 
@@ -446,7 +506,7 @@ export const appRouter = router({
       }),
 
     listTemplates: protectedProcedure.query(async ({ ctx }) => {
-      return dbComplete.listExamTemplates();
+      return dbComplete.listExamTemplatesNormalized();
     }),
 
     createTemplate: protectedProcedure
@@ -455,7 +515,41 @@ export const appRouter = router({
         content: z.string(),
       }))
       .mutation(async ({ ctx, input }) => {
-        return dbComplete.createExamTemplate(input, ctx.user.id);
+        return dbComplete.createExamTemplateNormalized(input, ctx.user.id);
+      }),
+  }),
+
+  examRequests: router({
+    create: protectedProcedure
+      .input(z.object({
+        patientId: z.number(),
+        specialty: z.string().optional(),
+        clinicalIndication: z.string().optional(),
+        content: z.string(),
+        observations: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return dbComplete.createExamRequest(input, ctx.user.id);
+      }),
+
+    getByPatient: protectedProcedure
+      .input(z.object({ patientId: z.number() }))
+      .query(async ({ input }) => {
+        return dbComplete.getExamRequestsByPatient(input.patientId);
+      }),
+
+    listTemplates: protectedProcedure.query(async () => {
+      return dbComplete.listExamTemplatesNormalized();
+    }),
+
+    createTemplate: protectedProcedure
+      .input(z.object({
+        name: z.string(),
+        content: z.string(),
+        specialty: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return dbComplete.createExamTemplateNormalized(input, ctx.user.id);
       }),
   }),
 
@@ -491,6 +585,15 @@ export const appRouter = router({
 
   // â”€â”€â”€ CATALOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   catalog: router({
+    searchTuss: protectedProcedure
+      .input(z.object({
+        query: z.string().optional(),
+        limit: z.number().optional(),
+      }))
+      .query(async ({ input }) => {
+        return dbComplete.searchTussCatalog(input.query, input.limit);
+      }),
+
     listProcedures: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listProcedures();
     }),
@@ -914,7 +1017,7 @@ export const appRouter = router({
   // â”€â”€â”€ TEMPLATES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   templates: router({
     list: protectedProcedure.query(async ({ ctx }) => {
-      return dbComplete.listTemplates();
+      return dbComplete.listTemplatesNormalized();
     }),
 
     create: protectedProcedure
@@ -928,14 +1031,14 @@ export const appRouter = router({
         })),
       }))
       .mutation(async ({ ctx, input }) => {
-        return dbComplete.createTemplate(input, ctx.user.id);
+        return dbComplete.createTemplateNormalized(input, ctx.user.id);
       }),
   }),
 
   // â”€â”€â”€ MEDICAL RECORDS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   medicalRecords: router({
     listTemplates: protectedProcedure.query(async ({ ctx }) => {
-      return dbComplete.listMedicalRecordTemplates();
+      return dbComplete.listMedicalRecordTemplatesNormalized();
     }),
     getHistory: protectedProcedure
       .input(z.object({ patientId: z.number() }))

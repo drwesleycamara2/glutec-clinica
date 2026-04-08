@@ -29,7 +29,7 @@ import {
   Files,
   LayoutDashboard,
   LogOut,
-  MessageSquareText,
+  MessageSquare,
   Package,
   Receipt,
   Settings,

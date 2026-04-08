@@ -9,7 +9,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { TextStyle } from "@tiptap/extension-text-style";
 import FontFamily from "@tiptap/extension-font-family";
 import { Button } from "@/components/ui/button";
-import { Bold, Italic, List, ListOrdered, Undo2, Redo2 } from "lucide-react";
+import { Bold, Italic, List, ListOrdered, Undo2, Redo2, AlignLeft, AlignCenter, AlignRight } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import "./RichTextEditor.css";
+import { useEffect, useState } from "react";
 
 interface RichTextEditorProps {
   value: string;
@@ -32,6 +33,9 @@ export function RichTextEditor({
   placeholder = "Digite o conteúdo da prescrição...",
   minHeight = "200px",
 }: RichTextEditorProps) {
+  const [fontSize, setFontSize] = useState("14px");
+  const [textColor, setTextColor] = useState("#111827");
+  const [textAlign, setTextAlign] = useState<"left" | "center" | "right" | "justify">("left");
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -57,6 +61,14 @@ export function RichTextEditor({
     },
   });
 
+  useEffect(() => {
+    if (!editor) return;
+    const element = editor.view.dom as HTMLElement;
+    element.style.fontSize = fontSize;
+    element.style.color = textColor;
+    element.style.textAlign = textAlign;
+  }, [editor, fontSize, textAlign, textColor]);
+
   if (!editor) {
     return null;
   }
@@ -69,11 +81,9 @@ export function RichTextEditor({
       <div className="flex flex-wrap items-center gap-2 p-3 border-b bg-muted/30">
         {/* Font Size Selector */}
         <Select
-          value={
-            editor.getAttributes("textStyle").fontSize || "14px"
-          }
+          value={fontSize}
           onValueChange={(size) => {
-            editor.chain().focus().setFontSize(size).run();
+            setFontSize(size);
           }}
         >
           <SelectTrigger className="w-24 h-9">
@@ -89,6 +99,16 @@ export function RichTextEditor({
         </Select>
 
         {/* Divider */}
+        <div className="w-px h-6 bg-border" />
+
+        <input
+          type="color"
+          value={textColor}
+          onChange={(event) => setTextColor(event.target.value)}
+          className="h-9 w-10 rounded border border-border bg-background p-1"
+          title="Cor do texto"
+        />
+
         <div className="w-px h-6 bg-border" />
 
         {/* Bold Button */}
@@ -114,6 +134,45 @@ export function RichTextEditor({
         </Button>
 
         {/* Divider */}
+        <div className="w-px h-6 bg-border" />
+
+        <Button
+          size="sm"
+          variant={textAlign === "left" ? "default" : "outline"}
+          onClick={() => setTextAlign("left")}
+          className="h-9 w-9 p-0"
+          title="Alinhar à esquerda"
+        >
+          <AlignLeft className="h-4 w-4" />
+        </Button>
+        <Button
+          size="sm"
+          variant={textAlign === "center" ? "default" : "outline"}
+          onClick={() => setTextAlign("center")}
+          className="h-9 w-9 p-0"
+          title="Centralizar"
+        >
+          <AlignCenter className="h-4 w-4" />
+        </Button>
+        <Button
+          size="sm"
+          variant={textAlign === "right" ? "default" : "outline"}
+          onClick={() => setTextAlign("right")}
+          className="h-9 w-9 p-0"
+          title="Alinhar à direita"
+        >
+          <AlignRight className="h-4 w-4" />
+        </Button>
+        <Button
+          size="sm"
+          variant={textAlign === "justify" ? "default" : "outline"}
+          onClick={() => setTextAlign("justify")}
+          className="h-9 px-3"
+          title="Justificar"
+        >
+          J
+        </Button>
+
         <div className="w-px h-6 bg-border" />
 
         {/* Bullet List Button */}

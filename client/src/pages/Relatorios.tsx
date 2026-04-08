@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -81,6 +83,12 @@ export default function Relatorios() {
           <p className="text-sm text-muted-foreground mt-1">Análises completas da Clínica Glutée</p>
         </div>
         <div className="flex items-center gap-3">
+          <Button asChild variant="outline">
+            <Link href="/relatorios/prontuario">Relatório do prontuário</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/relatorios/portabilidade">Portabilidade de dados</Link>
+          </Button>
           <Select value={period} onValueChange={setPeriod}>
             <SelectTrigger className="w-40 h-9"><SelectValue /></SelectTrigger>
             <SelectContent>

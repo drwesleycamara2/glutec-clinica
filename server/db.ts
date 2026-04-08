@@ -3,8 +3,11 @@ import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, icd10Codes, userFavoriteIcds, audioTranscriptions, InsertIcd10Code, InsertUserFavoriteIcd, InsertAudioTranscription } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { randomBytes } from "crypto";
+import fs from "fs/promises";
+import path from "path";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let icd10BootstrapPromise: Promise<void> | null = null;
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
@@ -114,6 +117,7 @@ export async function getUserByOpenId(openId: string) {
 export async function searchIcd10(query: string, limit = 50) {
   const db = await getDb();
   if (!db) return [];
+  await ensureIcd10Catalog();
   const q = `%${query}%`;
   return db
     .select()
@@ -125,6 +129,7 @@ export async function searchIcd10(query: string, limit = 50) {
 export async function getIcd10ById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
+  await ensureIcd10Catalog();
   const result = await db.select().from(icd10Codes).where(eq(icd10Codes.id, id)).limit(1);
   return result[0];
 }
@@ -132,6 +137,7 @@ export async function getIcd10ById(id: number) {
 export async function getFavoriteIcds(userId: number) {
   const db = await getDb();
   if (!db) return [];
+  await ensureIcd10Catalog();
   return db
     .select({
       id: icd10Codes.id,
@@ -147,6 +153,7 @@ export async function getFavoriteIcds(userId: number) {
 export async function addFavoriteIcd(userId: number, icd10CodeId: number) {
   const db = await getDb();
   if (!db) return;
+  await ensureIcd10Catalog();
   await db.insert(userFavoriteIcds).values({ userId, icd10CodeId }).onDuplicateKeyUpdate({ set: { userId } });
 }
 
@@ -164,6 +171,38 @@ export async function insertIcd10Batch(values: InsertIcd10Code[]) {
     const chunk = values.slice(i, i + chunkSize);
     await db.insert(icd10Codes).values(chunk).onDuplicateKeyUpdate({ set: { description: sql`description` } });
   }
+}
+
+async function ensureIcd10Catalog() {
+  if (icd10BootstrapPromise) {
+    return icd10BootstrapPromise;
+  }
+
+  icd10BootstrapPromise = (async () => {
+    const db = await getDb();
+    if (!db) return;
+
+    const countRows = await db.execute(sql`select count(*) as total from icd10_codes`);
+    const total = Number((countRows as any)?.[0]?.total ?? (countRows as any)?.[0]?.[0]?.total ?? 0);
+    if (total > 0) return;
+
+    const filePath = path.resolve(process.cwd(), "cid10_data.json");
+    const raw = await fs.readFile(filePath, "utf-8");
+    const parsed = JSON.parse(raw) as Array<{ code: string; description: string; descriptionAbbrev?: string }>;
+    if (!Array.isArray(parsed) || parsed.length === 0) return;
+
+    await insertIcd10Batch(
+      parsed.map((item) => ({
+        code: item.code,
+        description: item.description,
+        descriptionAbbrev: item.descriptionAbbrev ?? null,
+      })),
+    );
+  })().finally(() => {
+    icd10BootstrapPromise = null;
+  });
+
+  return icd10BootstrapPromise;
 }
 
 // ─── Audio Transcriptions ────────────────────────────────────────────────────
