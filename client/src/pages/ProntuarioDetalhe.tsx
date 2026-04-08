@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { AllergyAlert } from "@/components/AllergyAlert";
 import { ExportProntuarioButton } from "@/components/ExportProntuario";
-import { EvolucaoClinicaTab } from "@/components/EvolucaoClinicaTab";
+import { EvolucaoClinicaWorkspace } from "@/components/EvolucaoClinicaWorkspace";
 const DEFAULT_ANAMNESE_QUESTIONS = [
   { text: "Estado civil", type: "text", options: [] },
   { text: "Profissão *", type: "text", options: [] },
@@ -70,8 +70,11 @@ const DEFAULT_ANAMNESE_QUESTIONS = [
 function buildHistorySummary(record: any) {
   return [
     record.chiefComplaint,
+    record.anamnesis,
     record.historyOfPresentIllness,
     record.clinicalEvolution,
+    record.evolution,
+    record.plan,
     record.treatmentPlan,
     record.pastMedicalHistory,
     record.familyHistory,
@@ -85,14 +88,25 @@ function buildHistorySummary(record: any) {
     .join("\n\n");
 }
 
+function summarizeText(text?: string | null, maxLength: number = 180) {
+  const normalized = String(text ?? "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength).trimEnd()}...`;
+}
+
 function groupDocumentsByType(documents: any[]) {
   const labels: Record<string, string> = {
     rg: "Documentos pessoais",
     cpf: "Documentos pessoais",
     convenio: "Documentos pessoais",
     termo: "Contratos e termos",
+    contrato: "Contratos e termos",
     exame_pdf: "Resultados de exames",
     exame_imagem: "Resultados de exames",
+    solicitacao_exames: "Resultados de exames",
+    evolucao_pdf: "Atendimentos anteriores",
+    prescricao: "Prescrições e solicitações",
     video: "Vídeos",
     outro: "Outros anexos",
   };
@@ -415,10 +429,31 @@ function PrescricoesTab({ patientId }: { patientId: number }) {
 
 function HistoricoTab({ patientId }: { patientId: number }) {
   const { data, isLoading } = trpc.medicalRecords.getHistory.useQuery({ patientId });
+  const [selectedEntry, setSelectedEntry] = useState<any | null>(null);
   const records = data?.records ?? [];
   const appointments = data?.appointments ?? [];
+  const prescriptions = data?.prescriptions ?? [];
   const documents = data?.documents ?? [];
   const photos = data?.photos ?? [];
+
+  const timeline = [
+    ...appointments.map((appointment: any) => ({
+      kind: "appointment" as const,
+      sortDate: appointment.scheduledAt,
+      data: appointment,
+    })),
+    ...records.map((record: any) => ({
+      kind: "record" as const,
+      sortDate: record.date || record.createdAt,
+      data: record,
+    })),
+    ...prescriptions.map((prescription: any) => ({
+      kind: "prescription" as const,
+      sortDate: prescription.date || prescription.createdAt,
+      data: prescription,
+    })),
+  ].sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime());
+  const hasHistory = timeline.length > 0;
 
   if (isLoading) {
     return <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-[#C9A55B]" /></div>;
@@ -426,9 +461,10 @@ function HistoricoTab({ patientId }: { patientId: number }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-5">
         <Card className="border-border/50"><CardContent className="p-4"><p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Agendamentos</p><p className="mt-2 text-2xl font-semibold">{appointments.length}</p></CardContent></Card>
         <Card className="border-border/50"><CardContent className="p-4"><p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Atendimentos</p><p className="mt-2 text-2xl font-semibold">{records.length}</p></CardContent></Card>
+        <Card className="border-border/50"><CardContent className="p-4"><p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Prescrições</p><p className="mt-2 text-2xl font-semibold">{prescriptions.length}</p></CardContent></Card>
         <Card className="border-border/50"><CardContent className="p-4"><p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Anexos</p><p className="mt-2 text-2xl font-semibold">{documents.length}</p></CardContent></Card>
         <Card className="border-border/50"><CardContent className="p-4"><p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Imagens</p><p className="mt-2 text-2xl font-semibold">{photos.length}</p></CardContent></Card>
       </div>
@@ -436,7 +472,7 @@ function HistoricoTab({ patientId }: { patientId: number }) {
       <Card className="border-border/50">
         <CardHeader className="pb-3"><CardTitle className="text-sm font-semibold">Linha do tempo clínica</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          {appointments.length === 0 && records.length === 0 ? (
+          {!hasHistory ? (
             <p className="text-sm text-muted-foreground">Nenhum histórico clínico importado foi encontrado para este paciente.</p>
           ) : (
             <>
@@ -467,6 +503,18 @@ function HistoricoTab({ patientId }: { patientId: number }) {
                   </div>
                 );
               })}
+              {prescriptions.map((prescription: any) => (
+                <div key={`prescription-${prescription.id}`} className="rounded-xl border border-[#8A6526]/20 bg-[#8A6526]/6 p-4">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <p className="text-sm font-semibold">Prescrição em {new Date(prescription.date || prescription.createdAt).toLocaleString("pt-BR")}</p>
+                      <p className="text-xs text-muted-foreground">{prescription.doctorName || "Profissional não identificado"}</p>
+                    </div>
+                    <Badge className="bg-[#8A6526]/15 text-[#8A6526] dark:text-[#F1D791]">Prescrição</Badge>
+                  </div>
+                  <p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground">{prescription.content || "Sem conteúdo textual disponível."}</p>
+                </div>
+              ))}
             </>
           )}
         </CardContent>
@@ -564,6 +612,10 @@ function ExamesTab({ patientId }: { patientId: number }) {
   const [selectedExams, setSelectedExams] = useState<Array<{ code: string; name: string; urgency: string }>>([]);
   const [indicacao, setIndicacao] = useState("");
   const { data: templates } = trpc.examRequests.listTemplates.useQuery();
+  const { data: tussResults, isFetching: tussLoading } = trpc.catalog.searchTuss.useQuery(
+    { query: searchTuss || undefined, limit: 60 },
+    { enabled: modo === "lista" && searchTuss.trim().length >= 2 },
+  );
 
   const saveTemplateMutation = trpc.examRequests.createTemplate.useMutation({
     onSuccess: () => toast.success("Modelo salvo!"),
@@ -593,9 +645,7 @@ function ExamesTab({ patientId }: { patientId: number }) {
     { code: "40301575", name: "VHS" },
   ];
 
-  const filtered = examesTuss.filter((e) =>
-    e.name.toLowerCase().includes(searchTuss.toLowerCase()) || e.code.includes(searchTuss)
-  );
+  const filtered = searchTuss.trim().length >= 2 ? (tussResults ?? []) : examesTuss;
 
   return (
     <div className="space-y-4">
@@ -622,6 +672,7 @@ function ExamesTab({ patientId }: { patientId: number }) {
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                   <Input value={searchTuss} onChange={(e) => setSearchTuss(e.target.value)} placeholder="Buscar por nome ou código..." className="pl-8 h-8 text-xs" />
                 </div>
+                {tussLoading ? <p className="mb-2 text-[11px] text-muted-foreground">Carregando TUSS oficial...</p> : null}
                 <div className="max-h-60 overflow-y-auto space-y-1">
                   {filtered.map((exam) => (
                     <button key={exam.code + exam.name} onClick={() => {
@@ -791,8 +842,27 @@ export default function ProntuarioDetalhe() {
   const patientId = parseInt(params.id ?? "0");
   const [, setLocation] = useLocation();
   const { user } = useAuth();
+  const validTabs = ["historico", "anamnese", "evolucao", "atestados", "prescricoes", "anexos", "exames", "procedimentos"];
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window === "undefined") return "historico";
+    const hashTab = window.location.hash.replace("#", "");
+    return validTabs.includes(hashTab) ? hashTab : "historico";
+  });
 
   const { data: patient, isLoading } = trpc.patients.getById.useQuery({ id: patientId });
+
+  useEffect(() => {
+    const syncTabFromHash = () => {
+      const hashTab = window.location.hash.replace("#", "");
+      if (validTabs.includes(hashTab)) {
+        setActiveTab(hashTab);
+      }
+    };
+
+    window.addEventListener("hashchange", syncTabFromHash);
+    syncTabFromHash();
+    return () => window.removeEventListener("hashchange", syncTabFromHash);
+  }, []);
 
   if (isLoading) return <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-[#C9A55B]" /></div>;
   if (!patient) return <div className="text-center py-16 text-muted-foreground">Paciente não encontrado.</div>;
@@ -826,7 +896,16 @@ export default function ProntuarioDetalhe() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="historico" className="w-full">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => {
+          setActiveTab(value);
+          if (typeof window !== "undefined") {
+            window.history.replaceState(null, "", `${window.location.pathname}#${value}`);
+          }
+        }}
+        className="w-full"
+      >
         <TabsList className="w-full justify-start flex-wrap bg-muted/50 h-auto p-1 gap-0.5">
           <TabsTrigger value="historico" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
             <History className="h-3.5 w-3.5" />Histórico
@@ -856,7 +935,7 @@ export default function ProntuarioDetalhe() {
 
         <TabsContent value="historico" className="mt-4"><HistoricoTab patientId={patientId} /></TabsContent>
         <TabsContent value="anamnese" className="mt-4"><AnamneseTab patientId={patientId} /></TabsContent>
-        <TabsContent value="evolucao" className="mt-4"><EvolucaoClinicaTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
+        <TabsContent value="evolucao" className="mt-4"><EvolucaoClinicaWorkspace patientId={patientId} patientName={patient.fullName} /></TabsContent>
         <TabsContent value="atestados" className="mt-4"><AtestadosTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
         <TabsContent value="prescricoes" className="mt-4"><PrescricoesTab patientId={patientId} /></TabsContent>
         <TabsContent value="anexos" className="mt-4"><AnexosTab patientId={patientId} /></TabsContent>

@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,6 +13,7 @@ import {
   Folder,
   Image,
   Link2,
+  Maximize2,
   Plus,
   Search,
   Trash2,
@@ -64,6 +66,11 @@ function getPhotoPreviewUrl(photo: any) {
   return photo?.thumbnailUrl || photo?.photoUrl || "";
 }
 
+function isVideoMedia(photo: any) {
+  const value = `${photo?.photoUrl || ""} ${photo?.photoKey || ""}`.toLowerCase();
+  return value.includes(".mp4") || value.includes(".mov") || value.includes(".webm");
+}
+
 function handleBrokenPreview(event: React.SyntheticEvent<HTMLImageElement>) {
   event.currentTarget.src =
     "data:image/svg+xml;utf8," +
@@ -81,6 +88,7 @@ export default function Fotos() {
   const [uploadCategory, setUploadCategory] = useState<string>("antes");
   const [uploadDescription, setUploadDescription] = useState("");
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<number[]>([]);
+  const [expandedPhoto, setExpandedPhoto] = useState<any | null>(null);
 
   const { data: patientMatches } = trpc.patients.list.useQuery(
     { query: patientSearch || undefined, limit: 12 },
@@ -281,7 +289,7 @@ export default function Fotos() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,video/*"
                 className="hidden"
                 onChange={handleFileSelect}
               />
@@ -353,12 +361,26 @@ export default function Fotos() {
               {selectedPhotos.map(photo => (
                 <div key={photo.id} className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-background/60">
                   <div className="aspect-[4/5] bg-muted">
-                    <img
-                      src={getPhotoPreviewUrl(photo)}
-                      alt={photo.description ?? "Foto do paciente"}
-                      className="h-full w-full object-cover"
-                      onError={handleBrokenPreview}
-                    />
+                    {isVideoMedia(photo) ? (
+                      <video
+                        src={getPhotoPreviewUrl(photo)}
+                        className="h-full w-full cursor-zoom-in object-cover"
+                        muted
+                        playsInline
+                        onClick={() => setExpandedPhoto(photo)}
+                      />
+                    ) : (
+                      <img
+                        src={getPhotoPreviewUrl(photo)}
+                        alt={photo.description ?? "Foto do paciente"}
+                        className="h-full w-full cursor-zoom-in object-cover"
+                        draggable={false}
+                        translate="no"
+                        data-no-translate="true"
+                        onClick={() => setExpandedPhoto(photo)}
+                        onError={handleBrokenPreview}
+                      />
+                    )}
                   </div>
                   <div className="space-y-2 p-4">
                     <div className="flex items-center justify-between gap-2">
@@ -368,6 +390,10 @@ export default function Fotos() {
                       <span className="text-xs text-muted-foreground">{formatPhotoDate(photo)}</span>
                     </div>
                     <p className="text-sm font-medium text-foreground">{photo.description || "Sem descricao clinica"}</p>
+                    <Button variant="outline" size="sm" className="w-full" onClick={() => setExpandedPhoto(photo)}>
+                      <Maximize2 className="h-3.5 w-3.5" />
+                      Ampliar imagem
+                    </Button>
                   </div>
                 </div>
               ))}
@@ -420,15 +446,38 @@ export default function Fotos() {
                     return (
                       <div key={photo.id} className="overflow-hidden rounded-[1.5rem] border border-border/70 bg-background/60">
                         <div className="group relative aspect-[4/5] bg-muted">
-                    <img
-                      src={getPhotoPreviewUrl(photo)}
-                      alt={photo.description ?? "Foto"}
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                      onError={handleBrokenPreview}
-                    />
+                    {isVideoMedia(photo) ? (
+                      <video
+                        src={getPhotoPreviewUrl(photo)}
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                        muted
+                        playsInline
+                        onClick={() => setExpandedPhoto(photo)}
+                      />
+                    ) : (
+                      <img
+                        src={getPhotoPreviewUrl(photo)}
+                        alt={photo.description ?? "Foto"}
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                        draggable={false}
+                        translate="no"
+                        data-no-translate="true"
+                        onClick={() => setExpandedPhoto(photo)}
+                        onError={handleBrokenPreview}
+                      />
+                    )}
                           <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/75 via-black/20 to-transparent p-3">
-                            <Badge className="border-white/15 bg-white/10 text-white">{photo.category}</Badge>
+                      <Badge className="border-white/15 bg-white/10 text-white">
+                        {isVideoMedia(photo) ? "video" : photo.category}
+                      </Badge>
                             <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setExpandedPhoto(photo)}
+                              >
+                                <Maximize2 className="h-3.5 w-3.5" />
+                              </Button>
                               <Button
                                 variant={isSelected ? "premium" : "outline"}
                                 size="sm"
@@ -505,6 +554,61 @@ export default function Fotos() {
           </Card>
         </div>
       </div>
+
+      <Dialog open={!!expandedPhoto} onOpenChange={(open) => !open && setExpandedPhoto(null)}>
+        <DialogContent className="max-h-[92vh] max-w-6xl overflow-hidden border-[#C9A55B]/25 bg-background/95 p-0">
+          <DialogHeader className="border-b border-border/60 px-6 py-4">
+            <DialogTitle className="flex items-center justify-between gap-3 text-left text-base font-semibold">
+              <span>{expandedPhoto?.description || "Imagem do paciente"}</span>
+              <span className="text-sm font-normal text-muted-foreground">
+                {expandedPhoto ? formatPhotoDate(expandedPhoto) : ""}
+              </span>
+            </DialogTitle>
+          </DialogHeader>
+          {expandedPhoto ? (
+            <div className="grid gap-0 lg:grid-cols-[1.25fr_0.75fr]">
+              <div className="flex min-h-[55vh] items-center justify-center bg-black/90 p-4">
+                {isVideoMedia(expandedPhoto) ? (
+                  <video
+                    src={getPhotoPreviewUrl(expandedPhoto)}
+                    className="max-h-[78vh] w-auto max-w-full rounded-xl object-contain"
+                    controls
+                    autoPlay
+                    playsInline
+                  />
+                ) : (
+                  <img
+                    src={getPhotoPreviewUrl(expandedPhoto)}
+                    alt={expandedPhoto.description ?? "Imagem ampliada"}
+                    className="max-h-[78vh] w-auto max-w-full rounded-xl object-contain"
+                    draggable={false}
+                    translate="no"
+                    data-no-translate="true"
+                    onError={handleBrokenPreview}
+                  />
+                )}
+              </div>
+              <div className="space-y-4 p-6">
+                <div className="flex flex-wrap gap-2">
+                  <Badge className="border-[#C9A55B]/20 bg-[#C9A55B]/10 text-[#8A6526] dark:text-[#F1D791]">
+                    {isVideoMedia(expandedPhoto) ? "video" : expandedPhoto.category}
+                  </Badge>
+                  <Badge variant="outline">ID {expandedPhoto.id}</Badge>
+                </div>
+                <div className="space-y-2 text-sm leading-6 text-muted-foreground">
+                  <p><span className="font-medium text-foreground">Descrição:</span> {expandedPhoto.description || "Sem descrição clínica."}</p>
+                  <p><span className="font-medium text-foreground">Data:</span> {formatPhotoDate(expandedPhoto)}</p>
+                  <p><span className="font-medium text-foreground">Arquivo:</span> {expandedPhoto.photoKey || "Não informado"}</p>
+                </div>
+                <Button variant="premium" className="w-full" onClick={() => window.open(getPhotoPreviewUrl(expandedPhoto), "_blank", "noopener,noreferrer")}>
+                  <Maximize2 className="h-4 w-4" />
+                  Abrir em tela cheia
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

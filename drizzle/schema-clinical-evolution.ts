@@ -6,6 +6,7 @@ export const clinicalEvolutions = mysqlTable("clinical_evolutions", {
   id: int("id").autoincrement().primaryKey(),
   patientId: int("patientId").notNull(),
   doctorId: int("doctorId").notNull(),
+  assistantUserId: int("assistantUserId"),
   medicalRecordId: int("medicalRecordId"),
   appointmentId: int("appointmentId"),
   
@@ -19,6 +20,12 @@ export const clinicalEvolutions = mysqlTable("clinical_evolutions", {
   
   // Status and Workflow
   status: mysqlEnum("status", ["rascunho", "finalizado", "assinado", "cancelado"]).default("rascunho").notNull(),
+  startedAt: timestamp("startedAt"),
+  endedAt: timestamp("endedAt"),
+  finalizedAt: timestamp("finalizedAt"),
+  isRetroactive: int("isRetroactive").default(0).notNull(),
+  retroactiveJustification: text("retroactiveJustification"),
+  assistantName: varchar("assistantName", { length: 255 }).notNull(),
   
   // Digital Signature (D4Sign Integration)
   d4signDocumentKey: varchar("d4signDocumentKey", { length: 128 }),
@@ -28,6 +35,9 @@ export const clinicalEvolutions = mysqlTable("clinical_evolutions", {
   signedByDoctorName: varchar("signedByDoctorName", { length: 256 }),
   signedPdfUrl: text("signedPdfUrl"),
   signatureHash: varchar("signatureHash", { length: 256 }), // Hash da assinatura para auditoria
+  signatureProvider: varchar("signatureProvider", { length: 64 }),
+  signatureCertificateLabel: varchar("signatureCertificateLabel", { length: 255 }),
+  signatureValidationCode: varchar("signatureValidationCode", { length: 128 }),
   
   // Audit Trail
   createdAt: timestamp("createdAt").defaultNow().notNull(),

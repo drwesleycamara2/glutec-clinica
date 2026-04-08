@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Eye, EyeOff, Lock, Mail, AlertCircle, Loader2 } from "lucide-react";
+import { CLINICAL_LOCK_RETURN_TO_KEY } from "@/lib/clinicalSession";
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -12,6 +13,9 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const query = new URLSearchParams(window.location.search);
+  const returnTo = query.get("returnTo") || localStorage.getItem(CLINICAL_LOCK_RETURN_TO_KEY) || "/";
+  const locked = query.get("locked") === "1";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +37,7 @@ export default function Login() {
       }
 
       if (data.status === "requires_2fa") {
-        setLocation(`/verificar-2fa?token=${data.tempToken}`);
+        setLocation(`/verificar-2fa?token=${data.tempToken}&returnTo=${encodeURIComponent(returnTo)}`);
         return;
       }
 
@@ -47,7 +51,8 @@ export default function Login() {
         return;
       }
 
-      window.location.href = "/";
+      localStorage.removeItem(CLINICAL_LOCK_RETURN_TO_KEY);
+      window.location.href = returnTo;
     } catch {
       setError("Erro de conexão. Verifique sua internet e tente novamente.");
     } finally {
@@ -102,6 +107,15 @@ export default function Login() {
         <div className="px-8 py-8 sm:px-10">
           <h2 className="text-3xl font-semibold tracking-tight text-[#fffaf0]">Bem-vindo de volta</h2>
           <p className="mt-2 text-sm text-[#d3c6a4]">Faça login para acessar o sistema.</p>
+
+          {locked && !error && (
+            <div className="mt-6 flex items-start gap-3 rounded-2xl border border-[#d7ba78]/25 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#f1d791]" />
+              <p className="text-sm text-[#f8f0dc]">
+                Sua sessão foi bloqueada por 30 minutos de inatividade. Entre novamente para continuar.
+              </p>
+            </div>
+          )}
 
           {error && (
             <div className="mt-6 flex items-start gap-3 rounded-2xl border border-[#d7ba78]/25 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">

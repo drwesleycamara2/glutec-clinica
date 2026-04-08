@@ -26,8 +26,54 @@ function normalizeMediaUrl(value?: string | null) {
   return raw.startsWith("/") ? raw : `/${raw}`;
 }
 
+type TussCatalogEntry = {
+  code: string;
+  name: string;
+  description?: string;
+};
+
+let tussCatalogCache: TussCatalogEntry[] | null = null;
+let tussCatalogPromise: Promise<TussCatalogEntry[]> | null = null;
+
+function normalizeSearchText(value?: string | null) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+async function loadTussCatalog() {
+  if (tussCatalogCache) {
+    return tussCatalogCache;
+  }
+
+  if (!tussCatalogPromise) {
+    tussCatalogPromise = fs.promises
+      .readFile(path.resolve(process.cwd(), "tuss22_data.json"), "utf-8")
+      .then((raw) => JSON.parse(raw) as TussCatalogEntry[])
+      .then((rows) =>
+        rows.filter((row) => row?.code && row?.name).map((row) => ({
+          code: String(row.code).trim(),
+          name: String(row.name).trim(),
+          description: String(row.description ?? "").trim(),
+        })),
+      )
+      .catch(() => [])
+      .finally(() => {
+        tussCatalogPromise = null;
+      });
+  }
+
+  tussCatalogCache = await tussCatalogPromise;
+  return tussCatalogCache;
+}
+
 function inferExtensionFromMimeType(mimeType?: string | null) {
   const normalized = String(mimeType ?? "").toLowerCase();
+  if (normalized.includes("mp4")) return "mp4";
+  if (normalized.includes("quicktime") || normalized.includes("mov")) return "mov";
+  if (normalized.includes("webm")) return "webm";
   if (normalized.includes("png")) return "png";
   if (normalized.includes("webp")) return "webp";
   if (normalized.includes("gif")) return "gif";
@@ -63,6 +109,32 @@ function normalizeDocumentRow(row: any) {
   return {
     ...row,
     fileUrl: normalizeMediaUrl(row.fileUrl),
+  };
+}
+
+function parseTemplateSections(sections: any) {
+  if (Array.isArray(sections)) return sections;
+  if (typeof sections === "string" && sections.trim()) {
+    try {
+      return JSON.parse(sections);
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function normalizeTemplateRow(row: any) {
+  const sections = parseTemplateSections(row.sections);
+  const firstSection = Array.isArray(sections) ? sections[0] : null;
+  return {
+    ...row,
+    sections,
+    content:
+      firstSection?.content ??
+      firstSection?.text ??
+      firstSection?.fields?.map?.((field: any) => field.label).join("\n") ??
+      "",
   };
 }
 
@@ -710,7 +782,7 @@ export async function getPatientDocuments(patientId: number) {
 
 export async function getPatientHistory(patientId: number) {
   const db = await getDb();
-  if (!db) return { appointments: [], records: [], documents: [], photos: [] };
+  if (!db) return { appointments: [], records: [], prescriptions: [], documents: [], photos: [] };
 
   const appointments = unwrapRows<any>(await db.execute(sql`
     select a.*, u.name as doctorName
@@ -728,15 +800,41 @@ export async function getPatientHistory(patientId: number) {
     order by coalesce(mr.date, mr.createdAt) desc, mr.id desc
   `));
 
+  const prescriptions = unwrapRows<any>(await db.execute(sql`
+    select p.*, u.name as doctorName
+    from prescriptions p
+    left join users u on u.id = p.doctorId
+    where p.patientId = ${patientId}
+    order by coalesce(p.date, p.createdAt) desc, p.id desc
+  `));
+
   const documents = await getPatientDocuments(patientId);
   const photos = await getPatientPhotos(patientId);
 
   return {
     appointments,
     records,
+    prescriptions,
     documents,
     photos,
   };
+}
+
+export async function searchTussCatalog(query?: string, limit: number = 60) {
+  const catalog = await loadTussCatalog();
+  if (!catalog.length) return [];
+
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) {
+    return catalog.slice(0, limit);
+  }
+
+  const matches = catalog.filter((entry) => {
+    const haystack = normalizeSearchText(`${entry.code} ${entry.name} ${entry.description ?? ""}`);
+    return haystack.includes(normalizedQuery);
+  });
+
+  return matches.slice(0, limit);
 }
 
 // ─── CHAT ────────────────────────────────────────────────────────────────────
@@ -1621,6 +1719,113 @@ export async function listMedicalRecordTemplates() {
   if (!db) return [];
   
   return db.select().from(sql`medical_record_templates`).where(eq(sql`active`, true));
+}
+
+export async function listTemplatesNormalized() {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db.select().from(sql`medical_record_templates`).where(eq(sql`active`, true));
+  return rows.map((row: any) => normalizeTemplateRow(row));
+}
+
+export async function createTemplateNormalized(data: any, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const sections = Array.isArray(data.sections) ? data.sections : [];
+  const result = await db.insert(sql`medical_record_templates`).values({
+    name: data.name,
+    specialty: data.specialty ?? null,
+    description: data.description ?? null,
+    sections: JSON.stringify(sections),
+    createdBy: userId,
+    active: true,
+  });
+  return result[0];
+}
+
+export async function listMedicalRecordTemplatesNormalized() {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db.select().from(sql`medical_record_templates`).where(eq(sql`active`, true));
+  return rows.map((row: any) => normalizeTemplateRow(row));
+}
+
+export async function listPrescriptionTemplatesNormalized() {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from medical_record_templates
+    where active = 1
+      and specialty in ('Prescrição', 'PrescriÃ§Ã£o', 'Prescricao')
+    order by name asc
+  `));
+
+  return rows.map((row: any) => ({
+    ...normalizeTemplateRow(row),
+    type: row.description || "simples",
+  }));
+}
+
+export async function createPrescriptionTemplateNormalized(data: any, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const result = await db.insert(sql`medical_record_templates`).values({
+    name: data.name,
+    specialty: "Prescrição",
+    description: data.type || "simples",
+    sections: JSON.stringify([
+      {
+        title: data.name,
+        type: "richtext",
+        content: data.content ?? "",
+      },
+    ]),
+    active: true,
+    createdBy: userId,
+  });
+  return result[0];
+}
+
+export async function listExamTemplatesNormalized() {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from medical_record_templates
+    where active = 1
+      and specialty in ('Exame', 'Exames', 'Pedido de Exames')
+    order by name asc
+  `));
+
+  return rows.map((row: any) => normalizeTemplateRow(row));
+}
+
+export async function createExamTemplateNormalized(data: any, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const result = await db.insert(sql`medical_record_templates`).values({
+    name: data.name,
+    specialty: "Exame",
+    description: data.specialty ?? null,
+    sections: JSON.stringify([
+      {
+        title: data.name,
+        type: "richtext",
+        content: data.content ?? "",
+      },
+    ]),
+    active: true,
+    createdBy: userId,
+  });
+  return result[0];
 }
 
 // ─── WHATSAPP ─────────────────────────────────────────────────────────────────

@@ -11,6 +11,7 @@ import { setupVite } from "./vite";
 import { registerAuthRoutes } from "./authRoutes";
 import { authenticateRequest } from "./auth";
 import { transcribeAudio } from "./voiceTranscription";
+import { resolveSystemExport } from "../lib/system-export";
 
 function getRequestBaseUrl(req: express.Request) {
   const forwardedProto = req.headers["x-forwarded-proto"];
@@ -178,6 +179,27 @@ async function startServer() {
 
   const uploadsPath = path.resolve(process.cwd(), "public", "uploads");
   serveProtectedDirectory(app, "/uploads", uploadsPath);
+
+  app.get("/api/admin/system-export/:token", async (req, res) => {
+    const user = await authenticateRequest(req);
+    if (!user || user.role !== "admin") {
+      addNoIndexHeaders(res);
+      return res.status(401).send("Sessão inválida. Faça login novamente.");
+    }
+
+    const exportItem = resolveSystemExport(String(req.params.token ?? ""), user.id);
+    if (!exportItem) {
+      addNoIndexHeaders(res);
+      return res.status(404).send("Pacote de exportação não encontrado ou expirado.");
+    }
+
+    addNoIndexHeaders(res);
+    res.setHeader("Cache-Control", "private, no-store, max-age=0");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.setHeader("Content-Type", "application/octet-stream");
+    return res.download(exportItem.filePath, exportItem.fileName);
+  });
 
   // tRPC API
   app.use(

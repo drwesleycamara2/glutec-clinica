@@ -36,6 +36,16 @@ export function AudioRecorder({ onTranscriptionComplete, medicalRecordId }: Audi
     };
   }, [audioUrl]);
 
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message.trim()) {
+      return error.message;
+    }
+    if (typeof error === "string" && error.trim()) {
+      return error;
+    }
+    return fallback;
+  };
+
   const blobToBase64 = async (blob: Blob) =>
     new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -150,8 +160,9 @@ export function AudioRecorder({ onTranscriptionComplete, medicalRecordId }: Audi
       );
     } catch (error) {
       console.error("Error uploading audio:", error);
-      toast.error("Erro ao fazer upload do áudio");
+      toast.error(getErrorMessage(error, "Erro ao fazer upload do áudio."));
       setIsTranscribing(false);
+      return;
     }
   };
 
@@ -165,7 +176,8 @@ export function AudioRecorder({ onTranscriptionComplete, medicalRecordId }: Audi
       });
 
       if (!response.ok) {
-        throw new Error("Transcription failed");
+        const detail = await response.text().catch(() => "");
+        throw new Error(detail || "Falha ao transcrever o áudio.");
       }
 
       const data = await response.json();
@@ -188,7 +200,7 @@ export function AudioRecorder({ onTranscriptionComplete, medicalRecordId }: Audi
       toast.success("Áudio transcrito com sucesso");
     } catch (error) {
       console.error("Error transcribing audio:", error);
-      toast.error("Erro ao transcrever áudio");
+      toast.error(getErrorMessage(error, "Erro ao transcrever o áudio."));
       if (transcriptionId) {
         updateTranscription({
           id: transcriptionId,
@@ -196,6 +208,7 @@ export function AudioRecorder({ onTranscriptionComplete, medicalRecordId }: Audi
           status: "failed",
         });
       }
+      return;
     } finally {
       setIsTranscribing(false);
     }

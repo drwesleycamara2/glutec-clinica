@@ -2,7 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useTheme } from "@/contexts/ThemeContext";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Moon, Sun, Palette, Bell, Shield, User } from "lucide-react";
+import { Moon, Sun, Palette, Bell, Shield, User, FileStack } from "lucide-react";
 
 export default function Configuracoes() {
   const { theme, toggleTheme, switchable } = useTheme();
@@ -111,6 +111,24 @@ export default function Configuracoes() {
               className="btn-glossy-gold px-6 py-2 text-sm"
             >
               Acessar Meu Perfil
+            </button>
+          </CardContent>
+        </Card>
+
+        <Card className="border-primary/10 bg-card/50 backdrop-blur-sm">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <FileStack className="h-5 w-5 text-primary" />
+              <CardTitle>Modelos</CardTitle>
+            </div>
+            <CardDescription>Prescrições, exames, anamneses, atestados e evolução.</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[140px] flex items-center justify-center">
+            <button
+              onClick={() => window.location.href = "/templates"}
+              className="btn-glossy-gold px-6 py-2 text-sm"
+            >
+              Gerenciar modelos
             </button>
           </CardContent>
         </Card>
