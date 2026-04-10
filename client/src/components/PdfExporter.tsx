@@ -1,4 +1,4 @@
-/**
+﻿/**
  * PDF Exporter Component
  * Generates premium PDFs with the new visual design (Light/Dark compatible)
  * Includes Glutée clinic logo, watermark, and D4Sign signature support

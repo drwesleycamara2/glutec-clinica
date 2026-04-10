@@ -1,19 +1,18 @@
-import { useAuth } from "@/_core/hooks/useAuth";
+﻿import { useAuth } from "@/_core/hooks/useAuth";
 import { PremiumButton, PremiumCard, PremiumStatCard } from "@/components/premium";
 import { trpc } from "@/lib/trpc";
 import {
   Activity,
+  AlertTriangle,
   CalendarDays,
   ClipboardList,
   DollarSign,
   FileSignature,
   MessageSquare,
   Package,
+  Receipt,
   Stethoscope,
   Users,
-  AlertTriangle,
-  TrendingUp,
-  Receipt,
 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -35,6 +34,46 @@ const STATUS_COLORS: Record<string, string> = {
   falta: "bg-[#E8D29B]/30 text-[#8A6526] dark:bg-[#E8D29B]/15 dark:text-[#E8D29B]",
 };
 
+function normalizePreferredName(name?: string | null) {
+  return String(name ?? "")
+    .trim()
+    .replace(/\bWesley\b/gi, "Wésley")
+    .replace(/\s+/g, " ");
+}
+
+function getMedicalTitle(role?: string | null, profession?: string | null, name?: string | null) {
+  const normalizedRole = String(role ?? "").toLowerCase();
+  const normalizedProfession = String(profession ?? "").toLowerCase();
+  const normalizedName = normalizePreferredName(name).toLowerCase();
+  const isDoctor =
+    normalizedRole.includes("doctor") ||
+    normalizedRole.includes("medico") ||
+    normalizedRole.includes("médico") ||
+    normalizedRole.includes("admin") ||
+    normalizedProfession.includes("medica") ||
+    normalizedProfession.includes("médica") ||
+    normalizedProfession.includes("medico") ||
+    normalizedProfession.includes("médico") ||
+    normalizedName.includes("wésley câmara");
+
+  if (!isDoctor) return "";
+  if (
+    normalizedProfession.includes("medica") ||
+    normalizedProfession.includes("médica") ||
+    normalizedProfession.includes("doutora")
+  ) {
+    return "Dra.";
+  }
+  if (
+    normalizedProfession.includes("medico") ||
+    normalizedProfession.includes("médico") ||
+    normalizedProfession.includes("doutor")
+  ) {
+    return "Dr.";
+  }
+  return "Dr(a).";
+}
+
 function getGreeting() {
   const h = new Date().getHours();
   if (h < 12) return "Bom dia";
@@ -44,27 +83,71 @@ function getGreeting() {
 
 function formatUserGreeting(user: any) {
   if (!user?.name) return "Usuário";
-  
-  const nameParts = user.name.trim().split(/\s+/);
+
+  const normalizedName = normalizePreferredName(user.name);
+  const nameParts = normalizedName.split(/\s+/);
   const firstName = nameParts[0];
   const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "";
-  
+
   let title = "";
-  const role = (user?.role ?? "").toLowerCase();
-  const profession = (user?.profession ?? "").toLowerCase();
-  
-  if (role.includes("doctor") || role.includes("admin") || profession.includes("médico") || profession.includes("médica") || user.name.includes("Wésley")) {
+  const role = String(user?.role ?? "").toLowerCase();
+  const profession = String(user?.profession ?? "").toLowerCase();
+
+  if (
+    role.includes("doctor") ||
+    role.includes("admin") ||
+    profession.includes("médico") ||
+    profession.includes("médica") ||
+    normalizedName.includes("Wésley")
+  ) {
     const isFemale = profession.includes("médica") || profession.includes("doutora");
     title = isFemale ? "Dra." : "Dr.";
   }
-  
+
   return `${title} ${firstName} ${lastName}`.trim().replace(/\s+/g, " ");
 }
 
-/**
- * Dashboard Premium - Versão com componentes estilizados
- * Segue o design system premium com dourado metálico
- */
+function formatDoctorDisplayName(appointment: any, doctors?: any[]) {
+  const doctor =
+    doctors?.find((entry) => Number(entry.id) === Number(appointment?.doctorId)) ??
+    (appointment?.doctorName
+      ? {
+          name: appointment.doctorName,
+          role: appointment.doctorRole,
+          specialty: appointment.doctorSpecialty,
+        }
+      : null);
+
+  if (!doctor?.name) {
+    return `Dr(a). Médico #${appointment?.doctorId ?? "-"}`;
+  }
+
+  const normalizedName = normalizePreferredName(doctor.name);
+  const title = getMedicalTitle((doctor as any)?.role, (doctor as any)?.specialty, normalizedName);
+  return `${title} ${normalizedName}`.trim();
+}
+
+function getPatientName(appointment: any) {
+  const rawName =
+    appointment?.patientName ??
+    appointment?.fullName ??
+    appointment?.name ??
+    appointment?.patient?.fullName ??
+    appointment?.patient?.name;
+
+  const normalizedName = normalizePreferredName(rawName);
+  return normalizedName || `Paciente #${appointment?.patientId ?? "-"}`;
+}
+
+function getPatientPhone(appointment: any) {
+  return (
+    appointment?.patientPhone ??
+    appointment?.phone ??
+    appointment?.patient?.phone ??
+    "Telefone não informado"
+  );
+}
+
 export default function DashboardPremium() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -83,11 +166,25 @@ export default function DashboardPremium() {
     to: todayEnd.toISOString(),
   });
 
+  const { data: patients } = trpc.patients.list.useQuery({ limit: 5000 });
   const { data: doctors } = trpc.admin.getDoctors.useQuery();
   const { data: lowStock } = trpc.inventory.getLowStock.useQuery();
 
-  const getDoctorName = (doctorId: number) => {
-    return doctors?.find((d) => d.id === doctorId)?.name ?? `Médico #${doctorId}`;
+  const getDoctorName = (appointment: any) => formatDoctorDisplayName(appointment, doctors);
+  const getResolvedPatientName = (appointment: any) => {
+    const joinedName = getPatientName(appointment);
+    if (!joinedName.startsWith("Paciente #")) return joinedName;
+
+    const patient = patients?.find((entry: any) => Number(entry.id) === Number(appointment?.patientId));
+    return normalizePreferredName(patient?.fullName) || joinedName;
+  };
+
+  const getResolvedPatientPhone = (appointment: any) => {
+    const joinedPhone = getPatientPhone(appointment);
+    if (joinedPhone !== "Telefone não informado") return joinedPhone;
+
+    const patient = patients?.find((entry: any) => Number(entry.id) === Number(appointment?.patientId));
+    return patient?.phone || joinedPhone;
   };
 
   const statCards = [
@@ -99,7 +196,7 @@ export default function DashboardPremium() {
     },
     {
       title: "Consultas Hoje",
-      value: statsLoading ? "..." : stats?.todayAppointments ?? 0,
+      value: statsLoading ? "..." : todayAppointments?.length ?? stats?.todayAppointments ?? 0,
       icon: CalendarDays,
       action: () => setLocation("/agenda"),
     },
@@ -111,7 +208,7 @@ export default function DashboardPremium() {
     },
     {
       title: "Médicos Ativos",
-      value: statsLoading ? "..." : stats?.totalDoctors ?? 0,
+      value: statsLoading ? "..." : doctors?.length ?? stats?.totalDoctors ?? 0,
       icon: Stethoscope,
       action: userRole === "admin" ? () => setLocation("/usuarios") : undefined,
     },
@@ -123,7 +220,7 @@ export default function DashboardPremium() {
     },
     {
       title: "Estoque Baixo",
-      value: statsLoading ? "..." : stats?.lowStockItems ?? 0,
+      value: statsLoading ? "..." : lowStock?.length ?? stats?.lowStockItems ?? 0,
       icon: Package,
       action: () => setLocation("/estoque"),
     },
@@ -131,11 +228,13 @@ export default function DashboardPremium() {
 
   return (
     <div className="space-y-8">
-      {/* Saudação Premium */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 pb-6 border-b border-gold">
         <div>
           <h1 className="text-4xl font-light text-text-primary tracking-tight">
-            {getGreeting()}, <span className="font-semibold" style={{ color: 'var(--accent)' }}>{formatUserGreeting(user)}</span>
+            {getGreeting()},{" "}
+            <span className="font-semibold" style={{ color: "var(--accent)" }}>
+              {formatUserGreeting(user)}
+            </span>
           </h1>
           <p className="text-sm text-text-tertiary font-medium mt-2 uppercase tracking-widest">
             {today.toLocaleDateString("pt-BR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
@@ -161,7 +260,6 @@ export default function DashboardPremium() {
         </div>
       </div>
 
-      {/* Alerta de estoque baixo - Premium */}
       {lowStock && lowStock.length > 0 && (
         <PremiumCard borderGold className="border-[#6B6B6B]/30 bg-[#6B6B6B]/5 dark:bg-red-950/20">
           <div className="flex items-center gap-4">
@@ -187,7 +285,6 @@ export default function DashboardPremium() {
         </PremiumCard>
       )}
 
-      {/* Cards de estatísticas - Premium */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         {statCards.map((card) => (
           <div
@@ -204,9 +301,7 @@ export default function DashboardPremium() {
         ))}
       </div>
 
-      {/* Consultas de hoje + Ações rápidas */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Consultas de Hoje */}
         <div className="lg:col-span-2">
           <PremiumCard borderGold glowEffect>
             <div className="space-y-4">
@@ -244,8 +339,9 @@ export default function DashboardPremium() {
                           </p>
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-text-primary">Paciente #{apt.patientId}</p>
-                          <p className="text-xs text-text-tertiary">{getDoctorName(apt.doctorId)}</p>
+                          <p className="text-sm font-medium text-text-primary">{getResolvedPatientName(apt)}</p>
+                          <p className="text-xs text-text-secondary">{getResolvedPatientPhone(apt)}</p>
+                          <p className="text-xs text-text-tertiary">{getDoctorName(apt)}</p>
                         </div>
                       </div>
                       <span className={`text-xs font-semibold px-3 py-1 rounded-full ${STATUS_COLORS[apt.status] ?? "bg-gray-100 text-gray-700"}`}>
@@ -264,9 +360,7 @@ export default function DashboardPremium() {
           </PremiumCard>
         </div>
 
-        {/* Ações rápidas + Conformidade */}
         <div className="space-y-6">
-          {/* Ações Rápidas */}
           <PremiumCard borderGold>
             <div className="space-y-4">
               <h2 className="text-lg font-semibold text-text-primary flex items-center gap-3 pb-4 border-b border-gold">
@@ -327,7 +421,6 @@ export default function DashboardPremium() {
             </div>
           </PremiumCard>
 
-          {/* Card de Conformidade Premium */}
           <PremiumCard borderGold glowEffect className="bg-accent-hover/30">
             <div className="flex items-start gap-4">
               <div className="flex-shrink-0 p-3 rounded-lg bg-accent-active">

@@ -1,9 +1,13 @@
-import { eq, sql, or, like, and } from "drizzle-orm";
+import { eq, sql, or, like, and, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, icd10Codes, userFavoriteIcds, audioTranscriptions, InsertIcd10Code, InsertUserFavoriteIcd, InsertAudioTranscription } from "../drizzle/schema";
 import { ENV } from './_core/env';
+import { randomBytes } from "crypto";
+import fs from "fs/promises";
+import path from "path";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let icd10BootstrapPromise: Promise<void> | null = null;
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
@@ -113,6 +117,7 @@ export async function getUserByOpenId(openId: string) {
 export async function searchIcd10(query: string, limit = 50) {
   const db = await getDb();
   if (!db) return [];
+  await ensureIcd10Catalog();
   const q = `%${query}%`;
   return db
     .select()
@@ -124,6 +129,7 @@ export async function searchIcd10(query: string, limit = 50) {
 export async function getIcd10ById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
+  await ensureIcd10Catalog();
   const result = await db.select().from(icd10Codes).where(eq(icd10Codes.id, id)).limit(1);
   return result[0];
 }
@@ -131,6 +137,7 @@ export async function getIcd10ById(id: number) {
 export async function getFavoriteIcds(userId: number) {
   const db = await getDb();
   if (!db) return [];
+  await ensureIcd10Catalog();
   return db
     .select({
       id: icd10Codes.id,
@@ -146,6 +153,7 @@ export async function getFavoriteIcds(userId: number) {
 export async function addFavoriteIcd(userId: number, icd10CodeId: number) {
   const db = await getDb();
   if (!db) return;
+  await ensureIcd10Catalog();
   await db.insert(userFavoriteIcds).values({ userId, icd10CodeId }).onDuplicateKeyUpdate({ set: { userId } });
 }
 
@@ -165,13 +173,54 @@ export async function insertIcd10Batch(values: InsertIcd10Code[]) {
   }
 }
 
+async function ensureIcd10Catalog() {
+  if (icd10BootstrapPromise) {
+    return icd10BootstrapPromise;
+  }
+
+  icd10BootstrapPromise = (async () => {
+    const db = await getDb();
+    if (!db) return;
+
+    const countRows = await db.execute(sql`select count(*) as total from icd10_codes`);
+    const total = Number((countRows as any)?.[0]?.total ?? (countRows as any)?.[0]?.[0]?.total ?? 0);
+    if (total > 0) return;
+
+    const filePath = path.resolve(process.cwd(), "cid10_data.json");
+    const raw = await fs.readFile(filePath, "utf-8");
+    const parsed = JSON.parse(raw) as Array<{ code: string; description: string; descriptionAbbrev?: string }>;
+    if (!Array.isArray(parsed) || parsed.length === 0) return;
+
+    await insertIcd10Batch(
+      parsed.map((item) => ({
+        code: item.code,
+        description: item.description,
+        descriptionAbbrev: item.descriptionAbbrev ?? null,
+      })),
+    );
+  })().finally(() => {
+    icd10BootstrapPromise = null;
+  });
+
+  return icd10BootstrapPromise;
+}
+
 // ─── Audio Transcriptions ────────────────────────────────────────────────────
 
 export async function createAudioTranscription(data: InsertAudioTranscription) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const result = await db.insert(audioTranscriptions).values(data);
-  return result[0];
+  const insertId =
+    typeof result[0] === "number"
+      ? result[0]
+      : (result[0] as any)?.insertId ?? (result[0] as any)?.id;
+
+  if (!insertId) {
+    return result[0];
+  }
+
+  return { id: insertId };
 }
 
 export async function getAudioTranscriptionById(id: number) {
@@ -219,7 +268,12 @@ export async function deleteUser(userId: number) {
   await db.delete(users).where(eq(users.id, userId));
 }
 
-export async function inviteUser(data: { email: string, name: string, role: 'user' | 'admin', permissions: string }) {
+export async function inviteUser(data: {
+  email: string;
+  name: string;
+  role: "user" | "admin" | "medico" | "recepcionista" | "enfermeiro";
+  permissions: string;
+}) {
   const db = await getDb();
   if (!db) return;
   
@@ -231,13 +285,224 @@ export async function inviteUser(data: { email: string, name: string, role: 'use
     name: data.name,
     role: data.role,
     permissions: data.permissions,
-    status: 'active',
+    status: 'inactive',
     openId: `invited_${data.email}`, // Temporary openId
   }).onDuplicateKeyUpdate({
     set: {
+      name: data.name,
       role: data.role,
       permissions: data.permissions,
-      status: 'active'
+      status: 'inactive'
     }
+  });
+}
+
+function normalizeUserRow<T extends Record<string, any>>(row: T | undefined | null) {
+  if (!row) return row;
+  return {
+    ...row,
+    mustChangePassword: Boolean(row.mustChangePassword),
+    twoFactorEnabled: Boolean(row.twoFactorEnabled),
+  };
+}
+
+function makeLocalOpenId() {
+  return `local_${randomBytes(12).toString("hex")}`;
+}
+
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return normalizeUserRow(result[0] as any);
+}
+
+export async function getUserById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return normalizeUserRow(result[0] as any);
+}
+
+export async function updateUserLastSignedIn(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, userId));
+}
+
+export async function updateUserPassword(userId: number, passwordHash: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(users)
+    .set({
+      password: passwordHash,
+      mustChangePassword: 0,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+}
+
+export async function updateUser2FABackupCodes(userId: number, backupCodesJson: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(users)
+    .set({
+      twoFactorBackupCodes: backupCodesJson,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+}
+
+export async function setUser2FA(
+  userId: number,
+  params: { secret: string; enabled: boolean; backupCodesJson: string }
+) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(users)
+    .set({
+      twoFactorSecret: params.secret,
+      twoFactorEnabled: params.enabled ? 1 : 0,
+      twoFactorBackupCodes: params.backupCodesJson,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+}
+
+export async function disableUser2FA(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(users)
+    .set({
+      twoFactorSecret: null,
+      twoFactorEnabled: 0,
+      twoFactorBackupCodes: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+}
+
+export async function createInvitation(data: {
+  email: string;
+  name: string;
+  role: "user" | "admin" | "medico" | "recepcionista" | "enfermeiro";
+  token: string;
+  invitedById: number;
+  expiresAt: Date;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(sql`user_invitations`).values({
+    email: data.email,
+    name: data.name,
+    role: data.role,
+    token: data.token,
+    invitedById: data.invitedById,
+    expiresAt: data.expiresAt,
+  });
+}
+
+export async function getPendingInvitations() {
+  const db = await getDb();
+  if (!db) return [];
+  return (await db.execute(
+    sql`select * from user_invitations where usedAt is null and expiresAt > now() order by createdAt desc`
+  )) as any[];
+}
+
+export async function getInvitationByToken(token: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = (await db.execute(
+    sql`select * from user_invitations where token = ${token} limit 1`
+  )) as any[];
+  return result[0] as any;
+}
+
+export async function markInvitationUsed(invitationId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(sql`user_invitations`)
+    .set({ usedAt: new Date() })
+    .where(eq(sql`id`, invitationId));
+}
+
+export async function createUserFromInvite(data: {
+  email: string;
+  name: string;
+  role: "user" | "admin" | "medico" | "recepcionista" | "enfermeiro";
+  passwordHash: string;
+}) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const existing = await getUserByEmail(data.email);
+  if (existing) {
+    await db
+      .update(users)
+      .set({
+        name: data.name,
+        role: data.role,
+        status: "active",
+        password: data.passwordHash,
+        mustChangePassword: 0,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, existing.id));
+    return getUserById(existing.id);
+  }
+
+  const openId = makeLocalOpenId();
+  await db.insert(users).values({
+    openId,
+    name: data.name,
+    email: data.email,
+    loginMethod: "local",
+    role: data.role,
+    status: "active",
+    permissions: "[]",
+    password: data.passwordHash,
+    mustChangePassword: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    lastSignedIn: new Date(),
+  });
+
+  return getUserByEmail(data.email);
+}
+
+export async function getSmtpSettings() {
+  const db = await getDb();
+  if (!db) return null;
+  const result = (await db.execute(sql`select * from smtp_settings limit 1`)) as any[];
+  return (result[0] as any) ?? null;
+}
+
+export async function saveSmtpSettings(data: {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  password: string;
+  fromName?: string;
+  fromEmail?: string;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(sql`smtp_settings`);
+  await db.insert(sql`smtp_settings`).values({
+    host: data.host,
+    port: data.port,
+    secure: data.secure ? 1 : 0,
+    user: data.user,
+    password: data.password,
+    fromName: data.fromName ?? null,
+    fromEmail: data.fromEmail ?? null,
+    updatedAt: new Date(),
   });
 }

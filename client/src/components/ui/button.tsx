@@ -10,10 +10,12 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        premium:
+          "relative overflow-hidden border border-[#d9b977]/60 bg-[linear-gradient(135deg,#8A6526_0%,#C9A55B_26%,#F6E2A6_50%,#B8863B_74%,#8A6526_100%)] text-[#050505] shadow-[0_14px_34px_rgba(201,165,91,0.28)] before:absolute before:inset-[1px] before:rounded-[inherit] before:bg-[linear-gradient(180deg,rgba(255,255,255,0.34),rgba(255,255,255,0.02))] before:opacity-90 before:content-[''] after:absolute after:-left-[38%] after:top-[-130%] after:h-[320%] after:w-[42%] after:rotate-[18deg] after:bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.85),transparent)] after:transition-transform after:duration-500 after:content-[''] hover:-translate-y-0.5 hover:brightness-105 hover:shadow-[0_20px_40px_rgba(201,165,91,0.36)] hover:after:translate-x-[240%]",
         destructive:
           "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
         outline:
-          "border bg-transparent shadow-xs hover:bg-accent dark:bg-transparent dark:border-input dark:hover:bg-input/50",
+          "border border-gold/25 bg-[linear-gradient(180deg,rgba(255,255,255,0.46),rgba(255,255,255,0.14))] shadow-[inset_0_1px_0_rgba(255,255,255,0.42)] hover:border-gold/50 hover:bg-[linear-gradient(90deg,rgba(201,165,91,0.08),rgba(255,250,238,0.88),rgba(201,165,91,0.12))] dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] dark:border-input dark:hover:bg-[linear-gradient(90deg,rgba(201,165,91,0.12),rgba(26,24,22,0.92),rgba(201,165,91,0.16))]",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost:

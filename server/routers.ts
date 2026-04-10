@@ -1,4 +1,4 @@
-import { COOKIE_NAME } from "@shared/const";
+﻿import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
@@ -7,21 +7,123 @@ import * as db from "./db";
 import * as dbComplete from "./db_complete";
 import { TRPCError } from "@trpc/server";
 import { clinicalEvolutionRouter } from "./routers/clinical-evolution";
+import { twoFactorRouter } from "./routers/auth-secure";
+import { generateSecureToken, verifyPassword } from "./_core/auth";
+import { inviteEmailTemplate, sendEmail } from "./_core/mailer";
+import { verifyTotpCode } from "./_core/totp";
+import { createAuditLog } from "./features_special";
+import { generateSecureSystemExport } from "./lib/system-export";
+import { createD4SignService, getD4SignIntegrationStatus } from "./lib/d4sign-integration";
+import { createD4SignService as createSignatureDispatchService, SAFE_MAP } from "./d4sign";
+
+const SUPER_ADMIN_EMAIL = "contato@drwesleycamara.com.br";
+
+function stripHtmlForSignature(value?: string | null) {
+  return String(value ?? "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+function escapePdfText(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+
+function buildSimplePdfBuffer(title: string, lines: string[]) {
+  const sanitizedLines = lines.flatMap((line) => {
+    const normalized = String(line ?? "").replace(/\r/g, "");
+    if (!normalized) return [""];
+    return normalized.split("\n");
+  });
+
+  const contentLines = [
+    "BT",
+    "/F1 14 Tf",
+    "50 800 Td",
+    "18 TL",
+    `(${escapePdfText(title)}) Tj`,
+    "T*",
+    "/F1 11 Tf",
+    ...sanitizedLines.map((line) => `(${escapePdfText(line)}) Tj\nT*`),
+    "ET",
+  ].join("\n");
+
+  const objects = [
+    "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj",
+    "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj",
+    "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj",
+    "4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj",
+    `5 0 obj << /Length ${Buffer.byteLength(contentLines, "latin1")} >> stream\n${contentLines}\nendstream\nendobj`,
+  ];
+
+  let pdf = "%PDF-1.4\n";
+  const offsets: number[] = [0];
+  for (const object of objects) {
+    offsets.push(Buffer.byteLength(pdf, "latin1"));
+    pdf += `${object}\n`;
+  }
+  const xrefOffset = Buffer.byteLength(pdf, "latin1");
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+  for (let index = 1; index <= objects.length; index += 1) {
+    pdf += `${String(offsets[index]).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return Buffer.from(pdf, "latin1");
+}
+
+function getAppBaseUrl(req: { headers: Record<string, unknown>; secure?: boolean }) {
+  if (process.env.APP_URL) return process.env.APP_URL;
+
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  const forwardedHost = req.headers["x-forwarded-host"];
+  const host = forwardedHost || req.headers.host;
+  const protocol = forwardedProto || (req.secure ? "https" : "http");
+
+  if (Array.isArray(host)) {
+    return `${Array.isArray(protocol) ? protocol[0] : protocol}://${host[0]}`;
+  }
+
+  return `${Array.isArray(protocol) ? protocol[0] : protocol}://${host || "localhost:3000"}`;
+}
 
 export const appRouter = router({
   system: systemRouter,
-  
-  // ─── AUTH ────────────────────────────────────────────────────────────────
+
+  // AUTH
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
+    updateMe: protectedProcedure
+      .input(z.object({
+        name: z.string().optional(),
+        email: z.string().email().optional(),
+        specialty: z.string().optional(),
+        profession: z.string().optional(),
+        crm: z.string().optional(),
+        professionalLicenseType: z.enum(["CRM", "COREN"]).optional(),
+        professionalLicenseState: z.string().length(2).optional(),
+        phone: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await dbComplete.updateUserProfile(ctx.user.id, input);
+        const updatedUser = await db.getUserById(ctx.user.id);
+        return { success: true, user: updatedUser };
+      }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
   }),
-
-  // ─── ICD-10 ──────────────────────────────────────────────────────────────
+  twoFactor: twoFactorRouter,
   icd10: router({
     search: publicProcedure
       .input(z.object({ query: z.string().min(1), limit: z.number().optional() }))
@@ -52,7 +154,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── AUDIO ───────────────────────────────────────────────────────────────
+  // â”€â”€â”€ AUDIO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   audio: router({
     createTranscription: protectedProcedure
       .input(z.object({ audioUrl: z.string(), audioKey: z.string(), medicalRecordId: z.number().optional() }))
@@ -82,10 +184,10 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── CLINICAL EVOLUTION ──────────────────────────────────────────────────
+  // â”€â”€â”€ CLINICAL EVOLUTION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   clinicalEvolution: clinicalEvolutionRouter,
 
-  // ─── ADMIN ───────────────────────────────────────────────────────────────
+  // â”€â”€â”€ ADMIN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   admin: router({
     getUsers: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
@@ -121,17 +223,113 @@ export const appRouter = router({
         return dbComplete.getAuditLogs(input.limit);
       }),
 
+    generateSystemExport: protectedProcedure
+      .input(z.object({
+        currentPassword: z.string().min(1),
+        exportPassword: z.string().min(12),
+        includeFiles: z.boolean().default(false),
+        securityCode: z.string().optional(),
+        reason: z.string().max(500).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+
+        const user = await db.getUserById(ctx.user.id);
+        const storedPasswordHash = (user as any)?.passwordHash ?? (user as any)?.password;
+        if (!user || !storedPasswordHash) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Usuário inválido." });
+        }
+
+        const passwordOk = await verifyPassword(input.currentPassword, storedPasswordHash);
+        if (!passwordOk) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Senha atual incorreta." });
+        }
+
+        if (user.twoFactorEnabled) {
+          if (!input.securityCode || !user.twoFactorSecret || !verifyTotpCode(input.securityCode, user.twoFactorSecret)) {
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "Informe um código válido do autenticador para exportar os dados.",
+            });
+          }
+        }
+
+        const exported = await generateSecureSystemExport({
+          exportPassword: input.exportPassword,
+          includeFiles: input.includeFiles,
+          reason: input.reason,
+          requestedBy: {
+            id: ctx.user.id,
+            name: ctx.user.name,
+            email: ctx.user.email,
+          },
+        });
+
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "system_export_generated",
+          entityType: "system_export",
+          entityId: 0,
+          details: `Exportação completa do sistema gerada. Tabelas: ${exported.tableCount}, registros: ${exported.rowCount}, arquivos: ${exported.fileCount}. Motivo: ${input.reason || "não informado"}.`,
+          ipAddress: ctx.req.ip || null,
+        });
+
+        return {
+          ...exported,
+          downloadUrl: `/api/admin/system-export/${exported.token}`,
+        };
+      }),
+
     inviteUser: protectedProcedure
       .input(z.object({
         email: z.string().email(),
         name: z.string(),
-        role: z.enum(['user', 'admin']),
+        role: z.enum(['user', 'admin', 'medico', 'recepcionista', 'enfermeiro']),
         permissions: z.string(),
       }))
       .mutation(async ({ ctx, input }) => {
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
-        await db.inviteUser(input);
-        return { success: true };
+
+        const normalizedEmail = input.email.toLowerCase().trim();
+        const existingUser = await db.getUserByEmail(normalizedEmail);
+        if (existingUser && existingUser.status === 'active' && ((existingUser as any).passwordHash || (existingUser as any).password)) {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Ja existe um usuario ativo com este e-mail.' });
+        }
+
+        await db.inviteUser({
+          email: normalizedEmail,
+          name: input.name,
+          role: input.role,
+          permissions: input.permissions,
+        });
+
+        const token = generateSecureToken(32);
+        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+        await db.createInvitation({
+          email: normalizedEmail,
+          name: input.name,
+          role: input.role,
+          token,
+          invitedById: ctx.user.id,
+          expiresAt,
+        });
+
+        const acceptUrl = `${getAppBaseUrl(ctx.req)}/aceitar-convite?token=${token}`;
+        const { subject, html } = inviteEmailTemplate({
+          name: input.name,
+          inviterName: ctx.user.name || 'Administrador',
+          role: input.role,
+          acceptUrl,
+          expiresIn: '48 horas',
+        });
+
+        const emailResult = await sendEmail({ to: normalizedEmail, subject, html });
+        return {
+          success: true,
+          emailSent: emailResult.success,
+          manualLink: emailResult.success ? null : acceptUrl,
+          warning: emailResult.success ? null : `E-mail nao enviado: ${emailResult.error}`,
+        };
       }),
 
     updateUserStatus: protectedProcedure
@@ -159,7 +357,10 @@ export const appRouter = router({
     deleteUser: protectedProcedure
       .input(z.object({ userId: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+        const isSuperAdmin = ctx.user.role === 'admin' && String(ctx.user.email || "").toLowerCase() === SUPER_ADMIN_EMAIL;
+        if (!isSuperAdmin) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'A exclusão de cadastros só pode ser feita por Wésley Câmara.' });
+        }
         await db.deleteUser(input.userId);
         return { success: true };
       }),
@@ -214,7 +415,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── PATIENTS ────────────────────────────────────────────────────────────
+  // â”€â”€â”€ PATIENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   patients: router({
     list: protectedProcedure
       .input(z.object({ query: z.string().optional(), limit: z.number().optional() }))
@@ -255,7 +456,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── APPOINTMENTS ────────────────────────────────────────────────────────
+  // â”€â”€â”€ APPOINTMENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   appointments: router({
     create: protectedProcedure
       .input(z.object({
@@ -263,6 +464,7 @@ export const appRouter = router({
         doctorId: z.number(),
         scheduledAt: z.string(),
         durationMinutes: z.number(),
+        room: z.string().min(1),
         type: z.string(),
         notes: z.string().optional(),
         isRetroactive: z.boolean().optional(),
@@ -291,7 +493,39 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── PRESCRIPTIONS ───────────────────────────────────────────────────────
+  appointmentBlocks: router({
+    list: protectedProcedure
+      .input(z.object({
+        from: z.string(),
+        to: z.string(),
+      }))
+      .query(async ({ input }) => {
+        return dbComplete.listAppointmentBlocks(input.from, input.to);
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        title: z.string().min(1),
+        notes: z.string().optional(),
+        room: z.string().optional(),
+        doctorId: z.number().optional(),
+        startsAt: z.string(),
+        endsAt: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return dbComplete.createAppointmentBlock(input, ctx.user.id);
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({
+        blockId: z.number(),
+      }))
+      .mutation(async ({ input }) => {
+        return dbComplete.deleteAppointmentBlock(input.blockId);
+      }),
+  }),
+
+  // â”€â”€â”€ PRESCRIPTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   prescriptions: router({
     create: protectedProcedure
       .input(z.object({
@@ -311,20 +545,21 @@ export const appRouter = router({
       }),
 
     listTemplates: protectedProcedure.query(async ({ ctx }) => {
-      return dbComplete.listPrescriptionTemplates();
+      return dbComplete.listPrescriptionTemplatesNormalized();
     }),
 
     createTemplate: protectedProcedure
       .input(z.object({
         name: z.string(),
         content: z.string(),
+        type: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        return dbComplete.createPrescriptionTemplate(input, ctx.user.id);
+        return dbComplete.createPrescriptionTemplateNormalized(input, ctx.user.id);
       }),
   }),
 
-  // ─── EXAM REQUESTS ───────────────────────────────────────────────────────
+  // â”€â”€â”€ EXAM REQUESTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   exams: router({
     create: protectedProcedure
       .input(z.object({
@@ -345,7 +580,7 @@ export const appRouter = router({
       }),
 
     listTemplates: protectedProcedure.query(async ({ ctx }) => {
-      return dbComplete.listExamTemplates();
+      return dbComplete.listExamTemplatesNormalized();
     }),
 
     createTemplate: protectedProcedure
@@ -354,11 +589,45 @@ export const appRouter = router({
         content: z.string(),
       }))
       .mutation(async ({ ctx, input }) => {
-        return dbComplete.createExamTemplate(input, ctx.user.id);
+        return dbComplete.createExamTemplateNormalized(input, ctx.user.id);
       }),
   }),
 
-  // ─── FINANCIAL ───────────────────────────────────────────────────────────
+  examRequests: router({
+    create: protectedProcedure
+      .input(z.object({
+        patientId: z.number(),
+        specialty: z.string().optional(),
+        clinicalIndication: z.string().optional(),
+        content: z.string(),
+        observations: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return dbComplete.createExamRequest(input, ctx.user.id);
+      }),
+
+    getByPatient: protectedProcedure
+      .input(z.object({ patientId: z.number() }))
+      .query(async ({ input }) => {
+        return dbComplete.getExamRequestsByPatient(input.patientId);
+      }),
+
+    listTemplates: protectedProcedure.query(async () => {
+      return dbComplete.listExamTemplatesNormalized();
+    }),
+
+    createTemplate: protectedProcedure
+      .input(z.object({
+        name: z.string(),
+        content: z.string(),
+        specialty: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return dbComplete.createExamTemplateNormalized(input, ctx.user.id);
+      }),
+  }),
+
+  // â”€â”€â”€ FINANCIAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   financial: router({
     create: protectedProcedure
       .input(z.object({
@@ -388,8 +657,17 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── CATALOG ─────────────────────────────────────────────────────────────
+  // â”€â”€â”€ CATALOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   catalog: router({
+    searchTuss: protectedProcedure
+      .input(z.object({
+        query: z.string().optional(),
+        limit: z.number().optional(),
+      }))
+      .query(async ({ input }) => {
+        return dbComplete.searchTussCatalog(input.query, input.limit);
+      }),
+
     listProcedures: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listProcedures();
     }),
@@ -467,7 +745,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── INVENTORY ───────────────────────────────────────────────────────────
+  // â”€â”€â”€ INVENTORY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   inventory: router({
     listProducts: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listInventoryProducts();
@@ -509,24 +787,28 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── PHOTOS ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€ PHOTOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   photos: router({
     getByPatient: protectedProcedure
       .input(z.object({
         patientId: z.number(),
         category: z.string().optional(),
+        folderId: z.number().nullable().optional(),
       }))
       .query(async ({ input }) => {
-        return dbComplete.getPatientPhotos(input.patientId, input.category);
+        return dbComplete.getPatientPhotos(input.patientId, input.category, input.folderId);
       }),
 
     upload: protectedProcedure
       .input(z.object({
         patientId: z.number(),
+        folderId: z.number().nullable().optional(),
         category: z.string(),
         description: z.string().optional(),
         base64: z.string(),
         mimeType: z.string(),
+        originalFileName: z.string().optional(),
+        takenAt: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         return dbComplete.uploadPatientPhoto(input, ctx.user.id);
@@ -539,7 +821,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── CHAT ────────────────────────────────────────────────────────────────
+  // â”€â”€â”€ CHAT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   chat: router({
     getMessages: protectedProcedure
       .input(z.object({
@@ -560,7 +842,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── CLINIC ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€ CLINIC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   clinic: router({
     get: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.getClinicSettings();
@@ -592,7 +874,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── FISCAL ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€ FISCAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   fiscal: router({
     get: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.getFiscalSettings();
@@ -603,8 +885,18 @@ export const appRouter = router({
         cnpj: z.string().optional(),
         razaoSocial: z.string().optional(),
         nomeFantasia: z.string().optional(),
+        inscricaoMunicipal: z.string().optional(),
+        inscricaoEstadual: z.string().optional(),
+        codigoMunicipio: z.string().optional(),
+        telefone: z.string().optional(),
+        email: z.string().optional(),
+        cep: z.string().optional(),
         municipio: z.string().optional(),
         uf: z.string().optional(),
+        bairro: z.string().optional(),
+        logradouro: z.string().optional(),
+        numero: z.string().optional(),
+        complemento: z.string().optional(),
         optanteSimplesNacional: z.boolean().optional(),
         regimeApuracao: z.string().optional(),
         codigoTributacaoNacional: z.string().optional(),
@@ -617,15 +909,49 @@ export const appRouter = router({
         ufIncidencia: z.string().optional(),
         descricaoServicoPadrao: z.string().optional(),
         textoLegalFixo: z.string().optional(),
+        codigoServico: z.string().optional(),
+        itemListaServico: z.string().optional(),
+        cnaeServico: z.string().optional(),
+        webserviceUrl: z.string().optional(),
         ambiente: z.enum(['homologacao', 'producao']).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
         return dbComplete.upsertFiscalSettings(input);
       }),
+
+    uploadCertificate: protectedProcedure
+      .input(z.object({
+        fileName: z.string().min(1),
+        mimeType: z.string().optional(),
+        fileBase64: z.string().min(16),
+        password: z.string().min(1),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+        return dbComplete.saveFiscalCertificate(input);
+      }),
+
+    testNationalApi: protectedProcedure
+      .input(z.object({
+        ambiente: z.enum(['homologacao', 'producao']).optional(),
+      }).optional())
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+        return dbComplete.testFiscalNationalApi(input?.ambiente);
+      }),
+
+    syncMunicipalParameters: protectedProcedure
+      .input(z.object({
+        ambiente: z.enum(['homologacao', 'producao']).optional(),
+      }).optional())
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+        return dbComplete.syncFiscalMunicipalParameters(input?.ambiente);
+      }),
   }),
 
-  // ─── NFSE ────────────────────────────────────────────────────────────────
+  // â”€â”€â”€ NFSE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   nfse: router({
     list: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listNfse();
@@ -634,7 +960,7 @@ export const appRouter = router({
     create: protectedProcedure
       .input(z.object({
         tomadorDocumento: z.string(),
-        tomadorTipoDocumento: z.string(),
+        tomadorTipoDocumento: z.enum(["cpf", "cnpj"]).default("cpf"),
         tomadorNome: z.string(),
         tomadorEmail: z.string().optional(),
         tomadorTelefone: z.string().optional(),
@@ -646,8 +972,16 @@ export const appRouter = router({
         tomadorNumero: z.string().optional(),
         tomadorComplemento: z.string().optional(),
         patientId: z.number().optional(),
+        budgetId: z.number().optional(),
         descricaoServico: z.string(),
         complementoDescricao: z.string().optional(),
+        valorServico: z.number().min(1),
+        valorDeducao: z.number().optional(),
+        valorDescontoIncondicionado: z.number().optional(),
+        formaPagamento: z.enum(["pix", "dinheiro", "cartao_credito", "cartao_debito", "boleto", "transferencia", "financiamento", "outro"]).default("pix"),
+        detalhesPagamento: z.string().optional(),
+        dataCompetencia: z.string().optional(),
+        ambiente: z.enum(['homologacao', 'producao']).default('homologacao'),
       }))
       .mutation(async ({ ctx, input }) => {
         return dbComplete.createNfse(input, ctx.user.id);
@@ -656,7 +990,7 @@ export const appRouter = router({
     emit: protectedProcedure
       .input(z.object({ nfseId: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        return dbComplete.emitNfse(input.nfseId);
+        return dbComplete.emitNfseThroughNationalApi(input.nfseId, ctx.user.id);
       }),
 
     cancel: protectedProcedure
@@ -669,7 +1003,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── BUDGETS ─────────────────────────────────────────────────────────────
+  // â”€â”€â”€ BUDGETS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   budgets: router({
     list: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listBudgets();
@@ -701,9 +1035,21 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         return dbComplete.approveBudget(input.budgetId);
       }),
+
+    emitNfse: protectedProcedure
+      .input(z.object({
+        budgetId: z.number(),
+        formaPagamento: z.enum(["pix", "dinheiro", "cartao_credito", "cartao_debito", "boleto", "transferencia", "financiamento", "outro"]).default("pix"),
+        detalhesPagamento: z.string().optional(),
+        dataCompetencia: z.string().optional(),
+        ambiente: z.enum(['homologacao', 'producao']).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return dbComplete.emitBudgetNfse(input.budgetId, input, ctx.user.id);
+      }),
   }),
 
-  // ─── CRM ─────────────────────────────────────────────────────────────────
+  // â”€â”€â”€ CRM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   crm: router({
     list: protectedProcedure
       .input(z.object({ limit: z.number().optional() }))
@@ -734,22 +1080,122 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── SIGNATURES ───────────────────────────────────────────────────────────
+  // â”€â”€â”€ SIGNATURES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   signatures: router({
+    getIntegrationStatus: protectedProcedure.query(async ({ ctx }) => {
+      return getD4SignIntegrationStatus();
+    }),
+    testConnection: protectedProcedure.query(async ({ ctx }) => {
+      const service = await createD4SignService();
+      if (!service) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Credenciais D4Sign não configuradas no ambiente da clínica.",
+        });
+      }
+
+      const safes = await service.listSafes();
+      return {
+        connected: true,
+        safeCount: safes.length,
+        checkedAt: new Date().toISOString(),
+      };
+    }),
+    listSafes: protectedProcedure.query(async ({ ctx }) => {
+      const service = await createD4SignService();
+      if (!service) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Credenciais D4Sign não configuradas no ambiente da clínica.",
+        });
+      }
+
+      const safes = await service.listSafes();
+      return safes;
+    }),
     sendForSignature: protectedProcedure
       .input(z.object({
         documentId: z.number(),
         documentType: z.string(),
       }))
       .mutation(async ({ ctx, input }) => {
-        return dbComplete.sendForSignature(input.documentId, input.documentType, ctx.user.id);
+        const service = await createSignatureDispatchService();
+        if (!service) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "Credenciais D4Sign não configuradas para envio.",
+          });
+        }
+
+        if (!ctx.user.email) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "O usuário logado precisa ter um e-mail válido para assinar via D4Sign.",
+          });
+        }
+
+        let patientId: number | null = null;
+        let title = "";
+        let body = "";
+
+        if (input.documentType === "prescription") {
+          const prescription = await dbComplete.getPrescriptionById(input.documentId);
+          if (!prescription) throw new TRPCError({ code: "NOT_FOUND", message: "Prescrição não encontrada." });
+          patientId = Number(prescription.patientId);
+          title = "Prescrição médica";
+          body = `${stripHtmlForSignature(prescription.content)}\n\nObservações: ${prescription.observations || "Não informadas."}`;
+        } else if (input.documentType === "exam_request") {
+          const examRequest = await dbComplete.getExamRequestById(input.documentId);
+          if (!examRequest) throw new TRPCError({ code: "NOT_FOUND", message: "Pedido de exames não encontrado." });
+          patientId = Number(examRequest.patientId);
+          title = "Pedido de exames";
+          body = `${stripHtmlForSignature(examRequest.content)}\n\nObservações: ${examRequest.observations || "Não informadas."}`;
+        } else {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Este tipo de documento ainda não está habilitado para envio à D4Sign.",
+          });
+        }
+
+        const patient = patientId ? await dbComplete.getPatientById(patientId) : null;
+        const patientName = patient?.fullName || patient?.name || `Paciente ${patientId}`;
+        const fileName = `${title.toLowerCase().replace(/\s+/g, "_")}_${patientName.replace(/\s+/g, "_")}_${Date.now()}.pdf`;
+        const pdfBuffer = buildSimplePdfBuffer(title, [
+          `Paciente: ${patientName}`,
+          `Profissional: ${ctx.user.name || ctx.user.email}`,
+          `Data: ${new Date().toLocaleString("pt-BR")}`,
+          "",
+          ...body.split("\n"),
+        ]);
+
+        const sent = await service.sendDocumentForSignature({
+          safeUuid: SAFE_MAP.prontuario,
+          base64Content: pdfBuffer.toString("base64"),
+          fileName,
+          signerEmail: ctx.user.email,
+          signerName: ctx.user.name || ctx.user.email,
+          message: `Documento ${title} disponível para assinatura em ${patientName}.`,
+          useIcpBrasil: false,
+        });
+
+        await dbComplete.sendForSignature(input.documentId, input.documentType, ctx.user.id, {
+          d4signDocumentKey: sent.documentUuid,
+          d4signSafeKey: SAFE_MAP.prontuario,
+          status: "enviado",
+          signatureType: "eletronica",
+        });
+
+        return {
+          success: true,
+          documentUuid: sent.documentUuid,
+        };
       }),
   }),
 
-  // ─── TEMPLATES ────────────────────────────────────────────────────────────
+  // â”€â”€â”€ TEMPLATES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   templates: router({
     list: protectedProcedure.query(async ({ ctx }) => {
-      return dbComplete.listTemplates();
+      return dbComplete.listTemplatesNormalized();
     }),
 
     create: protectedProcedure
@@ -763,18 +1209,28 @@ export const appRouter = router({
         })),
       }))
       .mutation(async ({ ctx, input }) => {
-        return dbComplete.createTemplate(input, ctx.user.id);
+        return dbComplete.createTemplateNormalized(input, ctx.user.id);
       }),
   }),
 
-  // ─── MEDICAL RECORDS ──────────────────────────────────────────────────────
+  // â”€â”€â”€ MEDICAL RECORDS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   medicalRecords: router({
     listTemplates: protectedProcedure.query(async ({ ctx }) => {
-      return dbComplete.listMedicalRecordTemplates();
+      return dbComplete.listMedicalRecordTemplatesNormalized();
     }),
+    getHistory: protectedProcedure
+      .input(z.object({ patientId: z.number() }))
+      .query(async ({ input }) => {
+        return dbComplete.getPatientHistory(input.patientId);
+      }),
+    getDocuments: protectedProcedure
+      .input(z.object({ patientId: z.number() }))
+      .query(async ({ input }) => {
+        return dbComplete.getPatientDocuments(input.patientId);
+      }),
   }),
 
-  // ─── WHATSAPP ─────────────────────────────────────────────────────────────
+  // â”€â”€â”€ WHATSAPP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   whatsapp: router({
     sendMessage: protectedProcedure
       .input(z.object({
@@ -784,9 +1240,44 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         return dbComplete.sendWhatsAppMessage(input.phoneNumber, input.message);
       }),
+    sendAnamnesisRequest: protectedProcedure
+      .input(z.object({
+        patientId: z.number(),
+        title: z.string().optional(),
+        expiresInDays: z.number().min(1).max(60).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return dbComplete.sendPatientAnamnesisRequestViaWhatsApp(
+          input.patientId,
+          ctx.user.id,
+          getAppBaseUrl(ctx.req),
+          {
+            title: input.title,
+            expiresInDays: input.expiresInDays,
+          },
+        );
+      }),
+    sendAppointmentReminder: protectedProcedure
+      .input(z.object({
+        appointmentId: z.number(),
+        customMessage: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return dbComplete.sendAppointmentReminderViaWhatsApp(
+          input.appointmentId,
+          ctx.user.id,
+          getAppBaseUrl(ctx.req),
+          input.customMessage,
+        );
+      }),
+    sendTomorrowReminders: protectedProcedure
+      .mutation(async ({ ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        return dbComplete.sendTomorrowAppointmentReminders(ctx.user.id, getAppBaseUrl(ctx.req));
+      }),
   }),
 
-  // ─── AI ───────────────────────────────────────────────────────────────────
+  // â”€â”€â”€ AI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   ai: router({
     chat: protectedProcedure
       .input(z.object({
@@ -800,7 +1291,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── RETROACTIVE APPOINTMENTS ──────────────────────────────────────────
+  // â”€â”€â”€ RETROACTIVE APPOINTMENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   retroactiveAppointments: router({
     create: protectedProcedure
       .input(z.object({
@@ -810,7 +1301,7 @@ export const appRouter = router({
         durationMinutes: z.number(),
         type: z.string(),
         notes: z.string().optional(),
-        retroactiveJustification: z.string().min(10, "Justificativa deve ter no mínimo 10 caracteres"),
+        retroactiveJustification: z.string().min(10, "Justificativa deve ter no mÃ­nimo 10 caracteres"),
         originalAppointmentDate: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -826,7 +1317,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── ADVANCED PHOTO GALLERY ────────────────────────────────────────────
+  // â”€â”€â”€ ADVANCED PHOTO GALLERY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   photoGallery: router({
     createFolder: protectedProcedure
       .input(z.object({
@@ -835,15 +1326,13 @@ export const appRouter = router({
         description: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        const special = await import("./features_special");
-        return special.createPhotoFolder(input.patientId, input.name, input.description, ctx.user.id);
+        return dbComplete.createPhotoFolder(input.patientId, input.name, input.description, ctx.user.id);
       }),
 
     getFolders: protectedProcedure
       .input(z.object({ patientId: z.number() }))
       .query(async ({ input }) => {
-        const special = await import("./features_special");
-        return special.getPhotoFolders(input.patientId);
+        return dbComplete.getPhotoFolders(input.patientId);
       }),
 
     updateFolder: protectedProcedure
@@ -853,15 +1342,13 @@ export const appRouter = router({
         description: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        const special = await import("./features_special");
-        return special.updatePhotoFolder(input.folderId, { name: input.name, description: input.description });
+        return dbComplete.updatePhotoFolder(input.folderId, { name: input.name, description: input.description });
       }),
 
     deleteFolder: protectedProcedure
       .input(z.object({ folderId: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        const special = await import("./features_special");
-        return special.deletePhotoFolder(input.folderId);
+        return dbComplete.deletePhotoFolder(input.folderId);
       }),
 
     uploadToFolder: protectedProcedure
@@ -874,16 +1361,16 @@ export const appRouter = router({
         mimeType: z.string(),
       }))
       .mutation(async ({ ctx, input }) => {
-        // Aqui você faria upload para storage e obteria photoUrl e photoKey
-        const special = await import("./features_special");
-        return special.uploadPhotoToFolder(
-          input.patientId,
-          input.folderId,
-          input.category,
-          input.description || null,
-          "https://example.com/photo.jpg", // photoUrl
-          "photo_key_123", // photoKey
-          ctx.user.id
+        return dbComplete.uploadPatientPhoto(
+          {
+            patientId: input.patientId,
+            folderId: input.folderId,
+            category: input.category,
+            description: input.description,
+            base64: input.base64,
+            mimeType: input.mimeType,
+          },
+          ctx.user.id,
         );
       }),
 
@@ -893,8 +1380,7 @@ export const appRouter = router({
         folderId: z.number().nullable(),
       }))
       .query(async ({ input }) => {
-        const special = await import("./features_special");
-        return special.getPhotosByFolder(input.folderId, input.patientId);
+        return dbComplete.getPatientPhotos(input.patientId, undefined, input.folderId);
       }),
 
     createComparison: protectedProcedure
@@ -903,12 +1389,112 @@ export const appRouter = router({
         photoIds: z.array(z.number()).min(2).max(4),
       }))
       .mutation(async ({ ctx, input }) => {
-        const special = await import("./features_special");
-        return special.createPhotoComparison(input.patientId, input.photoIds, ctx.user.id);
+        return dbComplete.createPhotoComparison(input.patientId, input.photoIds, ctx.user.id);
+      }),
+
+    createUploadLink: protectedProcedure
+      .input(z.object({
+        patientId: z.number(),
+        folderId: z.number().nullable().optional(),
+        title: z.string().optional(),
+        allowVideos: z.boolean().optional(),
+        expiresInDays: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return dbComplete.createPatientMediaUploadLink(
+          input,
+          ctx.user.id,
+          getAppBaseUrl(ctx.req),
+        );
+      }),
+
+    listUploadLinks: protectedProcedure
+      .input(z.object({
+        patientId: z.number(),
+      }))
+      .query(async ({ input }) => {
+        return dbComplete.listPatientMediaUploadLinks(input.patientId);
+      }),
+
+    revokeUploadLink: protectedProcedure
+      .input(z.object({
+        linkId: z.number(),
+      }))
+      .mutation(async ({ input }) => {
+        return dbComplete.revokePatientMediaUploadLink(input.linkId);
       }),
   }),
 
-  // ─── INTELLIGENT PATIENT SEARCH ────────────────────────────────────────
+  anamnesisShare: router({
+    createLink: protectedProcedure
+      .input(z.object({
+        patientId: z.number(),
+        title: z.string().optional(),
+        templateName: z.string().optional(),
+        anamnesisDate: z.string().optional(),
+        expiresInDays: z.number().optional(),
+        questions: z.array(z.object({
+          text: z.string(),
+          type: z.string(),
+          options: z.array(z.string()).optional(),
+          required: z.boolean().optional(),
+          placeholder: z.string().optional(),
+          followUp: z.object({
+            prompt: z.string(),
+            triggerValues: z.array(z.string()),
+            required: z.boolean().optional(),
+            placeholder: z.string().optional(),
+          }).optional(),
+        })),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return dbComplete.createAnamnesisShareLink(
+          input,
+          ctx.user.id,
+          getAppBaseUrl(ctx.req),
+        );
+      }),
+  }),
+
+  anamneses: router({
+    listByPatient: protectedProcedure
+      .input(z.object({ patientId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return dbComplete.listPatientAnamneses(input.patientId, ctx.user.role);
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        patientId: z.number(),
+        title: z.string().min(1),
+        templateName: z.string().optional(),
+        anamnesisDate: z.string().optional(),
+        respondentName: z.string().optional(),
+        questions: z.array(z.object({
+          text: z.string(),
+          type: z.string(),
+          options: z.array(z.string()).optional(),
+          required: z.boolean().optional(),
+          placeholder: z.string().optional(),
+          followUp: z.object({
+            prompt: z.string(),
+            triggerValues: z.array(z.string()),
+            required: z.boolean().optional(),
+            placeholder: z.string().optional(),
+          }).optional(),
+        })),
+        answers: z.record(z.string()),
+        profilePhotoBase64: z.string().optional(),
+        profilePhotoMimeType: z.string().optional(),
+        profilePhotoFileName: z.string().optional(),
+        profilePhotoDeclarationAccepted: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return dbComplete.createPatientAnamnesis(input, ctx.user.id);
+      }),
+  }),
+
+  // â”€â”€â”€ INTELLIGENT PATIENT SEARCH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   patientSearch: router({
     autocomplete: protectedProcedure
       .input(z.object({
@@ -921,7 +1507,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── CUSTOMIZABLE PERMISSIONS ──────────────────────────────────────────
+  // â”€â”€â”€ CUSTOMIZABLE PERMISSIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   permissions: router({
     checkPermission: protectedProcedure
       .input(z.object({
@@ -1000,3 +1586,7 @@ export const appRouter = router({
 });
 
 export type AppRouter = typeof appRouter;
+
+
+
+

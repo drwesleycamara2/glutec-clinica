@@ -13,7 +13,9 @@ import {
   generateBackupCodes,
   hashBackupCodes,
 } from "../_core/totp";
-import { generateSecureToken } from "../_core/auth";
+import { createSessionToken, generateSecureToken } from "../_core/auth";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { getSessionCookieOptions } from "../_core/cookies";
 import { sendEmail, inviteEmailTemplate, testSmtpConnection } from "../_core/mailer";
 
 const SUPER_ADMIN_EMAIL = "contato@drwesleycamara.com.br";
@@ -54,6 +56,16 @@ export const twoFactorRouter = router({
         enabled: true,
         backupCodesJson: hashedCodesJson,
       });
+
+      const refreshedUser = (await db.getUserById(ctx.user.id)) ?? ctx.user;
+      const sessionToken = await createSessionToken({
+        userId: refreshedUser.id,
+        email: refreshedUser.email!,
+        role: refreshedUser.role,
+        twoFactorVerified: true,
+      });
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
       return {
         success: true,

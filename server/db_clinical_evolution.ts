@@ -1,5 +1,4 @@
 import { eq, and } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
 import { 
   clinicalEvolutions, 
   signatureAuditLog,
@@ -8,6 +7,7 @@ import {
   ClinicalEvolution,
   SignatureAuditLog
 } from "../drizzle/schema-clinical-evolution";
+import { users } from "../drizzle/schema";
 import { getDb } from "./db";
 
 // ─── Clinical Evolution Operations ───────────────────────────────────────────
@@ -19,7 +19,7 @@ export async function createClinicalEvolution(
   if (!db) throw new Error("Database unavailable");
   
   const result = await db.insert(clinicalEvolutions).values(data);
-  const id = (result as any)[0];
+  const id = (result as any)?.[0]?.insertId ?? (result as any)?.[0] ?? (result as any)?.insertId;
   
   if (!id) return null;
   
@@ -38,12 +38,24 @@ export async function getClinicalEvolutionById(
   if (!db) return null;
   
   const result = await db
-    .select()
+    .select({
+      evolution: clinicalEvolutions,
+      doctorName: users.name,
+      doctorEmail: users.email,
+      doctorRole: users.role,
+    })
     .from(clinicalEvolutions)
+    .leftJoin(users, eq(clinicalEvolutions.doctorId, users.id))
     .where(eq(clinicalEvolutions.id, id))
     .limit(1);
   
-  return result[0] || null;
+  if (!result[0]) return null;
+  return {
+    ...result[0].evolution,
+    doctorName: result[0].doctorName,
+    doctorEmail: result[0].doctorEmail,
+    doctorRole: result[0].doctorRole,
+  } as ClinicalEvolution & Record<string, unknown>;
 }
 
 export async function getClinicalEvolutionsByPatient(
@@ -52,11 +64,24 @@ export async function getClinicalEvolutionsByPatient(
   const db = await getDb();
   if (!db) return [];
   
-  return db
-    .select()
+  const rows = await db
+    .select({
+      evolution: clinicalEvolutions,
+      doctorName: users.name,
+      doctorEmail: users.email,
+      doctorRole: users.role,
+    })
     .from(clinicalEvolutions)
+    .leftJoin(users, eq(clinicalEvolutions.doctorId, users.id))
     .where(eq(clinicalEvolutions.patientId, patientId))
     .orderBy(clinicalEvolutions.createdAt);
+
+  return rows.map((row) => ({
+    ...row.evolution,
+    doctorName: row.doctorName,
+    doctorEmail: row.doctorEmail,
+    doctorRole: row.doctorRole,
+  })) as (ClinicalEvolution & Record<string, unknown>)[];
 }
 
 export async function updateClinicalEvolution(
@@ -90,6 +115,9 @@ export async function signClinicalEvolution(
   doctorCRM: string | undefined,
   d4signDocumentKey: string,
   signatureMethod: "eletronica" | "icp_brasil_a1" | "icp_brasil_a3" = "eletronica",
+  signatureProvider?: string,
+  signatureCertificateLabel?: string,
+  signatureValidationCode?: string,
   ipAddress?: string,
   userAgent?: string
 ): Promise<SignatureAuditLog | null> {
@@ -107,6 +135,9 @@ export async function signClinicalEvolution(
         signedAt: new Date(),
         signedByDoctorId: doctorId,
         signedByDoctorName: doctorName,
+        signatureProvider: signatureProvider ?? null,
+        signatureCertificateLabel: signatureCertificateLabel ?? null,
+        signatureValidationCode: signatureValidationCode ?? null,
       })
       .where(eq(clinicalEvolutions.id, evolutionId));
     
@@ -125,6 +156,9 @@ export async function signClinicalEvolution(
       details: JSON.stringify({
         timestamp: new Date().toISOString(),
         method: signatureMethod,
+        provider: signatureProvider ?? null,
+        certificateLabel: signatureCertificateLabel ?? null,
+        validationCode: signatureValidationCode ?? null,
       }),
     };
     

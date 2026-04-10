@@ -19,14 +19,31 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Calendar, ClipboardList, Settings, ShieldCheck } from "lucide-react";
-import { CSSProperties, useEffect, useRef, useState } from "react";
+import {
+  BarChart3,
+  CalendarDays as Calendar,
+  Camera,
+  ClipboardList,
+  FileText,
+  Files,
+  LayoutDashboard,
+  LogOut,
+  MessageSquare,
+  Package,
+  Receipt,
+  Settings,
+  ShieldCheck,
+  Stethoscope,
+  UserCircle2,
+  Users,
+  Wallet,
+} from "lucide-react";
+import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
+import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
+import { ThemeToggle } from "./ThemeToggle";
 import { Button } from "./ui/button";
-import { ThemeToggle } from './ThemeToggle';
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
@@ -92,7 +109,7 @@ export default function DashboardLayout({
           
           <Button
             onClick={() => {
-              window.location.href = "/api/auth/bypass";
+              window.location.href = "/login";
             }}
             size="lg"
             className="w-full h-14 text-lg font-semibold text-white shadow-lg transition-all transform hover:scale-[1.02] active:scale-[0.98] border-none"

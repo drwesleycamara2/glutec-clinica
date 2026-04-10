@@ -2,6 +2,7 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import * as db from "../db_clinical_evolution";
+import * as coreDb from "../db";
 
 export const clinicalEvolutionRouter = router({
   // Create clinical evolution
@@ -11,11 +12,19 @@ export const clinicalEvolutionRouter = router({
         patientId: z.number(),
         icdCode: z.string().min(1),
         icdDescription: z.string().min(1),
-        clinicalNotes: z.string().min(1),
+        clinicalNotes: z.string(),
+        assistantName: z.string().min(1),
+        assistantUserId: z.number().optional().nullable(),
         audioTranscription: z.string().optional(),
         audioUrl: z.string().optional(),
         audioKey: z.string().optional(),
         appointmentId: z.number().optional(),
+        startedAt: z.string().optional(),
+        endedAt: z.string().optional(),
+        finalizedAt: z.string().optional(),
+        isRetroactive: z.boolean().optional(),
+        retroactiveJustification: z.string().optional(),
+        status: z.enum(["rascunho", "finalizado", "assinado", "cancelado"]).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -25,6 +34,8 @@ export const clinicalEvolutionRouter = router({
         const evolution = await db.createClinicalEvolution({
           patientId: input.patientId,
           doctorId: ctx.user.id,
+          assistantName: input.assistantName.trim(),
+          assistantUserId: input.assistantUserId ?? null,
           icdCode: input.icdCode,
           icdDescription: input.icdDescription,
           clinicalNotes: input.clinicalNotes,
@@ -32,7 +43,12 @@ export const clinicalEvolutionRouter = router({
           audioUrl: input.audioUrl,
           audioKey: input.audioKey,
           appointmentId: input.appointmentId,
-          status: "rascunho",
+          startedAt: input.startedAt ? new Date(input.startedAt) : new Date(),
+          endedAt: input.endedAt ? new Date(input.endedAt) : null,
+          finalizedAt: input.finalizedAt ? new Date(input.finalizedAt) : null,
+          isRetroactive: input.isRetroactive ? 1 : 0,
+          retroactiveJustification: input.retroactiveJustification,
+          status: input.status ?? "rascunho",
           createdBy: ctx.user.id,
         });
 
@@ -75,8 +91,15 @@ export const clinicalEvolutionRouter = router({
         icdCode: z.string().optional(),
         icdDescription: z.string().optional(),
         clinicalNotes: z.string().optional(),
+        assistantName: z.string().min(1).optional(),
+        assistantUserId: z.number().optional().nullable(),
         audioTranscription: z.string().optional(),
         status: z.enum(["rascunho", "finalizado", "assinado", "cancelado"]).optional(),
+        startedAt: z.string().optional(),
+        endedAt: z.string().optional(),
+        finalizedAt: z.string().optional(),
+        isRetroactive: z.boolean().optional(),
+        retroactiveJustification: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -109,11 +132,19 @@ export const clinicalEvolutionRouter = router({
         }
 
         await db.updateClinicalEvolution(input.id, {
+          doctorId: ctx.user.id,
           icdCode: input.icdCode,
           icdDescription: input.icdDescription,
           clinicalNotes: input.clinicalNotes,
+          assistantName: input.assistantName?.trim(),
+          assistantUserId: input.assistantUserId === undefined ? undefined : (input.assistantUserId ?? null),
           audioTranscription: input.audioTranscription,
           status: input.status,
+          startedAt: input.startedAt ? new Date(input.startedAt) : undefined,
+          endedAt: input.endedAt ? new Date(input.endedAt) : undefined,
+          finalizedAt: input.finalizedAt ? new Date(input.finalizedAt) : undefined,
+          isRetroactive: input.isRetroactive === undefined ? undefined : (input.isRetroactive ? 1 : 0),
+          retroactiveJustification: input.retroactiveJustification,
           updatedBy: ctx.user.id,
         });
 
@@ -123,6 +154,19 @@ export const clinicalEvolutionRouter = router({
         throw error;
       }
     }),
+
+  listAssistants: protectedProcedure.query(async () => {
+    const users = await coreDb.getAllUsers();
+    return users
+      .filter((user: any) => user?.status !== "inactive")
+      .map((user: any) => ({
+        id: user.id,
+        name: user.name || user.email || `Usuário ${user.id}`,
+        role: user.role,
+        email: user.email,
+      }))
+      .sort((left: any, right: any) => String(left.name).localeCompare(String(right.name), "pt-BR"));
+  }),
 
   // Delete clinical evolution
   delete: protectedProcedure
@@ -140,11 +184,11 @@ export const clinicalEvolutionRouter = router({
           });
         }
 
-        // Check if user is the doctor who created this evolution
-        if (evolution.doctorId !== ctx.user.id && ctx.user.role !== "admin") {
+        const isSuperAdmin = ctx.user.role === "admin" && String(ctx.user.email || "").toLowerCase() === "contato@drwesleycamara.com.br";
+        if (!isSuperAdmin) {
           throw new TRPCError({
             code: "FORBIDDEN",
-            message: "You do not have permission to delete this evolution",
+            message: "A exclusão de prontuários só pode ser feita pelo administrador principal.",
           });
         }
 
@@ -170,10 +214,13 @@ export const clinicalEvolutionRouter = router({
     .input(
       z.object({
         id: z.number(),
-        d4signDocumentKey: z.string().min(1),
+        d4signDocumentKey: z.string().optional(),
         signatureMethod: z
           .enum(["eletronica", "icp_brasil_a1", "icp_brasil_a3"])
           .default("eletronica"),
+        signatureProvider: z.string().optional(),
+        signatureCertificateLabel: z.string().optional(),
+        signatureValidationCode: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -210,8 +257,11 @@ export const clinicalEvolutionRouter = router({
           ctx.user.id,
           ctx.user.name || "Unknown",
           ctx.user.specialty,
-          input.d4signDocumentKey,
+          input.d4signDocumentKey || `local-${input.signatureMethod}-${Date.now()}`,
           input.signatureMethod,
+          input.signatureProvider,
+          input.signatureCertificateLabel,
+          input.signatureValidationCode,
           ctx.req.ip,
           ctx.req.headers["user-agent"]
         );

@@ -1,15 +1,39 @@
-import { useAuth } from "@/_core/hooks/useAuth";
+﻿import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
-import { Calculator, Plus, Trash2, FileText, Check, X, DollarSign, CreditCard, Clock } from "lucide-react";
-import { useState, useMemo } from "react";
+import {
+  Calculator,
+  Check,
+  CreditCard,
+  DollarSign,
+  FileDown,
+  FileText,
+  Mail,
+  Plus,
+  Receipt,
+  Send,
+  Trash2,
+  AlertTriangle,
+  WalletCards,
+} from "lucide-react";
 import { toast } from "sonner";
 
 interface BudgetItemDraft {
@@ -22,303 +46,645 @@ interface BudgetItemDraft {
   quantity: number;
 }
 
-const COMPLEXITY_LABELS: Record<string, string> = { P: "Pequeno (P)", M: "Médio (M)", G: "Grande (G)" };
+const COMPLEXITY_LABELS: Record<string, string> = {
+  P: "Pequeno (P)",
+  M: "Medio (M)",
+  G: "Grande (G)",
+};
+
+const BUDGET_STATUS_LABELS: Record<string, string> = {
+  rascunho: "Rascunho",
+  enviado: "Enviado",
+  aprovado: "Aprovado",
+  recusado: "Recusado",
+  cancelado: "Cancelado",
+};
+
+const BUDGET_STATUS_COLORS: Record<string, string> = {
+  rascunho: "bg-zinc-100 text-zinc-700 dark:bg-zinc-900 dark:text-zinc-200",
+  enviado: "bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
+  aprovado: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200",
+  recusado: "bg-rose-100 text-rose-900 dark:bg-rose-950/40 dark:text-rose-200",
+  cancelado: "bg-zinc-200 text-zinc-800 dark:bg-zinc-900 dark:text-zinc-300",
+};
+
+const NFSE_STATUS_LABELS: Record<string, string> = {
+  rascunho: "Rascunho fiscal",
+  aguardando: "Aguardando emissao",
+  autorizada: "NFS-e autorizada",
+  erro: "Falha na emissao",
+  cancelada: "Cancelada",
+  substituida: "Substituida",
+};
+
+const NFSE_STATUS_COLORS: Record<string, string> = {
+  rascunho: "bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
+  aguardando: "bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
+  autorizada: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200",
+  erro: "bg-rose-100 text-rose-900 dark:bg-rose-950/40 dark:text-rose-200",
+  cancelada: "bg-zinc-200 text-zinc-800 dark:bg-zinc-900 dark:text-zinc-300",
+  substituida: "bg-sky-100 text-sky-900 dark:bg-sky-950/40 dark:text-sky-200",
+};
+
+const PAYMENT_LABELS: Record<string, string> = {
+  pix: "Pix",
+  dinheiro: "Dinheiro",
+  cartao_credito: "Cartao de credito",
+  cartao_debito: "Cartao de debito",
+  boleto: "Boleto",
+  transferencia: "Transferencia bancaria",
+  financiamento: "Financiamento",
+  outro: "Outro",
+};
 
 function formatCurrency(cents: number): string {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(cents / 100);
+}
+
+function digitsOnly(value?: string | null) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+function buildPaymentLabel(method: string, details?: string | null) {
+  const base = PAYMENT_LABELS[method] ?? method.replace(/_/g, " ");
+  return details?.trim() ? `${base} ${details.trim()}` : base;
 }
 
 export default function Orcamentos() {
-  const { data: budgetsList, isLoading: loadingBudgets, refetch } = trpc.budgets.list.useQuery({});
+  const { data: budgetsList, isLoading: loadingBudgets, refetch } =
+    trpc.budgets.list.useQuery({});
   const { data: procedures } = trpc.catalog.listProcedures.useQuery();
   const { data: paymentPlans } = trpc.catalog.listPaymentPlans.useQuery();
-
-  const createMutation = trpc.budgets.create.useMutation({
-    onSuccess: () => { toast.success("Orçamento criado com sucesso!"); refetch(); setShowCreate(false); resetForm(); },
-    onError: (err) => toast.error(err.message),
-  });
-  const emitMutation = trpc.budgets.emit.useMutation({
-    onSuccess: () => { toast.success("Orçamento emitido!"); refetch(); },
-  });
-  const approveMutation = trpc.budgets.approve.useMutation({
-    onSuccess: () => { toast.success("Orçamento aprovado!"); refetch(); },
-  });
+  const { data: fiscalSettings } = trpc.fiscal.get.useQuery();
+  const { data: patients } = trpc.patients.list.useQuery({ limit: 5000 });
 
   const [showCreate, setShowCreate] = useState(false);
-  const [showDetail, setShowDetail] = useState<number | null>(null);
+  const [showNfseDialog, setShowNfseDialog] = useState(false);
+  const [selectedBudget, setSelectedBudget] = useState<any | null>(null);
   const [patientId, setPatientId] = useState("");
+  const [patientSearch, setPatientSearch] = useState("");
   const [clinicalNotes, setClinicalNotes] = useState("");
   const [items, setItems] = useState<BudgetItemDraft[]>([]);
-
-  // Cascata state
-  const [selectedProcedureId, setSelectedProcedureId] = useState<number | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState("pix");
+  const [paymentDetails, setPaymentDetails] = useState("");
+  const [competenceDate, setCompetenceDate] = useState(
+    new Date().toISOString().slice(0, 10),
+  );
+  const [fiscalEnvironment, setFiscalEnvironment] = useState<
+    "homologacao" | "producao"
+  >("homologacao");
+  const [selectedProcedureId, setSelectedProcedureId] = useState<number | null>(
+    null,
+  );
   const [selectedAreaId, setSelectedAreaId] = useState<number | null>(null);
-  const [selectedComplexity, setSelectedComplexity] = useState<"P" | "M" | "G" | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const linkedPatientId = params.get("patientId");
+    const shouldCreate = params.get("create") === "1";
+
+    if (linkedPatientId && /^\d+$/.test(linkedPatientId)) {
+      setPatientId(linkedPatientId);
+      if (shouldCreate) {
+        setShowCreate(true);
+      }
+    }
+  }, []);
+  const [selectedComplexity, setSelectedComplexity] = useState<
+    "P" | "M" | "G" | null
+  >(null);
 
   const { data: procedureAreas } = trpc.catalog.getAreas.useQuery(
     { procedureId: selectedProcedureId! },
-    { enabled: !!selectedProcedureId }
+    { enabled: !!selectedProcedureId },
   );
   const { data: priceData } = trpc.catalog.getPrice.useQuery(
-    { procedureId: selectedProcedureId!, areaId: selectedAreaId!, complexity: selectedComplexity! },
-    { enabled: !!selectedProcedureId && !!selectedAreaId && !!selectedComplexity }
+    {
+      procedureId: selectedProcedureId!,
+      areaId: selectedAreaId!,
+      complexity: selectedComplexity!,
+    },
+    { enabled: !!selectedProcedureId && !!selectedAreaId && !!selectedComplexity },
   );
 
-  const resetForm = () => {
+  const createMutation = trpc.budgets.create.useMutation({
+    onSuccess: () => {
+      toast.success("Orcamento criado com sucesso.");
+      refetch();
+      setShowCreate(false);
+      resetForm();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const emitMutation = trpc.budgets.emit.useMutation({
+    onSuccess: () => {
+      toast.success("Orcamento enviado para aprovacao.");
+      refetch();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const approveMutation = trpc.budgets.approve.useMutation({
+    onSuccess: () => {
+      toast.success("Orcamento aprovado.");
+      refetch();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const emitNfseMutation = trpc.budgets.emitNfse.useMutation({
+    onSuccess: (data) => {
+      toast.success(data.message || "NFS-e processada com sucesso.");
+      refetch();
+      setShowNfseDialog(false);
+      setSelectedBudget(null);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+  const filteredPatients = useMemo(() => {
+    const normalized = patientSearch.trim().toLowerCase();
+    if (!patients || !normalized) return [];
+
+    return patients
+      .filter((patient: any) => {
+        const name = String(patient.name ?? "").toLowerCase();
+        const cpf = String(patient.cpf ?? "");
+        return name.includes(normalized) || cpf.includes(normalized);
+      })
+      .slice(0, 8);
+  }, [patients, patientSearch]);
+
+  const selectedPatient = useMemo(
+    () => patients?.find((patient: any) => Number(patient.id) === Number(patientId)),
+    [patients, patientId],
+  );
+
+  const totalInCents = useMemo(
+    () => items.reduce((sum, item) => sum + item.unitPriceInCents * item.quantity, 0),
+    [items],
+  );
+
+  const fiscalReady = Boolean(
+    fiscalSettings?.cnpj &&
+      fiscalSettings?.codigoTributacaoNacional &&
+      fiscalSettings?.descricaoServicoPadrao &&
+      fiscalSettings?.certificadoConfigurado,
+  );
+
+  function resetForm() {
     setPatientId("");
+    setPatientSearch("");
     setClinicalNotes("");
     setItems([]);
     setSelectedProcedureId(null);
     setSelectedAreaId(null);
     setSelectedComplexity(null);
-  };
+  }
 
-  const addItem = () => {
+  function selectPatient(patient: any) {
+    setPatientId(String(patient.id));
+    setPatientSearch(patient.name || "");
+  }
+
+  function addItem() {
     if (!selectedProcedureId || !selectedAreaId || !selectedComplexity) {
-      toast.error("Selecione procedimento, área e complexidade.");
+      toast.error("Selecione procedimento, area e complexidade.");
       return;
     }
-    const proc = procedures?.find((p: any) => p.id === selectedProcedureId);
-    const area = procedureAreas?.find((a: any) => a.id === selectedAreaId);
-    const price = priceData?.priceInCents ?? 0;
 
-    if (!proc || !area) return;
+    const procedure = procedures?.find(
+      (entry: any) => Number(entry.id) === Number(selectedProcedureId),
+    );
+    const area = procedureAreas?.find(
+      (entry: any) => Number(entry.id) === Number(selectedAreaId),
+    );
+    const price = Number(priceData?.priceInCents || 0);
 
-    setItems([...items, {
-      procedureId: selectedProcedureId,
-      procedureName: proc.name,
-      areaId: selectedAreaId,
-      areaName: area.areaName,
-      complexity: selectedComplexity,
-      unitPriceInCents: price,
-      quantity: 1,
-    }]);
+    if (!procedure || !area || !price) {
+      toast.error("Nao foi possivel resolver o valor deste procedimento.");
+      return;
+    }
 
-    // Reset cascata para próximo item
+    setItems((current) => [
+      ...current,
+      {
+        procedureId: selectedProcedureId,
+        procedureName: procedure.name,
+        areaId: selectedAreaId,
+        areaName: area.areaName,
+        complexity: selectedComplexity,
+        unitPriceInCents: price,
+        quantity: 1,
+      },
+    ]);
+
     setSelectedAreaId(null);
     setSelectedComplexity(null);
-    toast.success(`${proc.name} - ${area.areaName} (${selectedComplexity}) adicionado!`);
-  };
+  }
 
-  const removeItem = (idx: number) => {
-    setItems(items.filter((_, i) => i !== idx));
-  };
+  function removeItem(index: number) {
+    setItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  }
 
-  const totalInCents = useMemo(() => items.reduce((sum, i) => sum + i.unitPriceInCents * i.quantity, 0), [items]);
-
-  const handleCreate = () => {
+  function handleCreate() {
     if (!patientId || items.length === 0) {
       toast.error("Informe o paciente e adicione pelo menos um procedimento.");
       return;
     }
-    createMutation.mutate({ patientId: parseInt(patientId), clinicalNotes, items });
-  };
 
-  const STATUS_COLORS: Record<string, string> = {
-    rascunho: "bg-gray-100 text-gray-700",
-    emitido: "bg-[#C9A55B]/10 text-[#8A6526]",
-    aprovado: "bg-[#C9A55B]/15 text-[#6B5B2A]",
-    rejeitado: "bg-[#2F2F2F]/10 text-[#2F2F2F]",
-    expirado: "bg-yellow-100 text-yellow-700",
-  };
+    createMutation.mutate({
+      patientId: Number(patientId),
+      clinicalNotes,
+      items: items.map((item) => ({
+        procedureId: item.procedureId,
+        areaId: item.areaId,
+        complexity: item.complexity,
+        quantity: item.quantity,
+      })),
+    });
+  }
+
+  function openBudgetNfseDialog(budget: any) {
+    setSelectedBudget(budget);
+    setPaymentMethod(budget?.latestNfse?.formaPagamento || "pix");
+    setPaymentDetails(budget?.latestNfse?.detalhesPagamento || "");
+    setCompetenceDate(budget?.date || new Date().toISOString().slice(0, 10));
+    setFiscalEnvironment(
+      budget?.latestNfse?.ambiente ||
+        (fiscalSettings?.ambiente === "producao" ? "producao" : "homologacao"),
+    );
+    setShowNfseDialog(true);
+  }
+
+  function handleEmitBudgetNfse() {
+    if (!selectedBudget) return;
+
+    emitNfseMutation.mutate({
+      budgetId: selectedBudget.id,
+      formaPagamento: paymentMethod as any,
+      detalhesPagamento: paymentDetails || undefined,
+      dataCompetencia: competenceDate,
+      ambiente: fiscalEnvironment,
+    });
+  }
+
+  function getInvoiceLink(budget: any) {
+    return budget?.latestNfse?.pdfUrl || budget?.latestNfse?.linkNfse || "";
+  }
+
+  function openInvoiceLink(budget: any) {
+    const link = getInvoiceLink(budget);
+    if (!link) {
+      toast.error("A nota ainda nao possui link disponivel.");
+      return;
+    }
+
+    window.open(link, "_blank", "noopener,noreferrer");
+  }
+
+  function sendInvoiceByWhatsapp(budget: any) {
+    const link = getInvoiceLink(budget);
+    const phone = digitsOnly(budget?.patientPhone);
+
+    if (!link) {
+      toast.error("A nota ainda nao possui link disponivel.");
+      return;
+    }
+
+    if (!phone) {
+      toast.error("O paciente nao possui telefone cadastrado.");
+      return;
+    }
+
+    const waPhone = phone.startsWith("55") ? phone : `55${phone}`;
+    const text = encodeURIComponent(
+      `Ola, ${budget.patientName}. Segue sua NFS-e: ${link}`,
+    );
+
+    window.open(`https://wa.me/${waPhone}?text=${text}`, "_blank", "noopener,noreferrer");
+  }
+
+  function sendInvoiceByEmail(budget: any) {
+    const link = getInvoiceLink(budget);
+    const email = String(budget?.patientEmail ?? "").trim();
+
+    if (!link) {
+      toast.error("A nota ainda nao possui link disponivel.");
+      return;
+    }
+
+    if (!email) {
+      toast.error("O paciente nao possui e-mail cadastrado.");
+      return;
+    }
+
+    const subject = encodeURIComponent("Sua NFS-e - Glutec");
+    const body = encodeURIComponent(
+      `Ola, ${budget.patientName}.\n\nSegue o link da sua nota fiscal de servico:\n${link}\n\nAtenciosamente,\nGlutec`,
+    );
+
+    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
+          <h1 className="flex items-center gap-2 text-2xl font-semibold">
             <Calculator className="h-6 w-6 text-primary" />
-            Motor de Orçamentos
+            Motor de Orcamentos
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Orçamentos com cascata condicional, auto-soma e protocolo terapêutico (CDC Art. 40)
+          <p className="mt-1 text-sm text-muted-foreground">
+            Orcamentos com aprovacao, integracao fiscal e acompanhamento da NFS-e.
           </p>
         </div>
+
         <Dialog open={showCreate} onOpenChange={setShowCreate}>
           <DialogTrigger asChild>
-            <Button><Plus className="h-4 w-4 mr-2" />Novo Orçamento</Button>
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Novo orcamento
+            </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Criar Orçamento</DialogTitle>
+              <DialogTitle>Criar orcamento</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
-              {/* Paciente */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>ID do Paciente *</Label>
-                  <Input value={patientId} onChange={e => setPatientId(e.target.value)} placeholder="ID do paciente" type="number" />
+
+            <div className="space-y-5">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Paciente</Label>
+                  <Input
+                    value={patientSearch}
+                    onChange={(event) => setPatientSearch(event.target.value)}
+                    placeholder="Busque por nome ou CPF"
+                  />
+                  {filteredPatients.length > 0 && (
+                    <div className="rounded-lg border bg-background p-1">
+                      {filteredPatients.map((patient: any) => (
+                        <button
+                          key={patient.id}
+                          type="button"
+                          className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
+                          onClick={() => selectPatient(patient)}
+                        >
+                          <span>{patient.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {patient.cpf || `ID ${patient.id}`}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {selectedPatient && (
+                    <p className="text-xs text-muted-foreground">
+                      Selecionado: {selectedPatient.name} {selectedPatient.cpf ? `- ${selectedPatient.cpf}` : ""}
+                    </p>
+                  )}
                 </div>
-                <div>
-                  <Label>Notas Clínicas</Label>
-                  <Input value={clinicalNotes} onChange={e => setClinicalNotes(e.target.value)} placeholder="Observações clínicas" />
+
+                <div className="space-y-2">
+                  <Label>Observacoes clinicas</Label>
+                  <Input
+                    value={clinicalNotes}
+                    onChange={(event) => setClinicalNotes(event.target.value)}
+                    placeholder="Observacoes do atendimento ou do plano"
+                  />
                 </div>
               </div>
 
-              {/* Cascata: Procedimento > Área > Complexidade */}
               <Card className="border-primary/30">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-sm">
                     <DollarSign className="h-4 w-4 text-primary" />
-                    Seleção em Cascata (Procedimento → Área → Complexidade)
+                    Selecao em cascata de procedimento
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                    {/* Nível 1: Procedimento */}
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Nível 1 - Procedimento</Label>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Procedimento</Label>
                       <Select
-                        value={selectedProcedureId?.toString() ?? ""}
-                        onValueChange={v => { setSelectedProcedureId(parseInt(v)); setSelectedAreaId(null); setSelectedComplexity(null); }}
+                        value={selectedProcedureId ? String(selectedProcedureId) : undefined}
+                        onValueChange={(value) => {
+                          setSelectedProcedureId(Number(value));
+                          setSelectedAreaId(null);
+                          setSelectedComplexity(null);
+                        }}
                       >
-                        <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
                         <SelectContent>
-                          {procedures?.map((p: any) => (
-                            <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
+                          {procedures?.map((procedure: any) => (
+                            <SelectItem key={procedure.id} value={String(procedure.id)}>
+                              {procedure.name}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
 
-                    {/* Nível 2: Área */}
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Nível 2 - Área</Label>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Area</Label>
                       <Select
-                        value={selectedAreaId?.toString() ?? ""}
-                        onValueChange={v => { setSelectedAreaId(parseInt(v)); setSelectedComplexity(null); }}
+                        value={selectedAreaId ? String(selectedAreaId) : undefined}
+                        onValueChange={(value) => {
+                          setSelectedAreaId(Number(value));
+                          setSelectedComplexity(null);
+                        }}
                         disabled={!selectedProcedureId}
                       >
-                        <SelectTrigger><SelectValue placeholder={selectedProcedureId ? "Selecione a área..." : "Selecione o procedimento primeiro"} /></SelectTrigger>
+                        <SelectTrigger>
+                          <SelectValue
+                            placeholder={
+                              selectedProcedureId
+                                ? "Selecione a area"
+                                : "Escolha o procedimento antes"
+                            }
+                          />
+                        </SelectTrigger>
                         <SelectContent>
-                          {procedureAreas?.map((a: any) => (
-                            <SelectItem key={a.id} value={a.id.toString()}>{a.areaName}</SelectItem>
+                          {procedureAreas?.map((area: any) => (
+                            <SelectItem key={area.id} value={String(area.id)}>
+                              {area.areaName}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
 
-                    {/* Nível 3: Complexidade */}
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Nível 3 - Complexidade</Label>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Complexidade</Label>
                       <Select
-                        value={selectedComplexity ?? ""}
-                        onValueChange={v => setSelectedComplexity(v as "P" | "M" | "G")}
+                        value={selectedComplexity ?? undefined}
+                        onValueChange={(value) =>
+                          setSelectedComplexity(value as "P" | "M" | "G")
+                        }
                         disabled={!selectedAreaId}
                       >
-                        <SelectTrigger><SelectValue placeholder={selectedAreaId ? "P / M / G" : "Selecione a área primeiro"} /></SelectTrigger>
+                        <SelectTrigger>
+                          <SelectValue
+                            placeholder={
+                              selectedAreaId ? "P / M / G" : "Selecione a area antes"
+                            }
+                          />
+                        </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="P">Pequeno (P)</SelectItem>
-                          <SelectItem value="M">Médio (M)</SelectItem>
+                          <SelectItem value="M">Medio (M)</SelectItem>
                           <SelectItem value="G">Grande (G)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
 
                     <div className="flex items-end">
-                      <Button onClick={addItem} disabled={!selectedProcedureId || !selectedAreaId || !selectedComplexity} className="w-full">
-                        <Plus className="h-4 w-4 mr-1" />
+                      <Button
+                        className="w-full"
+                        onClick={addItem}
+                        disabled={!selectedProcedureId || !selectedAreaId || !selectedComplexity}
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
                         Adicionar
-                        {priceData && <span className="ml-1 text-xs">({formatCurrency(priceData.priceInCents)})</span>}
+                        {priceData ? (
+                          <span className="ml-2 text-xs">
+                            {formatCurrency(Number(priceData.priceInCents || 0))}
+                          </span>
+                        ) : null}
                       </Button>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Itens do Orçamento */}
               {items.length > 0 && (
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">Itens do Orçamento</CardTitle>
+                    <CardTitle className="text-sm">Itens do orcamento</CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b text-left text-muted-foreground">
-                          <th className="pb-2">Procedimento</th>
-                          <th className="pb-2">Área</th>
-                          <th className="pb-2">Tamanho</th>
-                          <th className="pb-2 text-right">Valor Unit.</th>
-                          <th className="pb-2 text-center">Qtd</th>
-                          <th className="pb-2 text-right">Subtotal</th>
-                          <th className="pb-2"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((item, idx) => (
-                          <tr key={idx} className="border-b">
-                            <td className="py-2 font-medium">{item.procedureName}</td>
-                            <td className="py-2">{item.areaName}</td>
-                            <td className="py-2"><Badge variant="outline">{item.complexity}</Badge></td>
-                            <td className="py-2 text-right">{formatCurrency(item.unitPriceInCents)}</td>
-                            <td className="py-2 text-center">
-                              <Input
-                                type="number"
-                                min={1}
-                                value={item.quantity}
-                                onChange={e => {
-                                  const newItems = [...items];
-                                  newItems[idx] = { ...newItems[idx], quantity: parseInt(e.target.value) || 1 };
-                                  setItems(newItems);
-                                }}
-                                className="w-16 text-center mx-auto"
-                              />
-                            </td>
-                            <td className="py-2 text-right font-semibold">{formatCurrency(item.unitPriceInCents * item.quantity)}</td>
-                            <td className="py-2 text-right">
-                              <Button variant="ghost" size="sm" onClick={() => removeItem(idx)}>
-                                <Trash2 className="h-3 w-3 text-destructive" />
-                              </Button>
-                            </td>
+                  <CardContent className="space-y-4">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b text-left text-muted-foreground">
+                            <th className="pb-2">Procedimento</th>
+                            <th className="pb-2">Area</th>
+                            <th className="pb-2">Complexidade</th>
+                            <th className="pb-2 text-right">Valor unitario</th>
+                            <th className="pb-2 text-center">Qtd</th>
+                            <th className="pb-2 text-right">Subtotal</th>
+                            <th className="pb-2" />
                           </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t-2 font-bold">
-                          <td colSpan={5} className="py-3 text-right text-base">TOTAL DO INVESTIMENTO:</td>
-                          <td className="py-3 text-right text-base text-primary">{formatCurrency(totalInCents)}</td>
-                          <td></td>
-                        </tr>
-                      </tfoot>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {items.map((item, index) => (
+                            <tr key={`${item.procedureId}-${item.areaId}-${index}`} className="border-b">
+                              <td className="py-2 font-medium">{item.procedureName}</td>
+                              <td className="py-2">{item.areaName}</td>
+                              <td className="py-2">
+                                <Badge variant="outline">
+                                  {COMPLEXITY_LABELS[item.complexity]}
+                                </Badge>
+                              </td>
+                              <td className="py-2 text-right">
+                                {formatCurrency(item.unitPriceInCents)}
+                              </td>
+                              <td className="py-2 text-center">
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  className="mx-auto w-16 text-center"
+                                  value={item.quantity}
+                                  onChange={(event) => {
+                                    const quantity = Math.max(
+                                      1,
+                                      Number(event.target.value || 1),
+                                    );
+                                    setItems((current) =>
+                                      current.map((currentItem, currentIndex) =>
+                                        currentIndex === index
+                                          ? { ...currentItem, quantity }
+                                          : currentItem,
+                                      ),
+                                    );
+                                  }}
+                                />
+                              </td>
+                              <td className="py-2 text-right font-semibold">
+                                {formatCurrency(item.unitPriceInCents * item.quantity)}
+                              </td>
+                              <td className="py-2 text-right">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => removeItem(index)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <div className="rounded-lg border bg-muted/30 px-4 py-3 text-right">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                          Total do investimento
+                        </p>
+                        <p className="text-xl font-semibold text-primary">
+                          {formatCurrency(totalInCents)}
+                        </p>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               )}
 
-              {/* Condições de Pagamento (preview) */}
               {items.length > 0 && paymentPlans && paymentPlans.length > 0 && (
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2 text-sm">
                       <CreditCard className="h-4 w-4 text-primary" />
-                      Condições de Pagamento Disponíveis
+                      Condicoes de pagamento disponiveis
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid gap-3 md:grid-cols-2">
                       {paymentPlans.map((plan: any) => {
-                        const discount = plan.discountPercent ? parseFloat(plan.discountPercent) : 0;
-                        const interest = plan.interestRatePercent ? parseFloat(plan.interestRatePercent) : 0;
-                        const finalValue = discount > 0
-                          ? totalInCents * (1 - discount / 100)
-                          : interest > 0
-                            ? totalInCents * (1 + interest / 100)
-                            : totalInCents;
+                        const discount = Number(plan.discountPercent || 0);
+                        const interest = Number(plan.interestRatePercent || 0);
+                        const finalValue =
+                          discount > 0
+                            ? totalInCents * (1 - discount / 100)
+                            : interest > 0
+                              ? totalInCents * (1 + interest / 100)
+                              : totalInCents;
+
                         return (
-                          <div key={plan.id} className="p-3 rounded-lg border bg-muted/30">
-                            <p className="font-medium text-sm">{plan.name}</p>
-                            <p className="text-xs text-muted-foreground">{plan.description}</p>
-                            <p className="text-sm font-semibold mt-1 text-primary">
-                              {formatCurrency(finalValue)}
-                              {discount > 0 && <span className="text-[#8A6526] ml-1">(-{discount}%)</span>}
-                              {interest > 0 && <span className="text-[#6B6B6B] ml-1">(+{interest}% juros)</span>}
+                          <div key={plan.id} className="rounded-lg border bg-muted/30 p-3">
+                            <p className="font-medium">{plan.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {plan.description}
                             </p>
-                            {plan.maxInstallments && plan.maxInstallments > 1 && (
+                            <p className="mt-2 text-sm font-semibold text-primary">
+                              {formatCurrency(Math.round(finalValue))}
+                            </p>
+                            {plan.maxInstallments && plan.maxInstallments > 1 ? (
                               <p className="text-xs text-muted-foreground">
-                                até {plan.maxInstallments}x de {formatCurrency(finalValue / plan.maxInstallments)}
+                                ate {plan.maxInstallments}x de{" "}
+                                {formatCurrency(
+                                  Math.round(finalValue / Number(plan.maxInstallments)),
+                                )}
                               </p>
-                            )}
+                            ) : null}
                           </div>
                         );
                       })}
@@ -327,10 +693,23 @@ export default function Orcamentos() {
                 </Card>
               )}
 
-              <div className="flex gap-2 justify-end">
-                <Button variant="outline" onClick={() => { setShowCreate(false); resetForm(); }}>Cancelar</Button>
-                <Button onClick={handleCreate} disabled={createMutation.isPending || items.length === 0}>
-                  {createMutation.isPending ? "Criando..." : `Criar Orçamento (${formatCurrency(totalInCents)})`}
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowCreate(false);
+                    resetForm();
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleCreate}
+                  disabled={createMutation.isPending || items.length === 0}
+                >
+                  {createMutation.isPending
+                    ? "Criando..."
+                    : `Criar orcamento (${formatCurrency(totalInCents)})`}
                 </Button>
               </div>
             </div>
@@ -338,51 +717,298 @@ export default function Orcamentos() {
         </Dialog>
       </div>
 
-      {/* Lista de Orçamentos */}
+      {!fiscalReady ? (
+        <Card className="border-amber-200 bg-amber-50/80 dark:border-amber-900/50 dark:bg-amber-950/20">
+          <CardContent className="flex items-start gap-3 py-4">
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-700 dark:text-amber-300" />
+            <div className="space-y-1">
+              <p className="font-medium text-amber-900 dark:text-amber-100">
+                A configuracao fiscal ainda precisa de confirmacao final.
+              </p>
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                A emissao do orcamento pode seguir, mas a NFS-e so deve ir para producao
+                depois de confirmar certificado, dados do prestador e parametros municipais.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Dialog open={showNfseDialog} onOpenChange={setShowNfseDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Emitir NFS-e do orcamento</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <Card className="border-primary/20">
+              <CardContent className="space-y-2 pt-6">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Orcamento
+                    </p>
+                    <p className="font-semibold">
+                      #{selectedBudget?.id} - {selectedBudget?.patientName}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      Valor
+                    </p>
+                    <p className="font-semibold text-primary">
+                      {formatCurrency(Number(selectedBudget?.totalInCents || 0))}
+                    </p>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Descricao padrao: {fiscalSettings?.descricaoServicoPadrao || "Referente a procedimentos medicos ambulatoriais."}
+                </p>
+              </CardContent>
+            </Card>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Forma de pagamento</Label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(PAYMENT_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Detalhes da forma de pagamento</Label>
+                <Input
+                  value={paymentDetails}
+                  onChange={(event) => setPaymentDetails(event.target.value)}
+                  placeholder="Ex.: parcelado em 3x, via Multibank"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Data de competencia</Label>
+                <Input
+                  type="date"
+                  value={competenceDate}
+                  onChange={(event) => setCompetenceDate(event.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Ambiente fiscal</Label>
+                <Select
+                  value={fiscalEnvironment}
+                  onValueChange={(value) =>
+                    setFiscalEnvironment(value as "homologacao" | "producao")
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="homologacao">Homologacao</SelectItem>
+                    <SelectItem value="producao">Producao</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Receipt className="h-4 w-4 text-primary" />
+                  Previa da descricao fiscal
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <p>{fiscalSettings?.descricaoServicoPadrao || "Referente a procedimentos medicos ambulatoriais."}</p>
+                <p>
+                  Forma de Pagamento: {buildPaymentLabel(paymentMethod, paymentDetails)}
+                </p>
+                <p className="whitespace-pre-wrap text-muted-foreground">
+                  {fiscalSettings?.textoLegalFixo ||
+                    "Nao sujeito a retencao de seguridade social, conforme art-31 da lei-8.212/91, os/inss-209/99, In/inss-dc-100/03 e in 971/09 art.120 inciso III. Os servicos acima descritos foram prestados pessoalmente pelo(s) socio(s) e sem o concurso de empregados ou outros contribuintes individuais."}
+                </p>
+              </CardContent>
+            </Card>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowNfseDialog(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleEmitBudgetNfse} disabled={emitNfseMutation.isPending}>
+                {emitNfseMutation.isPending ? "Emitindo..." : "Emitir NFS-e"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {loadingBudgets ? (
-        <div className="flex items-center justify-center h-32"><p className="text-muted-foreground">Carregando...</p></div>
+        <div className="flex h-32 items-center justify-center">
+          <p className="text-muted-foreground">Carregando orcamentos...</p>
+        </div>
       ) : !budgetsList || budgetsList.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <Calculator className="h-12 w-12 text-muted-foreground/30 mb-3" />
-            <p className="text-muted-foreground">Nenhum orçamento criado ainda.</p>
+            <Calculator className="mb-3 h-12 w-12 text-muted-foreground/30" />
+            <p className="text-muted-foreground">Nenhum orcamento criado ainda.</p>
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
-          {budgetsList.map((b: any) => (
-            <Card key={b.id} className="hover:shadow-sm transition-shadow">
-              <CardContent className="flex items-center justify-between py-4">
-                <div className="flex items-center gap-4">
-                  <FileText className="h-8 w-8 text-primary/50" />
-                  <div>
-                    <p className="font-medium">Orçamento #{b.id}</p>
-                    <p className="text-xs text-muted-foreground">Paciente #{b.patientId} | Criado em {new Date(b.createdAt).toLocaleDateString("pt-BR")}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <p className="font-semibold text-primary">{formatCurrency(b.totalInCents)}</p>
-                  <Badge className={STATUS_COLORS[b.status] ?? ""}>{b.status}</Badge>
-                  <div className="flex gap-1">
-                    {b.status === "rascunho" && (
-                      <Button size="sm" variant="outline" onClick={() => emitMutation.mutate({ id: b.id })}>
-                        Emitir
-                      </Button>
-                    )}
-                    {b.status === "emitido" && (
-                      <>
-                        <Button size="sm" variant="default" onClick={() => approveMutation.mutate({ id: b.id })}>
-                          <Check className="h-3 w-3 mr-1" />Aprovar
+        <div className="space-y-4">
+          {budgetsList.map((budget: any) => {
+            const latestNfse = budget.latestNfse;
+            const hasAuthorizedNfse = latestNfse?.status === "autorizada";
+            const hasNfseError = latestNfse?.status === "erro";
+            const hasPendingNfse =
+              latestNfse?.status === "rascunho" || latestNfse?.status === "aguardando";
+            const canRequestNfse =
+              budget.status === "aprovado" && latestNfse?.status !== "autorizada";
+
+            return (
+              <Card key={budget.id} className="overflow-hidden border shadow-sm">
+                <CardContent className="space-y-4 py-5">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <FileText className="h-5 w-5 text-primary/70" />
+                        <h3 className="text-lg font-semibold">Orcamento #{budget.id}</h3>
+                        <Badge className={BUDGET_STATUS_COLORS[budget.status] ?? ""}>
+                          {BUDGET_STATUS_LABELS[budget.status] ?? budget.status}
+                        </Badge>
+                        {latestNfse ? (
+                          <Badge className={NFSE_STATUS_COLORS[latestNfse.status] ?? ""}>
+                            {NFSE_STATUS_LABELS[latestNfse.status] ?? latestNfse.status}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline">Sem NFS-e</Badge>
+                        )}
+                      </div>
+
+                      <div className="grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
+                        <p>
+                          <span className="font-medium text-foreground">Paciente:</span>{" "}
+                          {budget.patientName}
+                        </p>
+                        <p>
+                          <span className="font-medium text-foreground">Data:</span>{" "}
+                          {budget.date
+                            ? new Date(`${budget.date}T12:00:00`).toLocaleDateString("pt-BR")
+                            : "-"}
+                        </p>
+                        <p>
+                          <span className="font-medium text-foreground">Titulo:</span>{" "}
+                          {budget.title || "Plano personalizado"}
+                        </p>
+                        <p>
+                          <span className="font-medium text-foreground">Valor:</span>{" "}
+                          {formatCurrency(Number(budget.totalInCents || 0))}
+                        </p>
+                      </div>
+
+                      {Array.isArray(budget.items) && budget.items.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {budget.items.slice(0, 4).map((item: any, index: number) => (
+                            <Badge key={`${budget.id}-${index}`} variant="outline">
+                              {item.procedureName} - {item.areaName}
+                            </Badge>
+                          ))}
+                          {budget.items.length > 4 ? (
+                            <Badge variant="outline">+{budget.items.length - 4} itens</Badge>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {budget.notes ? (
+                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                          {budget.notes}
+                        </p>
+                      ) : null}
+
+                      {hasNfseError ? (
+                        <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900 dark:border-rose-950/50 dark:bg-rose-950/20 dark:text-rose-200">
+                          <p className="font-medium">Falha na emissao da NFS-e</p>
+                          <p>{latestNfse?.erroMensagem || "A API nacional retornou um erro."}</p>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="flex min-w-[260px] flex-col gap-2">
+                      {budget.status === "rascunho" ? (
+                        <Button
+                          variant="outline"
+                          onClick={() => emitMutation.mutate({ budgetId: budget.id })}
+                          disabled={emitMutation.isPending}
+                        >
+                          <Send className="mr-2 h-4 w-4" />
+                          Enviar para aprovacao
                         </Button>
-                      </>
-                    )}
+                      ) : null}
+
+                      {budget.status === "enviado" ? (
+                        <Button
+                          onClick={() => approveMutation.mutate({ budgetId: budget.id })}
+                          disabled={approveMutation.isPending}
+                        >
+                          <Check className="mr-2 h-4 w-4" />
+                          Aprovar orcamento
+                        </Button>
+                      ) : null}
+
+                      {canRequestNfse ? (
+                        <Button
+                          className="bg-red-600 text-white hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
+                          onClick={() => openBudgetNfseDialog(budget)}
+                        >
+                          <Receipt className="mr-2 h-4 w-4" />
+                          {hasPendingNfse ? "Reprocessar NFS-e" : "Emitir NFS-e"}
+                        </Button>
+                      ) : null}
+
+                      {hasAuthorizedNfse ? (
+                        <Button
+                          className="bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800"
+                          onClick={() => openInvoiceLink(budget)}
+                        >
+                          <Receipt className="mr-2 h-4 w-4" />
+                          NFS-e emitida
+                        </Button>
+                      ) : null}
+
+                      {hasAuthorizedNfse ? (
+                        <>
+                          <Button variant="outline" onClick={() => openInvoiceLink(budget)}>
+                            <FileDown className="mr-2 h-4 w-4" />
+                            Baixar nota
+                          </Button>
+                          <Button variant="outline" onClick={() => sendInvoiceByWhatsapp(budget)}>
+                            <WalletCards className="mr-2 h-4 w-4" />
+                            Enviar por WhatsApp
+                          </Button>
+                          <Button variant="outline" onClick={() => sendInvoiceByEmail(budget)}>
+                            <Mail className="mr-2 h-4 w-4" />
+                            Enviar por e-mail
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
+

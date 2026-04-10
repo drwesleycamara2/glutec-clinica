@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+﻿import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +33,7 @@ import {
   Printer,
 } from "lucide-react";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// Helpers
 
 function formatCurrency(cents: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
@@ -55,13 +55,32 @@ function formatCpfCnpj(value: string): string {
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
   rascunho: { label: "Rascunho", color: "bg-[#F1D791]/30 text-[#8A6526]" },
-  emitida: { label: "Emitida", color: "bg-[#C9A55B]/15 text-[#6B5B2A]" },
+  aguardando: { label: "Aguardando Emissão", color: "bg-[#C9A55B]/15 text-[#6B5B2A]" },
+  autorizada: { label: "Autorizada", color: "bg-[#C9A55B]/15 text-[#6B5B2A]" },
   cancelada: { label: "Cancelada", color: "bg-[#2F2F2F]/10 text-[#2F2F2F]" },
   substituida: { label: "Substituída", color: "bg-[#C9A55B]/10 text-[#8A6526]" },
   erro: { label: "Erro", color: "bg-[#2F2F2F]/10 text-[#2F2F2F]" },
 };
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
+function getPaymentDescription(formaPagamento: string, detalhesPagamento?: string) {
+  const labels: Record<string, string> = {
+    pix: "Pix",
+    dinheiro: "Dinheiro",
+    cartao_credito: "Cartão de crédito",
+    cartao_debito: "Cartão de débito",
+    boleto: "Boleto",
+    transferencia: "Transferência bancária",
+    financiamento: "Financiamento",
+    outro: "Outro",
+  };
+
+  const baseLabel = labels[formaPagamento] ?? formaPagamento.replace(/_/g, " ");
+  return detalhesPagamento?.trim() ? `${baseLabel} ${detalhesPagamento.trim()}` : baseLabel;
+}
+
+const DEFAULT_SERVICE_DESCRIPTION = "Referente a procedimentos médicos ambulatoriais.";
+
+// Tipos
 
 interface NfseForm {
   // Etapa 1 - Pessoas
@@ -106,7 +125,7 @@ const initialForm: NfseForm = {
   tomadorLogradouro: "",
   tomadorNumero: "",
   tomadorComplemento: "",
-  descricaoServico: "Procedimentos Médicos Ambulatoriais",
+  descricaoServico: DEFAULT_SERVICE_DESCRIPTION,
   complementoDescricao: "",
   valorServico: "",
   valorDeducao: "",
@@ -116,7 +135,7 @@ const initialForm: NfseForm = {
   ambiente: "homologacao",
 };
 
-// ─── Componente Principal ─────────────────────────────────────────────────────
+// Componente principal
 
 export default function NfseEmissao() {
   const [activeTab, setActiveTab] = useState<"emitir" | "historico">("emitir");
@@ -128,11 +147,17 @@ export default function NfseEmissao() {
   const [showCancelar, setShowCancelar] = useState(false);
   const [motivoCancelamento, setMotivoCancelamento] = useState("");
   const [patientSearch, setPatientSearch] = useState("");
+  const currentMonthKey = new Date().toISOString().slice(0, 7);
+  const [confirmedAliquotaMonth, setConfirmedAliquotaMonth] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return window.localStorage.getItem("glutec-nfse-simples-confirmed-month") || "";
+  });
 
   // Queries
   const { data: fiscalSettings } = trpc.fiscal.get.useQuery();
   const { data: nfseList, isLoading: loadingList, refetch } = trpc.nfse.list.useQuery({});
-  const { data: patients } = trpc.patients.list.useQuery({ limit: 500 });
+  const { data: patients } = trpc.patients.list.useQuery({ limit: 5000 });
+  const needsAliquotaConfirmation = confirmedAliquotaMonth !== currentMonthKey;
 
   // Mutations
   const createMutation = trpc.nfse.create.useMutation({
@@ -149,7 +174,7 @@ export default function NfseEmissao() {
 
   const emitMutation = trpc.nfse.emit.useMutation({
     onSuccess: (data) => {
-      toast.success(`NFS-e emitida com sucesso! Número: ${data.numero}`);
+      toast.success(data.message || "NFS-e preparada para emissão manual no portal nacional.");
       refetch();
       setShowEmitir(false);
     },
@@ -187,7 +212,7 @@ export default function NfseEmissao() {
       tomadorMunicipio: patient.city || "",
       tomadorUf: patient.state || "",
       tomadorBairro: patient.neighborhood || "",
-      tomadorLogradouro: patient.address || "",
+      tomadorLogradouro: typeof patient.address === "string" ? patient.address : "",
       tomadorNumero: "",
       tomadorComplemento: "",
       patientId: patient.id,
@@ -226,8 +251,21 @@ export default function NfseEmissao() {
   const isStep2Valid = form.descricaoServico.length >= 5;
   const isStep3Valid = valorServicoCents > 0;
 
+  const confirmAliquotaForCurrentMonth = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("glutec-nfse-simples-confirmed-month", currentMonthKey);
+    }
+    setConfirmedAliquotaMonth(currentMonthKey);
+    toast.success("Aliquota do Simples Nacional confirmada para este mes.");
+  };
+
   // Submeter NFS-e
   const handleSubmit = () => {
+    if (needsAliquotaConfirmation) {
+      toast.error("Confirme primeiro se a aliquota do Simples Nacional deste mes esta atualizada.");
+      return;
+    }
+
     createMutation.mutate({
       tomadorDocumento: form.tomadorDocumento.replace(/\D/g, ""),
       tomadorTipoDocumento: form.tomadorTipoDocumento,
@@ -242,7 +280,7 @@ export default function NfseEmissao() {
       tomadorNumero: form.tomadorNumero || undefined,
       tomadorComplemento: form.tomadorComplemento || undefined,
       patientId: form.patientId,
-      descricaoServico: form.descricaoServico,
+      descricaoServico: form.descricaoServico || DEFAULT_SERVICE_DESCRIPTION,
       complementoDescricao: form.complementoDescricao || undefined,
       valorServico: valorServicoCents,
       valorDeducao: valorDeducaoCents || undefined,
@@ -254,7 +292,7 @@ export default function NfseEmissao() {
     });
   };
 
-  // ─── Etapa 1: Pessoas ───────────────────────────────────────────────────────
+  // Etapa 1: Pessoas
 
   const renderStep1 = () => (
     <div className="space-y-6">
@@ -459,7 +497,7 @@ export default function NfseEmissao() {
     </div>
   );
 
-  // ─── Etapa 2: Serviço ──────────────────────────────────────────────────────
+  // Etapa 2: Serviço
 
   const renderStep2 = () => (
     <div className="space-y-6">
@@ -549,9 +587,9 @@ export default function NfseEmissao() {
 
           {/* Texto Legal (somente leitura) */}
           <div className="p-3 bg-[#C9A55B]/5 rounded border border-[#C9A55B]/20">
-            <p className="text-xs font-medium text-[#8A6526] mb-1">Texto Legal (incluído automaticamente)</p>
+            <p className="text-xs font-medium text-[#8A6526] mb-1">Texto legal (incluído automaticamente)</p>
             <p className="text-xs text-[#8A6526]">
-              {fiscalSettings?.textoLegalFixo || "NÃO SUJEITO A RETENCAO A SEGURIDADE SOCIAL, CONFORME ART-31 DA LEI-8.212/91, OS/INSS-209/99, IN/INSS-DC-100/03 E IN 971/09 ART.120 INCISO III. OS SERVICOS ACIMA DESCRITOS FORAM PRESTADOS PESSOALMENTE PELO(S) SOCIO(S) E SEM O CONCURSO DE EMPREGADOS OU OUTROS CONTRIBUINTES INDIVIDUAIS"}
+              {fiscalSettings?.textoLegalFixo || "NÃO SUJEITO À RETENÇÃO DA SEGURIDADE SOCIAL, CONFORME ART. 31 DA LEI 8.212/91, OS/INSS 209/99, IN/INSS-DC 100/03 E IN 971/09, ART. 120, INCISO III. OS SERVIÇOS ACIMA DESCRITOS FORAM PRESTADOS PESSOALMENTE PELO(S) SÓCIO(S) E SEM O CONCURSO DE EMPREGADOS OU OUTROS CONTRIBUINTES INDIVIDUAIS."}
             </p>
           </div>
         </CardContent>
@@ -559,7 +597,7 @@ export default function NfseEmissao() {
     </div>
   );
 
-  // ─── Etapa 3: Valores e Tributação ──────────────────────────────────────────
+  // Etapa 3: Valores e Tributação
 
   const renderStep3 = () => (
     <div className="space-y-6">
@@ -655,7 +693,7 @@ export default function NfseEmissao() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-muted/30 rounded">
             <div>
               <p className="text-xs text-muted-foreground">PIS/COFINS</p>
-              <p className="text-sm font-medium">Nenhum - Não Retidos</p>
+              <p className="text-sm font-medium">Nenhum - Não retidos</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">IRRF</p>
@@ -672,6 +710,24 @@ export default function NfseEmissao() {
           </div>
         </CardContent>
       </Card>
+
+      {needsAliquotaConfirmation && (
+        <Card className="border-amber-200 bg-amber-50 shadow-sm">
+          <CardContent className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-amber-900">
+                Confirme a aliquota do Simples Nacional deste mes
+              </p>
+              <p className="text-xs text-amber-800">
+                Antes da primeira emissao de {new Date(`${currentMonthKey}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}, confirme se o percentual informado ainda esta correto.
+              </p>
+            </div>
+            <Button type="button" variant="outline" onClick={confirmAliquotaForCurrentMonth}>
+              Confirmar aliquota atual
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Valor Aproximado dos Tributos */}
       <Card className="border shadow-sm">
@@ -701,7 +757,7 @@ export default function NfseEmissao() {
     </div>
   );
 
-  // ─── Etapa 4: Conferência e Emissão ─────────────────────────────────────────
+  // Etapa 4: Conferência e Emissão
 
   const renderStep4 = () => (
     <div className="space-y-6">
@@ -766,7 +822,7 @@ export default function NfseEmissao() {
             <p className="text-sm">{form.descricaoServico}</p>
             {form.complementoDescricao && <p className="text-xs text-muted-foreground mt-1">{form.complementoDescricao}</p>}
             <p className="text-xs text-muted-foreground mt-1">
-              Pagamento: {form.formaPagamento.replace(/_/g, " ")} {form.detalhesPagamento ? `- ${form.detalhesPagamento}` : ""}
+              Forma de Pagamento: {getPaymentDescription(form.formaPagamento, form.detalhesPagamento)}
             </p>
           </div>
 
@@ -803,7 +859,7 @@ export default function NfseEmissao() {
     </div>
   );
 
-  // ─── Histórico ──────────────────────────────────────────────────────────────
+  // Histórico
 
   const renderHistorico = () => (
     <div className="space-y-4">
@@ -859,12 +915,12 @@ export default function NfseEmissao() {
                             size="sm"
                             variant="ghost"
                             className="text-[#8A6526] hover:text-[#6B5B2A]"
-                            onClick={() => emitMutation.mutate({ id: nfse.id })}
+                            onClick={() => emitMutation.mutate({ nfseId: nfse.id })}
                           >
                             <Send className="h-4 w-4" />
                           </Button>
                         )}
-                        {nfse.status === "emitida" && (
+                        {(nfse.status === "aguardando" || nfse.status === "autorizada") && (
                           <Button
                             size="sm"
                             variant="ghost"
@@ -886,7 +942,7 @@ export default function NfseEmissao() {
     </div>
   );
 
-  // ─── Steps Navigation ───────────────────────────────────────────────────────
+  // Steps navigation
 
   const steps = [
     { num: 1, label: "Pessoas", icon: Users },
@@ -895,7 +951,7 @@ export default function NfseEmissao() {
     { num: 4, label: "Emitir", icon: CheckCircle2 },
   ];
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
+  // Render
 
   return (
     <div className="space-y-6">
@@ -1018,13 +1074,13 @@ export default function NfseEmissao() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-muted-foreground">Emitente</p>
-                  <p className="text-sm font-medium">{selectedNfse.emitenteRazaoSocial}</p>
-                  <p className="text-xs text-muted-foreground">{formatCpfCnpj(selectedNfse.emitenteCnpj)}</p>
+                  <p className="text-sm font-medium">{fiscalSettings?.razaoSocial || "Emitente não configurado"}</p>
+                  <p className="text-xs text-muted-foreground">{fiscalSettings?.cnpj ? formatCpfCnpj(fiscalSettings.cnpj) : "-"}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Tomador</p>
                   <p className="text-sm font-medium">{selectedNfse.tomadorNome}</p>
-                  <p className="text-xs text-muted-foreground">{formatCpfCnpj(selectedNfse.tomadorDocumento)}</p>
+                  <p className="text-xs text-muted-foreground">{formatCpfCnpj(selectedNfse.tomadorDocumento || selectedNfse.tomadorCpfCnpj)}</p>
                 </div>
               </div>
 
@@ -1099,7 +1155,7 @@ export default function NfseEmissao() {
             <Button
               variant="destructive"
               disabled={!motivoCancelamento || cancelMutation.isPending}
-              onClick={() => selectedNfse && cancelMutation.mutate({ id: selectedNfse.id, motivo: motivoCancelamento })}
+              onClick={() => selectedNfse && cancelMutation.mutate({ nfseId: selectedNfse.id, reason: motivoCancelamento })}
             >
               {cancelMutation.isPending ? "Cancelando..." : "Confirmar Cancelamento"}
             </Button>
@@ -1109,3 +1165,4 @@ export default function NfseEmissao() {
     </div>
   );
 }
+

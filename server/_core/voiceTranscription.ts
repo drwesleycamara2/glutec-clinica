@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Voice transcription helper using internal Speech-to-Text service
  *
  * Frontend implementation guide:
@@ -74,21 +74,31 @@ export async function transcribeAudio(
   options: TranscribeOptions
 ): Promise<TranscriptionResponse | TranscriptionError> {
   try {
+    const transcriptionApiUrl =
+      ENV.forgeApiUrl ||
+      process.env.OPENAI_BASE_URL ||
+      "https://api.openai.com";
+    const transcriptionApiKey =
+      ENV.forgeApiKey ||
+      process.env.OPENAI_API_KEY ||
+      "";
+
     // Step 1: Validate environment configuration
-    if (!ENV.forgeApiUrl) {
+    if (!transcriptionApiUrl) {
       return {
-        error: "Voice transcription service is not configured",
+        error: "O serviço de transcrição de voz não está configurado",
         code: "SERVICE_ERROR",
-        details: "BUILT_IN_FORGE_API_URL is not set"
+        details: "Defina BUILT_IN_FORGE_API_URL ou OPENAI_BASE_URL no servidor"
       };
     }
-    if (!ENV.forgeApiKey) {
+    if (!transcriptionApiKey) {
       return {
-        error: "Voice transcription service authentication is missing",
+        error: "A chave do serviço de transcrição de voz não está configurada",
         code: "SERVICE_ERROR",
-        details: "BUILT_IN_FORGE_API_KEY is not set"
+        details: "Defina BUILT_IN_FORGE_API_KEY ou OPENAI_API_KEY no servidor"
       };
     }
+
 
     // Step 2: Download audio from URL
     let audioBuffer: Buffer;
@@ -97,7 +107,7 @@ export async function transcribeAudio(
       const response = await fetch(options.audioUrl);
       if (!response.ok) {
         return {
-          error: "Failed to download audio file",
+          error: "Não foi possível baixar o arquivo de áudio",
           code: "INVALID_FORMAT",
           details: `HTTP ${response.status}: ${response.statusText}`
         };
@@ -110,14 +120,14 @@ export async function transcribeAudio(
       const sizeMB = audioBuffer.length / (1024 * 1024);
       if (sizeMB > 16) {
         return {
-          error: "Audio file exceeds maximum size limit",
+          error: "O arquivo de áudio excede o limite máximo",
           code: "FILE_TOO_LARGE",
           details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 16MB`
         };
       }
     } catch (error) {
       return {
-        error: "Failed to fetch audio file",
+        error: "Não foi possível acessar o arquivo de áudio",
         code: "SERVICE_ERROR",
         details: error instanceof Error ? error.message : "Unknown error"
       };
@@ -143,9 +153,9 @@ export async function transcribeAudio(
     formData.append("prompt", prompt);
 
     // Step 4: Call the transcription service
-    const baseUrl = ENV.forgeApiUrl.endsWith("/")
-      ? ENV.forgeApiUrl
-      : `${ENV.forgeApiUrl}/`;
+    const baseUrl = transcriptionApiUrl.endsWith("/")
+      ? transcriptionApiUrl
+      : `${transcriptionApiUrl}/`;
     
     const fullUrl = new URL(
       "v1/audio/transcriptions",
@@ -155,7 +165,7 @@ export async function transcribeAudio(
     const response = await fetch(fullUrl, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${ENV.forgeApiKey}`,
+        authorization: `Bearer ${transcriptionApiKey}`,
         "Accept-Encoding": "identity",
       },
       body: formData,
@@ -164,7 +174,7 @@ export async function transcribeAudio(
     if (!response.ok) {
       const errorText = await response.text().catch(() => "");
       return {
-        error: "Transcription service request failed",
+        error: "A solicitação de transcrição falhou",
         code: "TRANSCRIPTION_FAILED",
         details: `${response.status} ${response.statusText}${errorText ? `: ${errorText}` : ""}`
       };
@@ -176,9 +186,9 @@ export async function transcribeAudio(
     // Validate response structure
     if (!whisperResponse.text || typeof whisperResponse.text !== 'string') {
       return {
-        error: "Invalid transcription response",
+        error: "Resposta inválida do serviço de transcrição",
         code: "SERVICE_ERROR",
-        details: "Transcription service returned an invalid response format"
+        details: "O serviço de transcrição retornou um formato inválido"
       };
     }
 
@@ -187,9 +197,9 @@ export async function transcribeAudio(
   } catch (error) {
     // Handle unexpected errors
     return {
-      error: "Voice transcription failed",
+      error: "Falha na transcrição de voz",
       code: "SERVICE_ERROR",
-      details: error instanceof Error ? error.message : "An unexpected error occurred"
+      details: error instanceof Error ? error.message : "Ocorreu um erro inesperado"
     };
   }
 }
@@ -282,3 +292,4 @@ function getLanguageName(langCode: string): string {
  * });
  * ```
  */
+

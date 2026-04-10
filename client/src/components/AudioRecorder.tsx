@@ -1,16 +1,36 @@
-import { useState, useRef, useEffect } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Mic, Square, Trash2, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 
-
 interface AudioRecorderProps {
   onTranscriptionComplete?: (transcription: string) => void;
   medicalRecordId?: number;
+}
+
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: any) => void) | null;
+  onerror: ((event: any) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort?: () => void;
+}
+
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
+function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
+  if (typeof window === "undefined") return null;
+  const candidate = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  return typeof candidate === "function" ? candidate : null;
 }
 
 export function AudioRecorder({ onTranscriptionComplete, medicalRecordId }: AudioRecorderProps) {
@@ -20,11 +40,14 @@ export function AudioRecorder({ onTranscriptionComplete, medicalRecordId }: Audi
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [usingBrowserSpeech, setUsingBrowserSpeech] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const liveTranscriptRef = useRef("");
+  const isRecordingRef = useRef(false);
 
   const { mutate: createTranscription } = trpc.audio.createTranscription.useMutation();
   const { mutate: updateTranscription } = trpc.audio.updateTranscription.useMutation();
@@ -32,8 +55,79 @@ export function AudioRecorder({ onTranscriptionComplete, medicalRecordId }: Audi
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+      speechRecognitionRef.current?.abort?.();
     };
-  }, []);
+  }, [audioUrl]);
+
+  useEffect(() => {
+    isRecordingRef.current = isRecording;
+  }, [isRecording]);
+
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message.trim()) {
+      return error.message;
+    }
+    if (typeof error === "string" && error.trim()) {
+      return error;
+    }
+    return fallback;
+  };
+
+  const blobToBase64 = async (blob: Blob) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = String(reader.result ?? "");
+        resolve(result.includes(",") ? result.split(",")[1] : result);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+
+  const startBrowserSpeechRecognition = () => {
+    const SpeechRecognition = getSpeechRecognitionCtor();
+    if (!SpeechRecognition) {
+      setUsingBrowserSpeech(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "pt-BR";
+      recognition.onresult = (event: any) => {
+        const transcript = Array.from(event.results)
+          .map((result: any) => result?.[0]?.transcript || "")
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim();
+
+        if (transcript) {
+          liveTranscriptRef.current = transcript;
+          setTranscription(transcript);
+        }
+      };
+      recognition.onerror = () => {
+        setUsingBrowserSpeech(false);
+      };
+      recognition.onend = () => {
+        if (isRecordingRef.current) {
+          try {
+            recognition.start();
+          } catch {
+            setUsingBrowserSpeech(false);
+          }
+        }
+      };
+      recognition.start();
+      speechRecognitionRef.current = recognition;
+      setUsingBrowserSpeech(true);
+    } catch {
+      setUsingBrowserSpeech(false);
+    }
+  };
 
   const startRecording = async () => {
     try {
@@ -43,9 +137,18 @@ export function AudioRecorder({ onTranscriptionComplete, medicalRecordId }: Audi
       });
 
       audioChunksRef.current = [];
+      liveTranscriptRef.current = "";
+      setTranscription("");
+      setAudioBlob(null);
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+        setAudioUrl(null);
+      }
 
       mediaRecorder.ondataavailable = (event) => {
-        audioChunksRef.current.push(event.data);
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
       };
 
       mediaRecorder.onstop = () => {
@@ -58,122 +161,150 @@ export function AudioRecorder({ onTranscriptionComplete, medicalRecordId }: Audi
 
       mediaRecorder.start();
       mediaRecorderRef.current = mediaRecorder;
+      isRecordingRef.current = true;
       setIsRecording(true);
       setRecordingTime(0);
-      setTranscription("");
 
       timerRef.current = setInterval(() => {
         setRecordingTime((prev) => prev + 1);
       }, 1000);
 
-      toast.success("Gravação iniciada");
+      startBrowserSpeechRecognition();
+      toast.success("Gravação iniciada.");
     } catch (error) {
-      console.error("Error accessing microphone:", error);
-      toast.error("Erro ao acessar o microfone. Verifique as permissões.");
+      console.error("Erro ao acessar microfone:", error);
+      toast.error("Erro ao acessar o microfone. Verifique as permissões do navegador.");
     }
   };
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
+      speechRecognitionRef.current?.stop();
+      isRecordingRef.current = false;
       setIsRecording(false);
       if (timerRef.current) clearInterval(timerRef.current);
-      toast.success("Gravação concluída");
+      toast.success("Gravação concluída.");
     }
+  };
+
+  const finishWithTranscript = (text: string, transcriptionId?: number) => {
+    const cleaned = text.replace(/\s+/g, " ").trim();
+    setTranscription(cleaned);
+
+    if (transcriptionId) {
+      updateTranscription({
+        id: transcriptionId,
+        transcription: cleaned,
+        status: "completed",
+      });
+    }
+
+    onTranscriptionComplete?.(cleaned);
+    toast.success(usingBrowserSpeech ? "Áudio transcrito pelo navegador." : "Áudio transcrito com sucesso.");
   };
 
   const handleTranscribe = async () => {
     if (!audioBlob) {
-      toast.error("Nenhum áudio para transcrever");
+      toast.error("Nenhum áudio gravado para transcrever.");
       return;
     }
 
     if (audioBlob.size > 16 * 1024 * 1024) {
-      toast.error("Arquivo muito grande (máximo 16MB)");
+      toast.error("Arquivo muito grande. O limite é de 16 MB.");
+      return;
+    }
+
+    const localTranscript = liveTranscriptRef.current.trim() || transcription.trim();
+    if (localTranscript) {
+      setIsTranscribing(true);
+      createTranscription(
+        {
+          audioUrl: audioUrl || "",
+          audioKey: `browser-live-${Date.now()}`,
+          medicalRecordId,
+        },
+        {
+          onSuccess: (result: any) => {
+            finishWithTranscript(localTranscript, result?.id);
+            setIsTranscribing(false);
+          },
+          onError: () => {
+            finishWithTranscript(localTranscript);
+            setIsTranscribing(false);
+          },
+        },
+      );
       return;
     }
 
     setIsTranscribing(true);
 
     try {
-      const audioKey = `audio/${Date.now()}-${Math.random().toString(36).substring(7)}.webm`;
-      
-      // Upload audio to storage
-      const formData = new FormData();
-      formData.append('file', audioBlob, 'audio.webm');
-      formData.append('key', audioKey);
-      
-      const uploadResponse = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
+      const audioKey = `audio/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.webm`;
+      const fileBase64 = await blobToBase64(audioBlob);
+
+      const uploadResponse = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: audioKey,
+          mimeType: audioBlob.type || "audio/webm",
+          fileName: "audio.webm",
+          fileBase64,
+        }),
       });
-      
+
       if (!uploadResponse.ok) {
-        throw new Error('Upload failed');
+        const detail = await uploadResponse.text().catch(() => "");
+        throw new Error(detail || "Falha no upload do áudio.");
       }
-      
+
       const uploadData = await uploadResponse.json();
-      const url = uploadData.url;
+      const uploadedUrl = uploadData.url;
 
       createTranscription(
         {
-          audioUrl: url,
+          audioUrl: uploadedUrl,
           audioKey,
           medicalRecordId,
         },
         {
           onSuccess: (result: any) => {
-            if (result && typeof result === 'object' && 'id' in result) {
-              transcribeAudio(result.id, url);
-            }
+            transcribeWithServer(result?.id, uploadedUrl);
           },
-          onError: (error) => {
-            toast.error("Erro ao criar registro de áudio");
+          onError: () => {
+            toast.error("Erro ao criar o registro do áudio.");
             setIsTranscribing(false);
           },
-        }
+        },
       );
     } catch (error) {
-      console.error("Error uploading audio:", error);
-      toast.error("Erro ao fazer upload do áudio");
+      console.error("Erro ao enviar áudio:", error);
+      toast.error(getErrorMessage(error, "Erro ao fazer upload do áudio."));
       setIsTranscribing(false);
     }
   };
 
-  const transcribeAudio = async (transcriptionId: number | undefined, audioUrl: string) => {
-    if (!transcriptionId) return;
+  const transcribeWithServer = async (transcriptionId: number | undefined, uploadedUrl: string) => {
     try {
       const response = await fetch("/api/transcribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audioUrl, language: "pt" }),
+        body: JSON.stringify({ audioUrl: uploadedUrl, language: "pt" }),
       });
 
       if (!response.ok) {
-        throw new Error("Transcription failed");
+        const detail = await response.text().catch(() => "");
+        throw new Error(detail || "Falha ao transcrever o áudio.");
       }
 
       const data = await response.json();
-      const transcribedText = data.text || "";
-
-      setTranscription(transcribedText);
-
-      if (transcriptionId) {
-        updateTranscription({
-          id: transcriptionId,
-          transcription: transcribedText,
-          status: "completed",
-        });
-      }
-
-      if (onTranscriptionComplete) {
-        onTranscriptionComplete(transcribedText);
-      }
-
-      toast.success("Áudio transcrito com sucesso");
+      finishWithTranscript(data.text || "", transcriptionId);
     } catch (error) {
-      console.error("Error transcribing audio:", error);
-      toast.error("Erro ao transcrever áudio");
+      console.error("Erro ao transcrever áudio:", error);
+      const message = getErrorMessage(error, "Erro ao transcrever o áudio.");
+      toast.error(message);
       if (transcriptionId) {
         updateTranscription({
           id: transcriptionId,
@@ -188,9 +319,15 @@ export function AudioRecorder({ onTranscriptionComplete, medicalRecordId }: Audi
 
   const clearRecording = () => {
     setAudioBlob(null);
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
     setAudioUrl(null);
     setTranscription("");
+    liveTranscriptRef.current = "";
     setRecordingTime(0);
+    setUsingBrowserSpeech(false);
+    isRecordingRef.current = false;
   };
 
   const formatTime = (seconds: number) => {
@@ -202,110 +339,79 @@ export function AudioRecorder({ onTranscriptionComplete, medicalRecordId }: Audi
   return (
     <Card className="border-border/50">
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
           <Mic className="h-4 w-4 text-amber-500" />
           Gravação de Áudio
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Recording Controls */}
         <div className="flex items-center gap-2">
           {!isRecording && !audioBlob && (
             <Button
               onClick={startRecording}
               size="sm"
-              className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white"
+              className="bg-gradient-to-r from-amber-500 to-amber-600 text-white hover:from-amber-600 hover:to-amber-700"
             >
-              <Mic className="h-3.5 w-3.5 mr-1.5" />
+              <Mic className="mr-1.5 h-3.5 w-3.5" />
               Iniciar Gravação
             </Button>
           )}
 
           {isRecording && (
             <>
-              <Button
-                onClick={stopRecording}
-                size="sm"
-                variant="destructive"
-              >
-                <Square className="h-3.5 w-3.5 mr-1.5" />
+              <Button onClick={stopRecording} size="sm" variant="destructive">
+                <Square className="mr-1.5 h-3.5 w-3.5" />
                 Parar Gravação
               </Button>
-              <Badge variant="outline" className="text-amber-500 border-amber-500/30">
-                <span className="inline-block w-2 h-2 bg-amber-500 rounded-full mr-2 animate-pulse" />
-                {formatTime(recordingTime)}
+              <Badge variant="outline" className="animate-pulse border-red-500/30 text-red-500">
+                Gravando {formatTime(recordingTime)}
               </Badge>
+              {usingBrowserSpeech ? (
+                <Badge variant="outline" className="border-emerald-500/30 text-emerald-600">
+                  Transcrição local ativa
+                </Badge>
+              ) : null}
             </>
           )}
 
-          {audioBlob && !isRecording && (
+          {!isRecording && audioBlob && (
             <>
-              <Button
-                onClick={handleTranscribe}
-                disabled={isTranscribing}
-                size="sm"
-                className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white"
-              >
-                {isTranscribing ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                    Transcrevendo...
-                  </>
-                ) : (
-                  <>
-                    <Volume2 className="h-3.5 w-3.5 mr-1.5" />
-                    Transcrever
-                  </>
-                )}
+              <Button onClick={handleTranscribe} size="sm" disabled={isTranscribing}>
+                {isTranscribing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Volume2 className="mr-1.5 h-3.5 w-3.5" />}
+                Transcrever
               </Button>
-              <Button
-                onClick={clearRecording}
-                disabled={isTranscribing}
-                size="sm"
-                variant="outline"
-              >
-                <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+              <Button onClick={clearRecording} size="sm" variant="outline">
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                 Limpar
               </Button>
             </>
           )}
         </div>
 
-        {/* Audio Playback */}
         {audioUrl && (
           <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground">Reproduzir Áudio</label>
-            <audio
-              ref={audioRef}
-              src={audioUrl}
-              controls
-              className="w-full h-8 rounded-md border border-border"
-            />
-          </div>
-        )}
-
-        {/* Transcription Display */}
-        {transcription && (
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground">Transcrição</label>
-            <Textarea
-              value={transcription}
-              onChange={(e) => setTranscription(e.target.value)}
-              placeholder="Transcrição do áudio..."
-              className="resize-none"
-              rows={4}
-            />
+            <Label className="text-sm font-medium">Reproduzir Áudio</Label>
+            <audio controls src={audioUrl} className="w-full" />
             <p className="text-xs text-muted-foreground">
-              {transcription.split(" ").length} palavras
+              Tamanho do arquivo: {(((audioBlob?.size ?? 0) / 1024) / 1024).toFixed(2)} MB
             </p>
           </div>
         )}
 
-        {/* File Size Warning */}
-        {audioBlob && (
-          <p className="text-xs text-muted-foreground">
-            Tamanho do arquivo: {(audioBlob.size / 1024 / 1024).toFixed(2)} MB
-          </p>
+        {transcription && (
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Transcrição</Label>
+            <Textarea
+              value={transcription}
+              onChange={(event) => {
+                setTranscription(event.target.value);
+                liveTranscriptRef.current = event.target.value;
+              }}
+              rows={6}
+              className="resize-none"
+              placeholder="A transcrição aparecerá aqui."
+            />
+          </div>
         )}
       </CardContent>
     </Card>
