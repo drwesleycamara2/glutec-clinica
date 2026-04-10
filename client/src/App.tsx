@@ -33,6 +33,8 @@ import Chat from "./pages/Chat";
 import Perfil from "./pages/Perfil";
 import DashboardLayout from "./components/DashboardLayoutPremium";
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import AceitarConvite from "./pages/AceitarConvite";
 import VerificarDoisFatores from "./pages/VerificarDoisFatores";
 import Configurar2FA from "./pages/Configurar2FA";
@@ -42,7 +44,16 @@ import AnamnesePublica from "./pages/AnamnesePublica";
 import { useAuth } from "./_core/hooks/useAuth";
 import { canAccessModule, getModuleForPath } from "./lib/access";
 
-const publicPaths = ["/login", "/aceitar-convite", "/verificar-2fa", "/envio-midias", "/anamnese-publica", "/anamnese-preencher"];
+const publicPaths = [
+  "/login",
+  "/esqueci-senha",
+  "/redefinir-senha",
+  "/aceitar-convite",
+  "/verificar-2fa",
+  "/envio-midias",
+  "/anamnese-publica",
+  "/anamnese-preencher",
+];
 const sessionSetupPaths = ["/configurar-2fa", "/trocar-senha"];
 
 function ProtectedRoutes() {
@@ -137,6 +148,8 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/esqueci-senha" component={ForgotPassword} />
+      <Route path="/redefinir-senha/:token" component={ResetPassword} />
       <Route path="/aceitar-convite" component={AceitarConvite} />
       <Route path="/verificar-2fa" component={VerificarDoisFatores} />
       <Route path="/envio-midias/:token" component={EnvioMidiasPaciente} />

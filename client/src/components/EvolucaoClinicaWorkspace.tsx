@@ -196,7 +196,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
 
     if (!shouldPersist) {
       localStorage.removeItem(draftStorageKey);
-      clearClinicalDraftMeta();
+      clearClinicalDraftMeta(patientId);
       return;
     }
 
@@ -358,7 +358,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
       }
 
       localStorage.removeItem(draftStorageKey);
-      clearClinicalDraftMeta();
+      clearClinicalDraftMeta(patientId);
       setSelectedEvolution(null);
       setStartedSessionAt("");
       setForm(emptyForm());

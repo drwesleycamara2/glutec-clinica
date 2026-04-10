@@ -106,6 +106,46 @@ export function inviteEmailTemplate(params: {
 
 // ─── Criar Transporter ────────────────────────────────────────────────────────
 
+export function passwordResetEmailTemplate(params: {
+  name?: string | null;
+  resetUrl: string;
+  expiresIn: string;
+}): { subject: string; html: string } {
+  const recipientName = params.name?.trim() || "Olá";
+
+  const html = baseTemplate(`
+    <h2 style="margin:0 0 8px;color:#050505;font-size:22px;">Redefinição de senha</h2>
+    <p style="margin:0 0 24px;color:#555;font-size:15px;">
+      ${recipientName}, recebemos uma solicitação para redefinir a senha da sua conta no <strong>Glutec</strong>.
+    </p>
+
+    <div style="background:#F7F4EE;border-radius:8px;padding:20px 24px;margin:0 0 28px;">
+      <p style="margin:0;color:#6B6B6B;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Validade do link</p>
+      <p style="margin:4px 0 0;color:#050505;font-size:17px;font-weight:700;">${params.expiresIn}</p>
+    </div>
+
+    <p style="margin:0 0 20px;color:#555;font-size:14px;">
+      Use o botão abaixo para cadastrar uma nova senha. Por segurança, este link é temporário e só pode ser usado uma vez.
+    </p>
+
+    <div style="text-align:center;margin:32px 0;">
+      <a href="${params.resetUrl}"
+         style="display:inline-block;background:linear-gradient(135deg,#8A6526,#C9A55B);color:#FFFFFF;text-decoration:none;padding:16px 40px;border-radius:8px;font-size:16px;font-weight:700;letter-spacing:0.5px;">
+        Redefinir minha senha
+      </a>
+    </div>
+
+    <p style="margin:24px 0 0;color:#777;font-size:12px;text-align:center;">
+      Se você não pediu essa redefinição, ignore este e-mail. Sua senha atual continuará protegida.
+    </p>
+  `);
+
+  return {
+    subject: "Recuperação de senha do Glutec",
+    html,
+  };
+}
+
 async function createTransporter(): Promise<Transporter | null> {
   const settings = await db.getSmtpSettings();
   if (!settings) return null;

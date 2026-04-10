@@ -14,6 +14,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -59,7 +61,7 @@ import {
   CLINICAL_DRAFT_AUTOSAVE_EVENT,
   CLINICAL_DRAFT_CHANGED_EVENT,
   CLINICAL_LOCK_RETURN_TO_KEY,
-  readClinicalDraftMeta,
+  readClinicalDraftMetas,
   type ClinicalDraftMeta,
 } from "@/lib/clinicalSession";
 
@@ -128,6 +130,18 @@ function getInitials(name?: string | null) {
     .slice(0, 2)
     .map(part => part[0]?.toUpperCase() ?? "")
     .join("");
+}
+
+function formatDraftUpdatedAt(updatedAt: string) {
+  const date = new Date(updatedAt);
+  if (Number.isNaN(date.getTime())) return "Atualizado há pouco";
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export default function DashboardLayoutPremium({
@@ -214,7 +228,7 @@ function DashboardLayoutPremiumContent({
   const { state, toggleSidebar } = useSidebar();
   const { isMobile } = useIsMobile();
   const [isResizing, setIsResizing] = useState(false);
-  const [activeClinicalDraft, setActiveClinicalDraft] = useState<ClinicalDraftMeta | null>(() => readClinicalDraftMeta());
+  const [openClinicalDrafts, setOpenClinicalDrafts] = useState<ClinicalDraftMeta[]>(() => readClinicalDraftMetas());
   const [navigationPromptOpen, setNavigationPromptOpen] = useState(false);
   const [pendingNavigationPath, setPendingNavigationPath] = useState<string | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -222,6 +236,10 @@ function DashboardLayoutPremiumContent({
   const previousLocationRef = useRef(location);
   const revertingNavigationRef = useRef(false);
   const inactivityTimeoutRef = useRef<number | null>(null);
+  const activeClinicalDraft = useMemo(
+    () => openClinicalDrafts.find((draft) => draft.path.split("#")[0] === location) ?? openClinicalDrafts[0] ?? null,
+    [location, openClinicalDrafts]
+  );
   const activeDraftBasePath = activeClinicalDraft?.path.split("#")[0] ?? null;
 
   const sections = useMemo(
@@ -243,7 +261,7 @@ function DashboardLayoutPremiumContent({
 
   useEffect(() => {
     const syncDraft = () => {
-      setActiveClinicalDraft(readClinicalDraftMeta());
+      setOpenClinicalDrafts(readClinicalDraftMetas());
     };
 
     syncDraft();
@@ -489,6 +507,51 @@ function DashboardLayoutPremiumContent({
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="relative flex h-11 w-11 items-center justify-center rounded-2xl border border-gold/20 bg-background/80 text-[#8f2f2f] shadow-[0_10px_24px_rgba(0,0,0,0.08)] transition-all hover:-translate-y-0.5 hover:border-[#d65a5a]/45 hover:text-[#c93030]"
+                  aria-label={`Prontuários abertos (${openClinicalDrafts.length})`}
+                >
+                  <Stethoscope className="h-5 w-5" />
+                  {openClinicalDrafts.length > 0 ? (
+                    <span className="absolute -right-1 -top-1 flex min-w-[1.25rem] items-center justify-center rounded-full bg-[#d63b3b] px-1.5 py-0.5 text-[10px] font-bold text-white shadow-[0_0_0_4px_rgba(255,255,255,0.85)] animate-pulse dark:shadow-[0_0_0_4px_rgba(8,8,8,0.88)]">
+                      {openClinicalDrafts.length}
+                    </span>
+                  ) : null}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-[26rem] rounded-2xl border-gold/20 bg-background/95 p-2">
+                <DropdownMenuLabel className="px-3 py-2 text-sm font-semibold text-text-primary">
+                  Prontuários abertos
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {openClinicalDrafts.length === 0 ? (
+                  <div className="px-3 py-5 text-sm text-text-secondary">
+                    Nenhum prontuário está em aberto no momento.
+                  </div>
+                ) : (
+                  openClinicalDrafts.map((draft) => (
+                    <DropdownMenuItem
+                      key={draft.patientId}
+                      onClick={() => navigateWithDraftProtection(draft.path)}
+                      className="flex items-start justify-between gap-4 rounded-xl px-3 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-text-primary">{draft.patientName}</p>
+                        <p className="mt-1 text-xs text-text-secondary">
+                          {draft.status === "em_andamento" ? "Atendimento em andamento" : "Rascunho salvo"}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-[11px] text-text-tertiary">
+                        {formatDraftUpdatedAt(draft.updatedAt)}
+                      </span>
+                    </DropdownMenuItem>
+                  ))
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button variant="outline" className="rounded-xl px-4" onClick={() => navigateWithDraftProtection("/pacientes")}>
               <Users className="h-4 w-4" />
               Novo Paciente
@@ -510,7 +573,54 @@ function DashboardLayoutPremiumContent({
                 <p className="text-sm font-medium text-text-primary">{activeMenuItem?.label ?? "Menu"}</p>
               </div>
             </div>
-            <ThemeToggle />
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-gold/20 bg-background/80 text-[#8f2f2f]"
+                    aria-label={`Prontuários abertos (${openClinicalDrafts.length})`}
+                  >
+                    <Stethoscope className="h-4 w-4" />
+                    {openClinicalDrafts.length > 0 ? (
+                      <span className="absolute -right-1 -top-1 flex min-w-[1rem] items-center justify-center rounded-full bg-[#d63b3b] px-1 py-0.5 text-[9px] font-bold text-white animate-pulse">
+                        {openClinicalDrafts.length}
+                      </span>
+                    ) : null}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[22rem] rounded-2xl border-gold/20 bg-background/95 p-2">
+                  <DropdownMenuLabel className="px-3 py-2 text-sm font-semibold text-text-primary">
+                    Prontuários abertos
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {openClinicalDrafts.length === 0 ? (
+                    <div className="px-3 py-5 text-sm text-text-secondary">
+                      Nenhum prontuário está em aberto no momento.
+                    </div>
+                  ) : (
+                    openClinicalDrafts.map((draft) => (
+                      <DropdownMenuItem
+                        key={`mobile-${draft.patientId}`}
+                        onClick={() => navigateWithDraftProtection(draft.path)}
+                        className="flex items-start justify-between gap-3 rounded-xl px-3 py-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-text-primary">{draft.patientName}</p>
+                          <p className="mt-1 text-xs text-text-secondary">
+                            {draft.status === "em_andamento" ? "Atendimento em andamento" : "Rascunho salvo"}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-[11px] text-text-tertiary">
+                          {formatDraftUpdatedAt(draft.updatedAt)}
+                        </span>
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <ThemeToggle />
+            </div>
           </div>
         )}
 

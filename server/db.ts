@@ -2,7 +2,7 @@ import { eq, sql, or, like, and, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, icd10Codes, userFavoriteIcds, audioTranscriptions, InsertIcd10Code, InsertUserFavoriteIcd, InsertAudioTranscription } from "../drizzle/schema";
 import { ENV } from './_core/env';
-import { randomBytes } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import fs from "fs/promises";
 import path from "path";
 
@@ -505,4 +505,75 @@ export async function saveSmtpSettings(data: {
     fromEmail: data.fromEmail ?? null,
     updatedAt: new Date(),
   });
+}
+
+export function hashPasswordResetToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+export async function createPasswordResetToken(data: {
+  userId: number;
+  tokenHash: string;
+  expiresAt: Date;
+  requestedIp?: string | null;
+  userAgent?: string | null;
+}) {
+  const db = await getDb();
+  if (!db) return;
+
+  await db.execute(
+    sql`update password_reset_tokens set usedAt = now() where userId = ${data.userId} and usedAt is null`
+  );
+
+  await db.execute(sql`
+    insert into password_reset_tokens (
+      userId,
+      tokenHash,
+      requestedIp,
+      userAgent,
+      expiresAt,
+      createdAt
+    ) values (
+      ${data.userId},
+      ${data.tokenHash},
+      ${data.requestedIp ?? null},
+      ${data.userAgent ?? null},
+      ${data.expiresAt},
+      ${new Date()}
+    )
+  `);
+}
+
+export async function getPasswordResetTokenByHash(tokenHash: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = (await db.execute(sql`
+    select
+      prt.*,
+      u.email as userEmail,
+      u.name as userName,
+      u.role as userRole,
+      u.status as userStatus
+    from password_reset_tokens prt
+    inner join users u on u.id = prt.userId
+    where prt.tokenHash = ${tokenHash}
+    limit 1
+  `)) as any[];
+
+  return result[0] as any;
+}
+
+export async function markPasswordResetTokenUsed(tokenId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.execute(sql`update password_reset_tokens set usedAt = now() where id = ${tokenId}`);
+}
+
+export async function invalidatePasswordResetTokensForUser(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.execute(
+    sql`update password_reset_tokens set usedAt = now() where userId = ${userId} and usedAt is null`
+  );
 }
