@@ -74,6 +74,9 @@ export async function transcribeAudio(
   options: TranscribeOptions
 ): Promise<TranscriptionResponse | TranscriptionError> {
   try {
+    const transcriptionModel =
+      process.env.OPENAI_TRANSCRIPTION_MODEL?.trim() ||
+      "whisper-1";
     const transcriptionApiUrl =
       ENV.forgeApiUrl ||
       process.env.OPENAI_BASE_URL ||
@@ -116,13 +119,13 @@ export async function transcribeAudio(
       audioBuffer = Buffer.from(await response.arrayBuffer());
       mimeType = response.headers.get('content-type') || 'audio/mpeg';
       
-      // Check file size (16MB limit)
+      // Keep the server-side limit aligned with the current API file limit.
       const sizeMB = audioBuffer.length / (1024 * 1024);
-      if (sizeMB > 16) {
+      if (sizeMB > 25) {
         return {
           error: "O arquivo de áudio excede o limite máximo",
           code: "FILE_TOO_LARGE",
-          details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 16MB`
+          details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 25MB`
         };
       }
     } catch (error) {
@@ -141,7 +144,7 @@ export async function transcribeAudio(
     const audioBlob = new Blob([new Uint8Array(audioBuffer)], { type: mimeType });
     formData.append("file", audioBlob, filename);
     
-    formData.append("model", "whisper-1");
+    formData.append("model", transcriptionModel);
     formData.append("response_format", "verbose_json");
     
     // Add prompt - use custom prompt if provided, otherwise generate based on language
