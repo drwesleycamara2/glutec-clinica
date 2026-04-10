@@ -429,7 +429,7 @@ export default function ProntuarioDetalhe() {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-semibold truncate">{patient.fullName}</h1>
-            <Badge variant="outline" className="text-[10px] shrink-0">PEP Â· CFM 1821/2007</Badge>
+            <Badge variant="outline" className="text-[10px] shrink-0">PEP · CFM 1821/2007</Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
             {patient.cpf && `CPF: ${patient.cpf}`}

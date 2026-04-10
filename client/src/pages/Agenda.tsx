@@ -21,9 +21,9 @@ import {
   UserCheck,
 } from "lucide-react";
 
-const DAYS_PT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "SÃ¡b"];
-const DAY_NAMES_FULL = ["DOMINGO", "SEGUNDA", "TERÃ‡A", "QUARTA", "QUINTA", "SEXTA", "SÃBADO"];
-const MONTHS_PT = ["Janeiro", "Fevereiro", "MarÃ§o", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+const DAYS_PT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const DAY_NAMES_FULL = ["DOMINGO", "SEGUNDA", "TERÇA", "QUARTA", "QUINTA", "SEXTA", "SÁBADO"];
+const MONTHS_PT = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
 const APPOINTMENT_TYPES = [
   { value: "consulta", label: "Consulta" },
@@ -36,7 +36,7 @@ const STATUS_LABELS: Record<string, string> = {
   agendada: "Agendada",
   confirmada: "Confirmada",
   em_atendimento: "Em atendimento",
-  concluida: "ConcluÃ­da",
+  concluida: "Concluída",
   cancelada: "Cancelada",
   falta: "Falta",
 };
@@ -285,7 +285,7 @@ export default function Agenda() {
     const scheduledAt = buildDateTimeForSlot(selectedDate, slot);
     const blockingItem = blockForSlot(slot);
     if (blockingItem) {
-      toast.error("HÃ¡ um bloqueio ativo nesse horÃ¡rio.");
+      toast.error("Há um bloqueio ativo nesse horário.");
       return;
     }
 
@@ -299,7 +299,7 @@ export default function Agenda() {
 
   const handleCreateAppointment = () => {
     if (!appointmentForm.patientId || !appointmentForm.doctorId || !appointmentForm.scheduledAt || !appointmentForm.room.trim()) {
-      toast.error("Preencha paciente, profissional, data, horÃ¡rio e sala.");
+      toast.error("Preencha paciente, profissional, data, horário e sala.");
       return;
     }
 
@@ -316,7 +316,7 @@ export default function Agenda() {
 
   const handleCreateBlock = () => {
     if (!blockForm.title.trim() || !blockForm.startsAt || !blockForm.endsAt) {
-      toast.error("Informe tÃ­tulo, inÃ­cio e fim do bloqueio.");
+      toast.error("Informe título, início e fim do bloqueio.");
       return;
     }
 
@@ -396,7 +396,7 @@ export default function Agenda() {
               }}
             >
               <Ban className="mr-2 h-4 w-4" />
-              Bloquear horÃ¡rio
+              Bloquear horário
             </Button>
             <Button variant="outline" size="sm" className="border-gray-300">
               <UserCheck className="mr-2 h-4 w-4" />
@@ -413,14 +413,14 @@ export default function Agenda() {
                 onClick={() => setViewMode(mode)}
                 className={viewMode === mode ? "btn-gold-gradient" : "border-gray-300"}
               >
-                {mode === "day" ? "Dia" : mode === "week" ? "Semana" : "MÃªs"}
+                {mode === "day" ? "Dia" : mode === "week" ? "Semana" : "Mês"}
               </Button>
             ))}
           </div>
 
           <Button variant="outline" size="sm" className="border-gray-300">
             <Settings className="mr-2 h-4 w-4" />
-            OpÃ§Ãµes
+            Opções
           </Button>
         </div>
         <div className="mb-4 grid gap-3 xl:grid-cols-4">
@@ -433,7 +433,7 @@ export default function Agenda() {
             <p className="mt-2 text-3xl font-semibold text-gray-900">{selectedDayAppointments.length}</p>
           </div>
           <div className="rounded-2xl border border-gray-300 bg-white p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-500">PrÃ³ximos</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-500">Próximos</p>
             <p className="mt-2 text-3xl font-semibold text-gray-900">{upcomingAppointments.length}</p>
           </div>
           <div className="rounded-2xl border border-gray-300 bg-white p-4">
@@ -453,12 +453,12 @@ export default function Agenda() {
                 <thead className="sticky top-0 z-10 bg-gray-100 backdrop-blur">
                   <tr className="text-xs font-semibold text-gray-700">
                     <th className="w-10 px-2 py-2 text-center"></th>
-                    <th className="w-24 px-3 py-2 text-left">HorÃ¡rio</th>
+                    <th className="w-24 px-3 py-2 text-left">Horário</th>
                     <th className="px-3 py-2 text-left">Paciente</th>
                     <th className="w-28 px-3 py-2 text-left">Tipo</th>
                     <th className="w-28 px-3 py-2 text-left">Sala</th>
-                    <th className="w-32 px-3 py-2 text-center">SituaÃ§Ã£o</th>
-                    <th className="w-24 px-3 py-2 text-center">AÃ§Ãµes</th>
+                    <th className="w-32 px-3 py-2 text-center">Situação</th>
+                    <th className="w-24 px-3 py-2 text-center">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -619,7 +619,7 @@ export default function Agenda() {
                             </div>
                             <p className="mt-2 text-sm text-gray-900">{getPatientName(item.patientId)}</p>
                             <p className="text-xs text-gray-500">
-                              {getDoctorName(item.doctorId)} Ã‚Â· {item.room || "Sem sala"}
+                              {getDoctorName(item.doctorId)} · {item.room || "Sem sala"}
                             </p>
                           </button>
                         ))
@@ -708,7 +708,7 @@ export default function Agenda() {
                           </div>
                           <p className="text-sm font-semibold text-gray-900">{getPatientName(item.patientId)}</p>
                           <p className="text-xs text-gray-500">
-                            {getDoctorName(item.doctorId)} Ã‚Â· {item.room || "Sem sala"}
+                            {getDoctorName(item.doctorId)} · {item.room || "Sem sala"}
                           </p>
                         </div>
 
@@ -762,7 +762,7 @@ export default function Agenda() {
                         <div className="space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-base font-semibold text-gray-900">
-                              {new Date(block.startsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} atÃ© {new Date(block.endsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                              {new Date(block.startsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} até {new Date(block.endsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                             </span>
                             <Badge className="border border-amber-200 bg-white text-amber-700">
                               Bloqueado
@@ -770,7 +770,7 @@ export default function Agenda() {
                           </div>
                           <p className="text-sm font-semibold text-gray-900">{block.title}</p>
                           <p className="text-xs text-gray-500">
-                            Sala: {block.room || "Todas"} Ã‚Â· Profissional: {block.doctorId ? getDoctorName(block.doctorId) : "Todos"}
+                            Sala: {block.room || "Todas"} · Profissional: {block.doctorId ? getDoctorName(block.doctorId) : "Todos"}
                           </p>
                           {block.notes ? (
                             <p className="text-xs text-gray-500">{block.notes}</p>
@@ -902,10 +902,10 @@ export default function Agenda() {
                     <Badge className="border border-amber-200 bg-amber-100 text-amber-700">Bloqueado</Badge>
                   </div>
                   <p className="mt-2 text-xs text-gray-500">
-                    {new Date(block.startsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} atÃ© {new Date(block.endsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                    {new Date(block.startsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} até {new Date(block.endsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                   </p>
                   <p className="text-xs text-gray-500">
-                    Sala: {block.room || "Todas"} Â· Profissional: {block.doctorId ? getDoctorName(block.doctorId) : "Todos"}
+                    Sala: {block.room || "Todas"} · Profissional: {block.doctorId ? getDoctorName(block.doctorId) : "Todos"}
                   </p>
                 </button>
               ))
@@ -916,7 +916,7 @@ export default function Agenda() {
         <div className="rounded-lg border border-gray-300 bg-white p-4">
           <div className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4 text-[#C9A55B]" />
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">PrÃ³ximos agendamentos</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Próximos agendamentos</p>
           </div>
           <div className="mt-3 space-y-3">
             {upcomingAppointments.length === 0 ? (
@@ -948,7 +948,7 @@ export default function Agenda() {
         <div className="rounded-lg border border-gray-300 bg-white p-4">
           <div className="flex items-center gap-2">
             <History className="h-4 w-4 text-[#C9A55B]" />
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">HistÃ³rico recente</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Histórico recente</p>
           </div>
           <div className="mt-3 space-y-3">
             {pastAppointments.length === 0 ? (
@@ -1055,7 +1055,7 @@ export default function Agenda() {
             </div>
 
             <div>
-              <Label className="text-sm font-semibold">DuraÃ§Ã£o (minutos)</Label>
+              <Label className="text-sm font-semibold">Duração (minutos)</Label>
               <Input
                 type="number"
                 min={5}
@@ -1066,7 +1066,7 @@ export default function Agenda() {
             </div>
 
             <div>
-              <Label className="text-sm font-semibold">ObservaÃ§Ãµes</Label>
+              <Label className="text-sm font-semibold">Observações</Label>
               <Textarea
                 value={appointmentForm.notes}
                 onChange={(event) => setAppointmentForm((current) => ({ ...current, notes: event.target.value }))}
@@ -1095,7 +1095,7 @@ export default function Agenda() {
 
           <div className="space-y-4">
             <div>
-              <Label className="text-sm font-semibold">TÃ­tulo *</Label>
+              <Label className="text-sm font-semibold">Título *</Label>
               <Input
                 value={blockForm.title}
                 onChange={(event) => setBlockForm((current) => ({ ...current, title: event.target.value }))}
@@ -1132,7 +1132,7 @@ export default function Agenda() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-sm font-semibold">InÃ­cio *</Label>
+                <Label className="text-sm font-semibold">Início *</Label>
                 <Input
                   type="datetime-local"
                   value={blockForm.startsAt}
@@ -1152,7 +1152,7 @@ export default function Agenda() {
             </div>
 
             <div>
-              <Label className="text-sm font-semibold">ObservaÃ§Ãµes</Label>
+              <Label className="text-sm font-semibold">Observações</Label>
               <Textarea
                 rows={3}
                 value={blockForm.notes}
@@ -1203,7 +1203,7 @@ export default function Agenda() {
                   </p>
                 </div>
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">HorÃ¡rio</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Horário</p>
                   <p className="mt-2 text-sm font-semibold text-gray-900">
                     {new Date(selectedEvent.scheduledAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                   </p>
@@ -1228,9 +1228,9 @@ export default function Agenda() {
               </div>
 
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">ObservaÃ§Ãµes</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Observações</p>
                 <p className="mt-2 whitespace-pre-wrap text-sm text-gray-800">
-                  {selectedEvent.notes || "Nenhuma observaÃ§Ã£o registrada para este agendamento."}
+                  {selectedEvent.notes || "Nenhuma observação registrada para este agendamento."}
                 </p>
               </div>
             </div>
@@ -1238,7 +1238,7 @@ export default function Agenda() {
             <div className="space-y-4">
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">TÃ­tulo</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Título</p>
                   <p className="mt-2 text-sm font-semibold text-gray-900">{selectedEvent.title}</p>
                 </div>
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
@@ -1246,7 +1246,7 @@ export default function Agenda() {
                   <p className="mt-2 text-sm font-semibold text-gray-900">{selectedEvent.room || "Todas"}</p>
                 </div>
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">InÃ­cio</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Início</p>
                   <p className="mt-2 text-sm font-semibold text-gray-900">{new Date(selectedEvent.startsAt).toLocaleString("pt-BR")}</p>
                 </div>
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
@@ -1256,9 +1256,9 @@ export default function Agenda() {
               </div>
 
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">ObservaÃ§Ãµes</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Observações</p>
                 <p className="mt-2 whitespace-pre-wrap text-sm text-gray-800">
-                  {selectedEvent.notes || "Sem observaÃ§Ãµes adicionais para este bloqueio."}
+                  {selectedEvent.notes || "Sem observações adicionais para este bloqueio."}
                 </p>
               </div>
             </div>
@@ -1304,4 +1304,3 @@ export default function Agenda() {
     </div>
   );
 }
-
