@@ -16,6 +16,12 @@ export const users = mysqlTable("users", {
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
+  specialty: varchar("specialty", { length: 128 }),
+  profession: varchar("profession", { length: 128 }),
+  crm: varchar("crm", { length: 32 }),
+  professionalLicenseType: varchar("professionalLicenseType", { length: 16 }),
+  professionalLicenseState: varchar("professionalLicenseState", { length: 2 }),
+  phone: varchar("phone", { length: 32 }),
   role: mysqlEnum("role", ["user", "admin", "medico", "recepcionista", "enfermeiro"]).default("user").notNull(),
   status: mysqlEnum("status", ["active", "inactive", "pending_password_change"]).default("active").notNull(),
   permissions: text("permissions"), // JSON string of allowed modules

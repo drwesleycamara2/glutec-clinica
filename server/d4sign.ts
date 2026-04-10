@@ -8,7 +8,7 @@
  */
 
 import axios, { AxiosInstance } from "axios";
-import * as db from "./db";
+import { getClinicSettings } from "./db_complete";
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -283,17 +283,15 @@ export class D4SignService {
  */
 export async function createD4SignService(): Promise<D4SignService | null> {
   // Tentar obter credenciais do banco de dados (clinic_settings)
-  const clinic = await db.getClinicSettings();
+  const clinic = await getClinicSettings();
 
   const tokenAPI =
     clinic?.d4signTokenApi ||
-    process.env.D4SIGN_TOKEN_API ||
-    "live_7d0a13cc11af0765b3100c9bdca360c862b57ae63bf9f5836d41cb67394dd790";
+    process.env.D4SIGN_TOKEN_API;
 
   const cryptKey =
     clinic?.d4signCryptKey ||
-    process.env.D4SIGN_CRYPT_KEY ||
-    "live_crypt_hShAdQ3il2jfdGWF7U1wybozsqGGouPC";
+    process.env.D4SIGN_CRYPT_KEY;
 
   const baseUrl =
     process.env.D4SIGN_BASE_URL ||

@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -140,6 +140,20 @@ export default function Orcamentos() {
     null,
   );
   const [selectedAreaId, setSelectedAreaId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const linkedPatientId = params.get("patientId");
+    const shouldCreate = params.get("create") === "1";
+
+    if (linkedPatientId && /^\d+$/.test(linkedPatientId)) {
+      setPatientId(linkedPatientId);
+      if (shouldCreate) {
+        setShowCreate(true);
+      }
+    }
+  }, []);
   const [selectedComplexity, setSelectedComplexity] = useState<
     "P" | "M" | "G" | null
   >(null);
@@ -997,3 +1011,4 @@ export default function Orcamentos() {
     </div>
   );
 }
+

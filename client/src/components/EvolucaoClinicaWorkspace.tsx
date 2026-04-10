@@ -69,9 +69,24 @@ const SIGNATURE_PROVIDERS = {
   ],
 } as const;
 
+const DEFAULT_CLINICAL_NOTES_TEMPLATE = [
+  "<p><strong>Queixa principal:</strong></p>",
+  "<p></p>",
+  "<p><strong>História Atual e Pregressa:</strong></p>",
+  "<p></p>",
+  "<p><strong>Exame físico:</strong></p>",
+  "<p></p>",
+  "<p><strong>Hipótese diagnóstica:</strong></p>",
+  "<p></p>",
+  "<p><strong>Conduta:</strong></p>",
+  "<p></p>",
+  "<p><strong>Observações:</strong></p>",
+  "<p></p>",
+].join("");
+
 const emptyForm = (): EvolutionFormState => ({
   icd10: null,
-  clinicalNotes: "",
+  clinicalNotes: DEFAULT_CLINICAL_NOTES_TEMPLATE,
   audioTranscription: "",
   assistantUserId: "",
   assistantName: "",
@@ -260,8 +275,8 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
       ? form.startedAt
       : startedSessionAt || form.startedAt || toDateTimeInputValue(new Date());
     const endedAt = status === "finalizado"
-      ? (form.endedAt || toDateTimeInputValue(new Date()))
-      : (form.endedAt || "");
+      ? form.endedAt || toDateTimeInputValue(new Date())
+      : form.endedAt || "";
 
     return {
       icdCode: form.icd10.code,
@@ -272,7 +287,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
       audioTranscription: form.audioTranscription || undefined,
       startedAt,
       endedAt: endedAt || undefined,
-      finalizedAt: status === "finalizado" ? (endedAt || toDateTimeInputValue(new Date())) : undefined,
+      finalizedAt: status === "finalizado" ? endedAt || toDateTimeInputValue(new Date()) : undefined,
       isRetroactive: form.isRetroactive,
       retroactiveJustification: form.retroactiveJustification || undefined,
       status,
@@ -687,7 +702,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
             <RichTextEditor
               value={form.clinicalNotes}
               onChange={(value) => setForm((current) => ({ ...current, clinicalNotes: value }))}
-              placeholder="Registre a evolução clínica, exame físico, conduta e demais observações."
+              placeholder="Queixa principal, história atual e pregressa, exame físico, hipótese diagnóstica, conduta e observações."
               minHeight="280px"
             />
           </div>
@@ -865,3 +880,4 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
     </div>
   );
 }
+
