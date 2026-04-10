@@ -1,5 +1,7 @@
-import fs from "fs";
+﻿import fs from "fs";
 import path from "path";
+import crypto from "crypto";
+import { execFileSync } from "child_process";
 import { getDb } from "./db";
 import { eq, like, and, gte, lte, desc } from "drizzle-orm";
 import { sql } from "drizzle-orm";
@@ -9,6 +11,7 @@ import {
   testNationalApiConnection,
 } from "./lib/nfse-nacional";
 import { encryptSensitiveValue, maskStoredValue } from "./lib/secure-storage";
+import { createWhatsAppService } from "./whatsapp";
 
 function unwrapRows<T = any>(result: any): T[] {
   if (Array.isArray(result) && Array.isArray(result[0])) {
@@ -24,6 +27,110 @@ function normalizeMediaUrl(value?: string | null) {
     return raw;
   }
   return raw.startsWith("/") ? raw : `/${raw}`;
+}
+
+type DefaultAnamnesisQuestion = {
+  text: string;
+  type: "text" | "radio" | "checkbox" | "select";
+  options?: string[];
+  required?: boolean;
+  placeholder?: string;
+  followUp?: {
+    prompt: string;
+    triggerValues: string[];
+    required?: boolean;
+    placeholder?: string;
+  };
+};
+
+const DEFAULT_ANAMNESIS_QUESTIONS_FEMININA: DefaultAnamnesisQuestion[] = [
+  { text: "Estado civil", type: "text", required: true, placeholder: "Informe o estado civil" },
+  { text: "Profissão", type: "text", required: true, placeholder: "Informe a profissão" },
+  { text: "Cidade e estado em que mora", type: "text", required: true, placeholder: "Ex: Mogi Guaçu - SP" },
+  { text: "Peso atual aproximado em kg", type: "text", required: true, placeholder: "Ex: 62" },
+  { text: "Sua estatura aproximada (em metros)", type: "text", required: true, placeholder: "Ex: 1,67" },
+  { text: "Tem alergia a algum medicamento, alimento ou substância?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Qual alergia é essa?", triggerValues: ["Sim"], required: true, placeholder: "Descreva a alergia" } },
+  { text: "É fumante?", type: "radio", options: ["Sim", "Não"], required: true },
+  { text: "Consome bebida alcoólica?", type: "radio", options: ["Sim, muito e com frequência", "Bebo pouco, socialmente", "Não bebo"], required: true },
+  { text: "Usa alguma droga ilícita?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Qual droga?", triggerValues: ["Sim"], required: true, placeholder: "Informe qual droga" } },
+  { text: "Usa algum tipo de hormônio?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Quais hormônios?", triggerValues: ["Sim"], required: true, placeholder: "Informe quais hormônios" } },
+  { text: "Faz uso de anticoagulante? (ou AAS?)", type: "radio", options: ["Sim", "Não"], required: true },
+  { text: "Toma vitamina D? Qual a dose e em que frequência?", type: "text", required: true, placeholder: "Descreva a dose e frequência" },
+  { text: "Faz uso de medicamentos regularmente?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Liste todos os medicamentos de uso regular", triggerValues: ["Sim"], required: true, placeholder: "Informe os medicamentos" } },
+  { text: "Selecione os problemas de saúde que tem atualmente", type: "checkbox", options: ["Nenhum problema de saúde", "Diabetes", "Pressão alta", "Problemas no coração ou arritmias", "Problema nos rins ou no fígado", "Tumores", "Alterações psiquiátricas", "Outros problemas de saúde"], required: true, followUp: { prompt: "Se marcou outros problemas de saúde, escreva quais", triggerValues: ["Outros problemas de saúde"], required: true, placeholder: "Descreva os outros problemas" } },
+  { text: "Teve gestações? Se sim, quando foi o último parto?", type: "text", required: true, placeholder: "Descreva" },
+  { text: "Está grávida ou amamentando?", type: "radio", options: ["Sim", "Não"], required: true },
+  { text: "Usa método anticoncepcional? Qual?", type: "text", required: true, placeholder: "Descreva o método" },
+  { text: "Já teve problemas de cicatrização, como queloides?", type: "radio", options: ["Sim", "Não"], required: true },
+  { text: "Já teve alguma reação ruim com anestesia?", type: "radio", options: ["Sim", "Não"], required: true },
+  { text: "Já teve alguma hemorragia? (como evacuar ou vomitar sangue?)", type: "radio", options: ["Sim", "Não"], required: true },
+  { text: "Realiza atividade física regular?", type: "radio", options: ["Sim, três ou mais vezes por semana", "Não realizo com frequência"], required: true, followUp: { prompt: "Se sim, diga qual atividade física realiza", triggerValues: ["Sim, três ou mais vezes por semana"], required: true, placeholder: "Descreva a atividade física" } },
+  { text: "Você é muito sensível à dor (sente dor com facilidade ou frequentemente)?", type: "radio", options: ["Sim", "Não"], required: true },
+  { text: "Já teve trombose, embolia ou AVC?", type: "radio", options: ["Sim", "Não"], required: true },
+  { text: "Já teve ou trata arritmia cardíaca?", type: "radio", options: ["Sim", "Não"], required: true },
+  { text: "Tem ou já teve pedras nos rins?", type: "radio", options: ["Sim", "Não"], required: true },
+  { text: "Já realizou alguma cirurgia?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Quais cirurgias realizou?", triggerValues: ["Sim"], required: true, placeholder: "Descreva as cirurgias" } },
+  { text: "Há algo que gostaria de informar ao médico?", type: "text", required: true, placeholder: "Escreva aqui" },
+];
+
+function getDefaultAnamnesisDefinition(patient: any) {
+  const gender = normalizeSearchText(patient?.biologicalSex || patient?.gender);
+  const isMale = gender.includes("mascul");
+  const questions = isMale
+    ? DEFAULT_ANAMNESIS_QUESTIONS_FEMININA.filter((question) => !["Teve gestações? Se sim, quando foi o último parto?", "Está grávida ou amamentando?", "Usa método anticoncepcional? Qual?"].includes(question.text))
+    : DEFAULT_ANAMNESIS_QUESTIONS_FEMININA;
+
+  return {
+    name: isMale ? "Anamnese masculina padrão" : "Anamnese feminina padrão",
+    questions,
+  };
+}
+
+function canViewAnamnesisAnswers(role?: string | null) {
+  return role === "admin" || role === "medico" || role === "enfermeiro";
+}
+
+function buildAnamnesisWhatsappMessage(patientName: string, shareUrl: string) {
+  return [
+    `Olá, ${patientName}.`,
+    "",
+    "A Clínica Glutée solicita o preenchimento da sua anamnese antes do atendimento.",
+    "Esse preenchimento ajuda a agilizar a consulta e aumentar a segurança clínica.",
+    "",
+    `Clique aqui para preencher: ${shareUrl}`,
+  ].join("\n");
+}
+
+function buildAppointmentReminderWhatsappMessage(params: {
+  patientName: string;
+  scheduledAt: string | Date;
+  doctorName?: string | null;
+  room?: string | null;
+  anamnesisLink?: string | null;
+}) {
+  const date = new Date(params.scheduledAt);
+  const dateLabel = date.toLocaleDateString("pt-BR");
+  const timeLabel = date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const lines = [
+    `Olá, ${params.patientName}.`,
+    "",
+    `Lembrete da sua consulta na Clínica Glutée para ${dateLabel} às ${timeLabel}.`,
+  ];
+
+  if (params.doctorName) {
+    lines.push(`Profissional: ${params.doctorName}`);
+  }
+  if (params.room) {
+    lines.push(`Sala: ${params.room}`);
+  }
+
+  lines.push("", "Se precisar, responda esta mensagem para confirmar ou solicitar ajuste.");
+
+  if (params.anamnesisLink) {
+    lines.push("", "Antes do atendimento, pedimos também o preenchimento da anamnese:", params.anamnesisLink);
+  }
+
+  return lines.join("\n");
 }
 
 type TussCatalogEntry = {
@@ -81,19 +188,111 @@ function inferExtensionFromMimeType(mimeType?: string | null) {
   return "jpg";
 }
 
-function savePatientMediaToPublicDir(patientId: number, base64: string, mimeType?: string | null) {
+function inferMediaType(mimeType?: string | null, filePath?: string | null) {
+  const normalizedMimeType = String(mimeType ?? "").toLowerCase();
+  const normalizedPath = String(filePath ?? "").toLowerCase();
+  if (normalizedMimeType.startsWith("video/")) return "video";
+  if (normalizedPath.endsWith(".mp4") || normalizedPath.endsWith(".mov") || normalizedPath.endsWith(".webm")) {
+    return "video";
+  }
+  return "image";
+}
+
+let ffmpegAvailability: boolean | null = null;
+
+function hasFfmpeg() {
+  if (ffmpegAvailability !== null) {
+    return ffmpegAvailability;
+  }
+
+  try {
+    execFileSync("ffmpeg", ["-version"], { stdio: "ignore" });
+    ffmpegAvailability = true;
+  } catch {
+    ffmpegAvailability = false;
+  }
+
+  return ffmpegAvailability;
+}
+
+function maybeOptimizeVideo(absolutePath: string, mimeType?: string | null, shouldOptimize: boolean = false) {
+  if (inferMediaType(mimeType, absolutePath) !== "video") {
+    return { absolutePath, mimeType: mimeType ?? "image/jpeg" };
+  }
+
+  if (!shouldOptimize || !hasFfmpeg()) {
+    return { absolutePath, mimeType: mimeType ?? "video/mp4" };
+  }
+
+  const optimizedPath = absolutePath.replace(/\.[^.]+$/, ".mp4");
+
+  try {
+    execFileSync(
+      "ffmpeg",
+      [
+        "-y",
+        "-i",
+        absolutePath,
+        "-vf",
+        "scale=1280:-2:force_original_aspect_ratio=decrease",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "30",
+        "-movflags",
+        "+faststart",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        optimizedPath,
+      ],
+      { stdio: "ignore" },
+    );
+
+    if (fs.existsSync(optimizedPath)) {
+      if (optimizedPath !== absolutePath && fs.existsSync(absolutePath)) {
+        fs.unlinkSync(absolutePath);
+      }
+      return { absolutePath: optimizedPath, mimeType: "video/mp4" };
+    }
+  } catch {
+    // Keep original file when optimization is unavailable or fails.
+  }
+
+  return { absolutePath, mimeType: mimeType ?? "video/mp4" };
+}
+
+function savePatientMediaToPublicDir(
+  patientId: number,
+  base64: string,
+  mimeType?: string | null,
+  sourceFolder: "manual" | "patient-submissions" = "manual",
+) {
   const extension = inferExtensionFromMimeType(mimeType);
-  const relativeDir = path.join("imports", "manual", `patient-${patientId}`);
+  const relativeDir = path.join("imports", sourceFolder, `patient-${patientId}`);
   const absoluteDir = path.resolve(process.cwd(), "public", relativeDir);
   fs.mkdirSync(absoluteDir, { recursive: true });
 
   const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${extension}`;
-  const absolutePath = path.join(absoluteDir, fileName);
-  fs.writeFileSync(absolutePath, Buffer.from(base64, "base64"));
+  const initialAbsolutePath = path.join(absoluteDir, fileName);
+  fs.writeFileSync(initialAbsolutePath, Buffer.from(base64, "base64"));
+
+  const optimized = maybeOptimizeVideo(
+    initialAbsolutePath,
+    mimeType,
+    sourceFolder === "patient-submissions",
+  );
+  const finalAbsolutePath = optimized.absolutePath;
+  const finalFileName = path.basename(finalAbsolutePath);
 
   return {
-    photoUrl: normalizeMediaUrl(path.posix.join("/", relativeDir.replace(/\\/g, "/"), fileName)),
-    photoKey: path.posix.join(relativeDir.replace(/\\/g, "/"), fileName),
+    photoUrl: normalizeMediaUrl(path.posix.join("/", relativeDir.replace(/\\/g, "/"), finalFileName)),
+    photoKey: path.posix.join(relativeDir.replace(/\\/g, "/"), finalFileName),
+    mimeType: optimized.mimeType,
+    mediaType: inferMediaType(optimized.mimeType, finalAbsolutePath),
   };
 }
 
@@ -102,6 +301,7 @@ function normalizePhotoRow(row: any) {
     ...row,
     photoUrl: normalizeMediaUrl(row.photoUrl),
     thumbnailUrl: normalizeMediaUrl(row.thumbnailUrl ?? row.photoUrl),
+    mediaType: row.mediaType ?? inferMediaType(row.mimeType, row.photoUrl ?? row.photoKey),
   };
 }
 
@@ -138,7 +338,7 @@ function normalizeTemplateRow(row: any) {
   };
 }
 
-// ─── PATIENTS ────────────────────────────────────────────────────────────────
+// --- PATIENTS ----------------------------------------------------------------
 export async function listPatients(query?: string, limit: number = 5000) {
   const db = await getDb();
   if (!db) return [];
@@ -229,7 +429,7 @@ export async function getPatientById(id: number) {
   };
 }
 
-// ─── APPOINTMENTS ────────────────────────────────────────────────────────────
+// --- APPOINTMENTS ------------------------------------------------------------
 export async function createAppointment(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
@@ -320,11 +520,20 @@ export async function getAppointmentsByDateRange(from: string, to: string) {
   if (!db) return [];
 
   return unwrapRows<any>(await db.execute(sql`
-    select *
-    from appointments
-    where scheduledAt >= ${from}
-      and scheduledAt <= ${to}
-    order by scheduledAt asc
+    select
+      a.*,
+      p.fullName as patientName,
+      p.phone as patientPhone,
+      p.email as patientEmail,
+      u.name as doctorName,
+      u.role as doctorRole,
+      u.specialty as doctorSpecialty
+    from appointments a
+    left join patients p on p.id = a.patientId
+    left join users u on u.id = a.doctorId
+    where a.scheduledAt >= ${from}
+      and a.scheduledAt <= ${to}
+    order by a.scheduledAt asc
   `));
 }
 
@@ -410,23 +619,71 @@ export async function deleteAppointmentBlock(blockId: number) {
   return { success: true };
 }
 
-// ─── PRESCRIPTIONS ───────────────────────────────────────────────────────────
+// --- PRESCRIPTIONS -----------------------------------------------------------
 export async function createPrescription(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
-  const result = await db.insert(sql`prescriptions`).values({
-    ...data,
-    doctorId: userId,
-  });
-  return result[0];
+
+  const result = await db.execute(sql`
+    insert into prescriptions (
+      patientId,
+      doctorId,
+      type,
+      content,
+      observations
+    ) values (
+      ${data.patientId},
+      ${userId},
+      ${data.type},
+      ${data.content},
+      ${data.observations ?? null}
+    )
+  `);
+
+  const insertedId =
+    typeof result[0] === "number"
+      ? result[0]
+      : result[0]?.insertId ?? result[0]?.id;
+
+  if (!insertedId) {
+    return { success: true };
+  }
+
+  return getPrescriptionById(Number(insertedId));
 }
 
 export async function getPrescriptionsByPatient(patientId: number) {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(sql`prescriptions`).where(eq(sql`patientId`, patientId));
+
+  if (!patientId || patientId <= 0) {
+    return unwrapRows<any>(await db.execute(sql`
+      select *
+      from prescriptions
+      order by createdAt desc, id desc
+    `));
+  }
+
+  return unwrapRows<any>(await db.execute(sql`
+    select *
+    from prescriptions
+    where patientId = ${patientId}
+    order by createdAt desc, id desc
+  `));
+}
+
+export async function getPrescriptionById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from prescriptions
+    where id = ${id}
+    limit 1
+  `));
+
+  return rows[0] ?? null;
 }
 
 export async function listPrescriptionTemplates() {
@@ -470,7 +727,7 @@ export async function createPrescriptionTemplate(data: any, userId: number) {
   return result[0];
 }
 
-// ─── EXAM REQUESTS ───────────────────────────────────────────────────────────
+// --- EXAM REQUESTS -----------------------------------------------------------
 export async function createExamRequest(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
@@ -487,6 +744,20 @@ export async function getExamRequestsByPatient(patientId: number) {
   if (!db) return [];
   
   return db.select().from(sql`exam_requests`).where(eq(sql`patientId`, patientId));
+}
+
+export async function getExamRequestById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from exam_requests
+    where id = ${id}
+    limit 1
+  `));
+
+  return rows[0] ?? null;
 }
 
 export async function listExamTemplates() {
@@ -508,7 +779,7 @@ export async function createExamTemplate(data: any, userId: number) {
   return result[0];
 }
 
-// ─── FINANCIAL ───────────────────────────────────────────────────────────────
+// --- FINANCIAL ---------------------------------------------------------------
 export async function createFinancialTransaction(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
@@ -555,7 +826,7 @@ export async function getFinancialSummary(from?: string, to?: string) {
   return summary;
 }
 
-// ─── CATALOG ─────────────────────────────────────────────────────────────────
+// --- CATALOG -----------------------------------------------------------------
 export async function listProcedures() {
   const db = await getDb();
   if (!db) return [];
@@ -650,7 +921,7 @@ export async function upsertProcedurePrice(data: any) {
   return { success: true };
 }
 
-// ─── INVENTORY ───────────────────────────────────────────────────────────────
+// --- INVENTORY ---------------------------------------------------------------
 export async function listInventoryProducts() {
   const db = await getDb();
   if (!db) return [];
@@ -702,26 +973,30 @@ export async function createInventoryMovement(data: any, userId: number) {
   return result[0];
 }
 
-// ─── PHOTOS ──────────────────────────────────────────────────────────────────
-export async function getPatientPhotos(patientId: number, category?: string) {
+// --- PHOTOS ------------------------------------------------------------------
+export async function getPatientPhotos(patientId: number, category?: string, folderId?: number | null) {
   const db = await getDb();
   if (!db) return [];
 
+  const filters = [sql`p.patientId = ${patientId}`];
   if (category) {
-    return unwrapRows<any>(await db.execute(sql`
-      select *
-      from patient_photos
-      where patientId = ${patientId}
-        and category = ${category}
-      order by coalesce(takenAt, createdAt) desc, id desc
-    `)).map(normalizePhotoRow);
+    filters.push(sql`p.category = ${category}`);
+  }
+  if (folderId === null) {
+    filters.push(sql`p.folderId is null`);
+  } else if (typeof folderId === "number" && Number.isFinite(folderId)) {
+    filters.push(sql`p.folderId = ${folderId}`);
   }
 
   return unwrapRows<any>(await db.execute(sql`
-    select *
-    from patient_photos
-    where patientId = ${patientId}
-    order by coalesce(takenAt, createdAt) desc, id desc
+    select
+      p.*,
+      f.name as folderName,
+      f.description as folderDescription
+    from patient_photos p
+    left join photo_folders f on f.id = p.folderId
+    where ${sql.join(filters, sql` and `)}
+    order by coalesce(p.takenAt, p.createdAt) desc, p.id desc
   `)).map(normalizePhotoRow);
 }
 
@@ -729,14 +1004,26 @@ export async function uploadPatientPhoto(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
-  const stored = savePatientMediaToPublicDir(Number(data.patientId), String(data.base64 ?? ""), data.mimeType);
+  const sourceFolder = data.mediaSource === "patient" ? "patient-submissions" : "manual";
+  const stored = savePatientMediaToPublicDir(
+    Number(data.patientId),
+    String(data.base64 ?? ""),
+    data.mimeType,
+    sourceFolder,
+  );
   const result = await db.insert(sql`patient_photos`).values({
     patientId: data.patientId,
+    folderId: data.folderId ?? null,
     category: data.category,
     description: data.description ?? null,
     photoUrl: stored.photoUrl,
     thumbnailUrl: stored.photoUrl,
     photoKey: stored.photoKey,
+    mimeType: stored.mimeType ?? data.mimeType ?? null,
+    originalFileName: data.originalFileName ?? null,
+    mediaType: stored.mediaType,
+    mediaSource: data.mediaSource === "patient" ? "patient" : "clinic",
+    takenAt: data.takenAt ? new Date(data.takenAt) : null,
     uploadedBy: userId,
   });
 
@@ -753,6 +1040,715 @@ export async function uploadPatientPhoto(data: any, userId: number) {
   `));
 
   return rows[0] ? normalizePhotoRow(rows[0]) : { success: true };
+}
+
+export async function createPhotoFolder(patientId: number, name: string, description: string | undefined, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const result = await db.execute(sql`
+    insert into photo_folders (patientId, name, description, createdBy)
+    values (${patientId}, ${name}, ${description ?? null}, ${userId})
+  `);
+
+  const insertedId =
+    Array.isArray(result) && typeof result[0] === "object"
+      ? (result[0] as any)?.insertId ?? (result[0] as any)?.id
+      : (result as any)?.insertId;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from photo_folders
+    where id = ${insertedId}
+    limit 1
+  `));
+
+  return rows[0] ?? { success: true };
+}
+
+export async function getPhotoFolders(patientId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return unwrapRows<any>(await db.execute(sql`
+    select
+      f.*,
+      count(p.id) as mediaCount
+    from photo_folders f
+    left join patient_photos p on p.folderId = f.id
+    where f.patientId = ${patientId}
+    group by f.id
+    order by f.name asc, f.id asc
+  `));
+}
+
+export async function updatePhotoFolder(folderId: number, data: { name?: string; description?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const currentRows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from photo_folders
+    where id = ${folderId}
+    limit 1
+  `));
+
+  const current = currentRows[0];
+  if (!current) {
+    throw new Error("Pasta não encontrada.");
+  }
+
+  await db.execute(sql`
+    update photo_folders
+    set
+      name = ${data.name ?? current.name},
+      description = ${data.description ?? current.description},
+      updatedAt = current_timestamp
+    where id = ${folderId}
+  `);
+
+  return { success: true };
+}
+
+export async function deletePhotoFolder(folderId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  await db.execute(sql`
+    update patient_photos
+    set folderId = null
+    where folderId = ${folderId}
+  `);
+
+  await db.execute(sql`
+    delete from photo_folders
+    where id = ${folderId}
+  `);
+
+  return { success: true };
+}
+
+export async function createPhotoComparison(patientId: number, photoIds: number[], userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  if (photoIds.length < 2 || photoIds.length > 4) {
+    throw new Error("Selecione entre 2 e 4 mídias para comparar.");
+  }
+
+  const comparisonId = `comp_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  await db.execute(sql`
+    insert into photo_comparisons (patientId, comparisonId, photoIds, createdBy)
+    values (${patientId}, ${comparisonId}, ${JSON.stringify(photoIds)}, ${userId})
+  `);
+
+  const photos = unwrapRows<any>(await db.execute(sql`
+    select
+      p.*,
+      f.name as folderName,
+      f.description as folderDescription
+    from patient_photos p
+    left join photo_folders f on f.id = p.folderId
+    where p.patientId = ${patientId}
+      and p.id in (${sql.join(photoIds.map((photoId) => sql`${photoId}`), sql`, `)})
+  `)).map(normalizePhotoRow);
+
+  return {
+    comparisonId,
+    createdAt: new Date().toISOString(),
+    photos,
+  };
+}
+
+export async function createPatientMediaUploadLink(
+  data: {
+    patientId: number;
+    folderId?: number | null;
+    title?: string;
+    allowVideos?: boolean;
+    expiresInDays?: number;
+  },
+  userId: number,
+  baseUrl: string,
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const token = crypto.randomBytes(24).toString("hex");
+  const expiresAt = new Date(Date.now() + Math.max(1, Number(data.expiresInDays || 7)) * 24 * 60 * 60 * 1000);
+
+  const result = await db.execute(sql`
+    insert into patient_media_upload_links (patientId, folderId, token, title, allowVideos, expiresAt, createdBy)
+    values (
+      ${data.patientId},
+      ${data.folderId ?? null},
+      ${token},
+      ${data.title ?? "Envio de imagens do paciente"},
+      ${data.allowVideos === false ? 0 : 1},
+      ${expiresAt},
+      ${userId}
+    )
+  `);
+
+  const insertedId =
+    Array.isArray(result) && typeof result[0] === "object"
+      ? (result[0] as any)?.insertId ?? (result[0] as any)?.id
+      : (result as any)?.insertId;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select l.*, p.fullName as patientName, f.name as folderName
+    from patient_media_upload_links l
+    left join patients p on p.id = l.patientId
+    left join photo_folders f on f.id = l.folderId
+    where l.id = ${insertedId}
+    limit 1
+  `));
+
+  const item = rows[0];
+  return {
+    ...item,
+    uploadUrl: `${baseUrl.replace(/\/$/, "")}/envio-midias/${token}`,
+  };
+}
+
+export async function listPatientMediaUploadLinks(patientId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return unwrapRows<any>(await db.execute(sql`
+    select l.*, p.fullName as patientName, f.name as folderName
+    from patient_media_upload_links l
+    left join patients p on p.id = l.patientId
+    left join photo_folders f on f.id = l.folderId
+    where l.patientId = ${patientId}
+    order by l.createdAt desc, l.id desc
+  `));
+}
+
+export async function revokePatientMediaUploadLink(linkId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  await db.execute(sql`
+    update patient_media_upload_links
+    set isActive = 0
+    where id = ${linkId}
+  `);
+
+  return { success: true };
+}
+
+export async function getPatientMediaUploadLinkByToken(token: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select
+      l.*,
+      p.fullName as patientName,
+      f.name as folderName
+    from patient_media_upload_links l
+    inner join patients p on p.id = l.patientId
+    left join photo_folders f on f.id = l.folderId
+    where l.token = ${token}
+      and l.isActive = 1
+      and l.expiresAt > now()
+    limit 1
+  `));
+
+  return rows[0] ?? null;
+}
+
+export async function createAnamnesisShareLink(
+  data: {
+    patientId: number;
+    title?: string;
+    templateName?: string;
+    anamnesisDate?: string;
+    questions: Array<Record<string, any>>;
+    expiresInDays?: number;
+  },
+  userId: number,
+  baseUrl: string,
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const token = crypto.randomBytes(18).toString("hex");
+  const expiresAt = new Date(Date.now() + Math.max(1, Number(data.expiresInDays || 7)) * 24 * 60 * 60 * 1000);
+  const result = await db.execute(sql`
+    insert into anamnesis_share_links (patientId, token, title, templateName, anamnesisDate, questionsJson, expiresAt, createdBy, source)
+    values (
+      ${data.patientId},
+      ${token},
+      ${data.title ?? "Preencher anamnese da Cl?nica Glut?e"},
+      ${data.templateName ?? null},
+      ${data.anamnesisDate ? new Date(data.anamnesisDate) : new Date()},
+      ${JSON.stringify(data.questions ?? [])},
+      ${expiresAt},
+      ${userId},
+      ${"share"}
+    )
+  `);
+
+  const insertedId =
+    Array.isArray(result) && typeof result[0] === "object"
+      ? (result[0] as any)?.insertId ?? (result[0] as any)?.id
+      : (result as any)?.insertId;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select l.*, p.fullName as patientName
+    from anamnesis_share_links l
+    left join patients p on p.id = l.patientId
+    where l.id = ${insertedId}
+    limit 1
+  `));
+
+  const link = rows[0] ?? null;
+  if (!link) {
+    throw new Error("Não foi possível gerar o link da anamnese.");
+  }
+
+  return {
+    ...link,
+    shareUrl: `${baseUrl.replace(/\/$/, "")}/anamnese-publica/${token}`,
+    fillUrl: `${baseUrl.replace(/\/$/, "")}/anamnese-preencher/${token}`,
+  };
+}
+
+export async function getAnamnesisShareLinkByToken(token: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select l.*, p.fullName as patientName
+    from anamnesis_share_links l
+    inner join patients p on p.id = l.patientId
+    where l.token = ${token}
+      and l.isActive = 1
+      and l.expiresAt > now()
+    limit 1
+  `));
+
+  const row = rows[0];
+  if (!row) return null;
+
+  let questions: Array<{ text: string; type: string; options?: string[] }> = [];
+  try {
+    questions = JSON.parse(String(row.questionsJson ?? "[]"));
+  } catch {
+    questions = [];
+  }
+
+  let answers: Record<string, string> | null = null;
+  try {
+    answers = row.submittedAnswers ? JSON.parse(String(row.submittedAnswers)) : null;
+  } catch {
+    answers = null;
+  }
+
+  return {
+    ...row,
+    questions,
+    answers,
+  };
+}
+
+export async function listPatientAnamneses(patientId: number, viewerRole?: string | null) {
+  const db = await getDb();
+  if (!db) return [];
+  const allowAnswers = canViewAnamnesisAnswers(viewerRole);
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select
+      l.*,
+      p.fullName as patientName
+    from anamnesis_share_links l
+    inner join patients p on p.id = l.patientId
+    where l.patientId = ${patientId}
+      and coalesce(l.submittedAnswers, '') <> ''
+    order by coalesce(l.anamnesisDate, l.submittedAt, l.createdAt) desc, l.id desc
+  `));
+
+  const directAnamneses = rows.map((row) => {
+    let questions: Array<Record<string, any>> = [];
+    let answers: Record<string, string> | null = null;
+    try {
+      questions = JSON.parse(String(row.questionsJson ?? "[]"));
+    } catch {
+      questions = [];
+    }
+    try {
+      answers = row.submittedAnswers ? JSON.parse(String(row.submittedAnswers)) : null;
+    } catch {
+      answers = null;
+    }
+
+    return {
+      ...row,
+      questions: allowAnswers ? questions : [],
+      answers: allowAnswers ? answers : null,
+      visibilityRestricted: !allowAnswers,
+      sourceLabel: row.source === "share" ? "Paciente" : "Cl?nica",
+    };
+  });
+
+  const legacyRows = unwrapRows<any>(await db.execute(sql`
+    select
+      mr.id,
+      mr.date,
+      mr.createdAt,
+      mr.anamnesis,
+      mr.chiefComplaint,
+      mr.sourceSystem,
+      mr.notes,
+      u.name as doctorName
+    from medical_records mr
+    left join users u on u.id = mr.doctorId
+    where mr.patientId = ${patientId}
+      and coalesce(trim(mr.anamnesis), '') <> ''
+    order by coalesce(mr.date, mr.createdAt) desc, mr.id desc
+  `));
+
+  const legacyAnamneses = legacyRows.map((row) => {
+    const title = `Anamnese importada de ${row.sourceSystem === "onedoctor" ? "OneDoctor" : row.sourceSystem === "prontuario_verde" ? "Prontu?rio Verde" : "legado"}`;
+    const answerText = String(row.anamnesis ?? "").trim();
+    return {
+      id: `legacy-${row.id}`,
+      title,
+      templateName: title,
+      anamnesisDate: row.date ?? row.createdAt,
+      submittedAt: row.date ?? row.createdAt,
+      source: "legacy",
+      sourceLabel: row.sourceSystem === "onedoctor" ? "OneDoctor" : row.sourceSystem === "prontuario_verde" ? "Prontu?rio Verde" : "Legado",
+      respondentName: row.doctorName ?? null,
+      questions: allowAnswers ? [{ text: "Anamnese importada do legado", type: "text", options: [] }] : [],
+      answers: allowAnswers ? { "Anamnese importada do legado": answerText } : null,
+      visibilityRestricted: !allowAnswers,
+      summary: answerText || row.chiefComplaint || "",
+    };
+  });
+
+  return [...directAnamneses, ...legacyAnamneses].sort((a: any, b: any) => {
+    const dateA = new Date(a.anamnesisDate ?? a.submittedAt ?? a.createdAt ?? 0).getTime();
+    const dateB = new Date(b.anamnesisDate ?? b.submittedAt ?? b.createdAt ?? 0).getTime();
+    return dateB - dateA;
+  });
+}
+
+export async function patientHasAnyAnamnesis(patientId: number) {
+  const db = await getDb();
+  if (!db) return false;
+
+  const submittedRows = unwrapRows<any>(await db.execute(sql`
+    select count(*) as count
+    from anamnesis_share_links
+    where patientId = ${patientId}
+      and coalesce(submittedAnswers, '') <> ''
+  `));
+
+  const legacyRows = unwrapRows<any>(await db.execute(sql`
+    select count(*) as count
+    from medical_records
+    where patientId = ${patientId}
+      and coalesce(trim(anamnesis), '') <> ''
+  `));
+
+  return Number(submittedRows[0]?.count ?? 0) > 0 || Number(legacyRows[0]?.count ?? 0) > 0;
+}
+
+export async function sendPatientAnamnesisRequestViaWhatsApp(
+  patientId: number,
+  userId: number,
+  baseUrl: string,
+  options?: { title?: string; expiresInDays?: number },
+) {
+  const patient = await getPatientById(patientId);
+  if (!patient) {
+    throw new Error("Paciente não encontrado.");
+  }
+  if (!patient.phone) {
+    throw new Error("O paciente não possui telefone cadastrado para WhatsApp.");
+  }
+
+  const template = getDefaultAnamnesisDefinition(patient);
+  const link = await createAnamnesisShareLink({
+    patientId,
+    title: options?.title || `Anamnese de ${patient.fullName}`,
+    templateName: template.name,
+    anamnesisDate: new Date().toISOString().slice(0, 10),
+    questions: template.questions,
+    expiresInDays: options?.expiresInDays ?? 14,
+  }, userId, baseUrl);
+
+  const result = await sendWhatsAppMessage(patient.phone, buildAnamnesisWhatsappMessage(patient.fullName, link.shareUrl));
+  return {
+    success: true,
+    patientId,
+    patientName: patient.fullName,
+    phone: patient.phone,
+    shareUrl: link.shareUrl,
+    ...result,
+  };
+}
+
+export async function sendAppointmentReminderViaWhatsApp(
+  appointmentId: number,
+  userId: number,
+  baseUrl: string,
+  customMessage?: string,
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select
+      a.*,
+      p.fullName as patientName,
+      p.phone as patientPhone,
+      u.name as doctorName
+    from appointments a
+    inner join patients p on p.id = a.patientId
+    left join users u on u.id = a.doctorId
+    where a.id = ${appointmentId}
+    limit 1
+  `));
+
+  const appointment = rows[0];
+  if (!appointment) {
+    throw new Error("Agendamento não encontrado.");
+  }
+  if (!appointment.patientPhone) {
+    throw new Error("O paciente não possui telefone cadastrado para WhatsApp.");
+  }
+
+  let anamnesisLink: string | null = null;
+  if (!(await patientHasAnyAnamnesis(Number(appointment.patientId)))) {
+    const template = getDefaultAnamnesisDefinition({ biologicalSex: appointment.biologicalSex, gender: appointment.gender });
+    const link = await createAnamnesisShareLink({
+      patientId: Number(appointment.patientId),
+      title: `Anamnese de ${appointment.patientName}`,
+      templateName: template.name,
+      anamnesisDate: new Date(appointment.scheduledAt).toISOString().slice(0, 10),
+      questions: template.questions,
+      expiresInDays: 7,
+    }, userId, baseUrl);
+    anamnesisLink = link.shareUrl;
+  }
+
+  const message = customMessage?.trim() || buildAppointmentReminderWhatsappMessage({
+    patientName: appointment.patientName,
+    scheduledAt: appointment.scheduledAt,
+    doctorName: appointment.doctorName,
+    room: appointment.room,
+    anamnesisLink,
+  });
+
+  const result = await sendWhatsAppMessage(appointment.patientPhone, message);
+  return {
+    success: true,
+    appointmentId,
+    patientId: Number(appointment.patientId),
+    patientName: appointment.patientName,
+    anamnesisLink,
+    ...result,
+  };
+}
+
+export async function sendTomorrowAppointmentReminders(userId: number, baseUrl: string) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 0, 0);
+
+  const end = new Date(tomorrow);
+  end.setHours(23, 59, 59, 999);
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select a.id
+    from appointments a
+    inner join patients p on p.id = a.patientId
+    where a.scheduledAt >= ${tomorrow}
+      and a.scheduledAt <= ${end}
+      and a.status not in ('cancelada', 'concluida', 'falta')
+      and coalesce(trim(p.phone), '') <> ''
+    order by a.scheduledAt asc, a.id asc
+  `));
+
+  const results = [];
+  for (const row of rows) {
+    try {
+      results.push(await sendAppointmentReminderViaWhatsApp(Number(row.id), userId, baseUrl));
+    } catch (error: any) {
+      results.push({ success: false, appointmentId: Number(row.id), error: error?.message || "Falha ao enviar lembrete." });
+    }
+  }
+
+  return {
+    success: true,
+    total: results.length,
+    sent: results.filter((item: any) => item.success).length,
+    failed: results.filter((item: any) => !item.success).length,
+    results,
+  };
+}
+
+export async function createPatientAnamnesis(
+  data: {
+    patientId: number;
+    title: string;
+    templateName?: string;
+    anamnesisDate?: string;
+    respondentName?: string | null;
+    questions: Array<Record<string, any>>;
+    answers: Record<string, string>;
+    profilePhotoBase64?: string | null;
+    profilePhotoMimeType?: string | null;
+    profilePhotoFileName?: string | null;
+    profilePhotoDeclarationAccepted?: boolean;
+  },
+  userId: number,
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  let profilePhotoUrl: string | null = null;
+  let profilePhotoMimeType: string | null = null;
+
+  if (data.profilePhotoBase64) {
+    if (!data.profilePhotoDeclarationAccepted) {
+      throw new Error("Confirme que a foto enviada é da própria pessoa.");
+    }
+
+    const uploaded = await uploadPatientPhoto({
+      patientId: data.patientId,
+      category: "perfil",
+      description: "Foto de perfil enviada na anamnese",
+      base64: data.profilePhotoBase64,
+      mimeType: data.profilePhotoMimeType ?? "image/jpeg",
+      originalFileName: data.profilePhotoFileName ?? "perfil-anamnese.jpg",
+      mediaSource: "patient",
+      takenAt: data.anamnesisDate ?? new Date().toISOString(),
+    }, userId);
+
+    profilePhotoUrl = uploaded.photoUrl ?? null;
+    profilePhotoMimeType = uploaded.mimeType ?? null;
+  }
+
+  const token = crypto.randomBytes(18).toString("hex");
+  const result = await db.execute(sql`
+    insert into anamnesis_share_links (
+      patientId,
+      token,
+      title,
+      templateName,
+      anamnesisDate,
+      questionsJson,
+      submittedAnswers,
+      respondentName,
+      source,
+      profilePhotoUrl,
+      profilePhotoMimeType,
+      profilePhotoDeclarationAccepted,
+      isActive,
+      expiresAt,
+      submittedAt,
+      createdBy
+    )
+    values (
+      ${data.patientId},
+      ${token},
+      ${data.title},
+      ${data.templateName ?? null},
+      ${data.anamnesisDate ? new Date(data.anamnesisDate) : new Date()},
+      ${JSON.stringify(data.questions ?? [])},
+      ${JSON.stringify(data.answers ?? {})},
+      ${data.respondentName ?? null},
+      ${"internal"},
+      ${profilePhotoUrl},
+      ${profilePhotoMimeType},
+      ${data.profilePhotoDeclarationAccepted ? 1 : 0},
+      1,
+      ${new Date("2099-12-31T23:59:59Z")},
+      now(),
+      ${userId}
+    )
+  `);
+
+  const insertedId =
+    Array.isArray(result) && typeof result[0] === "object"
+      ? (result[0] as any)?.insertId ?? (result[0] as any)?.id
+      : (result as any)?.insertId ?? null;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from anamnesis_share_links
+    where id = ${insertedId}
+    limit 1
+  `));
+
+  return rows[0] ?? { success: true };
+}
+
+export async function submitAnamnesisShareLink(
+  token: string,
+  answers: Record<string, string>,
+  respondentName?: string | null,
+  profilePhoto?: {
+    base64?: string | null;
+    mimeType?: string | null;
+    fileName?: string | null;
+    declarationAccepted?: boolean;
+  },
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const link = await getAnamnesisShareLinkByToken(token);
+  if (!link) {
+    throw new Error("Link da anamnese não encontrado ou expirado.");
+  }
+
+  let profilePhotoUrl = link.profilePhotoUrl ?? null;
+  let profilePhotoMimeType = link.profilePhotoMimeType ?? null;
+  let declarationAccepted = Number(link.profilePhotoDeclarationAccepted ?? 0) === 1;
+
+  if (profilePhoto?.base64) {
+    if (!profilePhoto.declarationAccepted) {
+      throw new Error("Confirme que a foto enviada é da própria pessoa.");
+    }
+
+    const uploaded = await uploadPatientPhoto({
+      patientId: link.patientId,
+      category: "perfil",
+      description: "Foto de perfil enviada na anamnese",
+      base64: profilePhoto.base64,
+      mimeType: profilePhoto.mimeType ?? "image/jpeg",
+      originalFileName: profilePhoto.fileName ?? "perfil-anamnese.jpg",
+      mediaSource: "patient",
+      takenAt: link.anamnesisDate ?? new Date().toISOString(),
+    }, Number(link.createdBy ?? 1));
+
+    profilePhotoUrl = uploaded.photoUrl ?? null;
+    profilePhotoMimeType = uploaded.mimeType ?? null;
+    declarationAccepted = true;
+  }
+
+  await db.execute(sql`
+    update anamnesis_share_links
+    set
+      submittedAnswers = ${JSON.stringify(answers ?? {})},
+      respondentName = ${respondentName ?? null},
+      profilePhotoUrl = ${profilePhotoUrl},
+      profilePhotoMimeType = ${profilePhotoMimeType},
+      profilePhotoDeclarationAccepted = ${declarationAccepted ? 1 : 0},
+      submittedAt = now()
+    where id = ${link.id}
+  `);
+
+  return { success: true };
 }
 
 export async function deletePatientPhoto(photoId: number) {
@@ -837,7 +1833,7 @@ export async function searchTussCatalog(query?: string, limit: number = 60) {
   return matches.slice(0, limit);
 }
 
-// ─── CHAT ────────────────────────────────────────────────────────────────────
+// --- CHAT --------------------------------------------------------------------
 export async function getChatMessages(channelId: string, limit: number = 100) {
   const db = await getDb();
   if (!db) return [];
@@ -861,7 +1857,7 @@ export async function createChatMessage(channelId: string, userId: number, conte
   return result[0];
 }
 
-// ─── CLINIC ──────────────────────────────────────────────────────────────────
+// --- CLINIC ------------------------------------------------------------------
 export async function getClinicSettings() {
   const db = await getDb();
   if (!db) return null;
@@ -885,7 +1881,7 @@ export async function updateClinicSettings(data: any) {
   return { success: true };
 }
 
-// ─── FISCAL ──────────────────────────────────────────────────────────────────
+// --- FISCAL ------------------------------------------------------------------
 function decimalToCents(value: unknown): number {
   const numeric = typeof value === "number" ? value : Number.parseFloat(String(value ?? 0));
   if (!Number.isFinite(numeric)) return 0;
@@ -1201,7 +2197,7 @@ export async function syncFiscalMunicipalParameters(ambiente?: "homologacao" | "
   };
 }
 
-// ─── NFSE ────────────────────────────────────────────────────────────────────
+// --- NFSE --------------------------------------------------------------------
 export async function listNfse() {
   const db = await getDb();
   if (!db) return [];
@@ -1399,7 +2395,7 @@ export async function emitNfseThroughNationalApi(nfseId: number, userId?: number
   }
 }
 
-// ─── BUDGETS ─────────────────────────────────────────────────────────────────
+// --- BUDGETS -----------------------------------------------------------------
 export async function listBudgets() {
   const db = await getDb();
   if (!db) return [];
@@ -1651,7 +2647,7 @@ export async function emitBudgetNfse(
   };
 }
 
-// ─── CRM ─────────────────────────────────────────────────────────────────────
+// --- CRM ---------------------------------------------------------------------
 export async function listCrmIndications(limit: number = 100) {
   const db = await getDb();
   if (!db) return [];
@@ -1679,8 +2675,20 @@ export async function updateCrmIndication(id: number, data: any) {
   return { success: true };
 }
 
-// ─── SIGNATURES ───────────────────────────────────────────────────────────────
-export async function sendForSignature(documentId: number, documentType: string, userId: number) {
+// --- SIGNATURES ---------------------------------------------------------------
+export async function sendForSignature(
+  documentId: number,
+  documentType: string,
+  userId: number,
+  extra: {
+    d4signDocumentKey?: string;
+    d4signSafeKey?: string;
+    status?: string;
+    signatureType?: string;
+    signedDocumentUrl?: string;
+    webhookData?: any;
+  } = {},
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   
@@ -1688,12 +2696,17 @@ export async function sendForSignature(documentId: number, documentType: string,
     resourceId: documentId,
     resourceType: documentType,
     doctorId: userId,
-    status: 'enviado',
+    d4signDocumentKey: extra.d4signDocumentKey,
+    d4signSafeKey: extra.d4signSafeKey,
+    status: extra.status || 'enviado',
+    signatureType: extra.signatureType || 'eletronica',
+    signedDocumentUrl: extra.signedDocumentUrl,
+    webhookData: extra.webhookData ? JSON.stringify(extra.webhookData) : undefined,
   });
   return result[0];
 }
 
-// ─── TEMPLATES ────────────────────────────────────────────────────────────────
+// --- TEMPLATES ----------------------------------------------------------------
 export async function listTemplates() {
   const db = await getDb();
   if (!db) return [];
@@ -1713,7 +2726,7 @@ export async function createTemplate(data: any, userId: number) {
   return result[0];
 }
 
-// ─── MEDICAL RECORDS ──────────────────────────────────────────────────────────
+// --- MEDICAL RECORDS ----------------------------------------------------------
 export async function listMedicalRecordTemplates() {
   const db = await getDb();
   if (!db) return [];
@@ -1761,7 +2774,7 @@ export async function listPrescriptionTemplatesNormalized() {
     select *
     from medical_record_templates
     where active = 1
-      and specialty in ('Prescrição', 'PrescriÃ§Ã£o', 'Prescricao')
+      and specialty in ('Prescrição', 'Prescricao')
     order by name asc
   `));
 
@@ -1828,19 +2841,29 @@ export async function createExamTemplateNormalized(data: any, userId: number) {
   return result[0];
 }
 
-// ─── WHATSAPP ─────────────────────────────────────────────────────────────────
+// --- WHATSAPP -----------------------------------------------------------------
 export async function sendWhatsAppMessage(phoneNumber: string, message: string) {
-  // Implementação com WhatsApp API
-  return { success: true, messageId: `msg_${Date.now()}` };
+  const service = await createWhatsAppService();
+  if (!service) {
+    throw new Error("A API oficial do WhatsApp ainda não foi configurada. Informe Token, Phone Number ID e Business Account ID da Meta.");
+  }
+
+  const result = await service.sendTextMessage(phoneNumber, message);
+  return {
+    success: true,
+    provider: "meta_cloud_api",
+    messageId: result?.messages?.[0]?.id ?? `msg_${Date.now()}`,
+    raw: result,
+  };
 }
 
-// ─── AI ───────────────────────────────────────────────────────────────────────
+// --- AI -----------------------------------------------------------------------
 export async function invokeAI(messages: any[]) {
   // Implementação com LLM
   return { role: 'assistant', content: 'Resposta da IA' };
 }
 
-// ─── ADMIN ────────────────────────────────────────────────────────────────────
+// --- ADMIN --------------------------------------------------------------------
 export async function getDoctors() {
   const db = await getDb();
   if (!db) return [];
@@ -1857,14 +2880,28 @@ export async function getDoctors() {
 export async function getDashboardStats() {
   const db = await getDb();
   if (!db) return { totalPatients: 0, todayAppointments: 0, totalAppointments: 0 };
-  
-  const patients = await db.select(sql`COUNT(*) as count`).from(sql`patients`);
-  const appointments = await db.select(sql`COUNT(*) as count`).from(sql`appointments`);
-  
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
+  const patients = unwrapRows<any>(await db.execute(sql`select count(*) as count from patients`));
+  const appointments = unwrapRows<any>(await db.execute(sql`select count(*) as count from appointments`));
+  const todayAppointments = unwrapRows<any>(await db.execute(sql`
+    select count(*) as count
+    from appointments
+    where scheduledAt >= ${todayStart}
+      and scheduledAt <= ${todayEnd}
+  `));
+
+  const parseCount = (value: any) => Number(value?.count ?? value?.COUNT ?? value?.total ?? 0);
+
   return {
-    totalPatients: patients[0]?.count || 0,
-    todayAppointments: 0,
-    totalAppointments: appointments[0]?.count || 0,
+    totalPatients: parseCount(patients[0]),
+    todayAppointments: parseCount(todayAppointments[0]),
+    totalAppointments: parseCount(appointments[0]),
   };
 }
 
@@ -1927,8 +2964,35 @@ export async function setUserPermission(userId: number, module: string, permissi
 export async function updateUserProfile(userId: number, data: any) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
-  await db.update(sql`users`).set(data).where(eq(sql`id`, userId));
+
+  const normalizedEmail = data.email ? String(data.email).trim().toLowerCase() : null;
+  if (normalizedEmail) {
+    const existingUsers = unwrapRows<any>(await db.execute(sql`
+      select id
+      from users
+      where email = ${normalizedEmail}
+        and id <> ${userId}
+      limit 1
+    `));
+
+    if (existingUsers[0]) {
+      throw new Error("Já existe outro usuário com este e-mail.");
+    }
+  }
+
+  const payload = {
+    ...data,
+    email: normalizedEmail ?? null,
+    name: data.name ? String(data.name).trim() : null,
+    specialty: data.specialty ? String(data.specialty).trim() : null,
+    profession: data.profession ? String(data.profession).trim() : null,
+    crm: data.crm ? String(data.crm).trim() : null,
+    professionalLicenseType: data.professionalLicenseType ? String(data.professionalLicenseType).trim().toUpperCase() : null,
+    professionalLicenseState: data.professionalLicenseState ? String(data.professionalLicenseState).trim().toUpperCase() : null,
+    phone: data.phone ? String(data.phone).trim() : null,
+  };
+
+  await db.update(sql`users`).set(payload).where(eq(sql`id`, userId));
   return { success: true };
 }
 
@@ -1939,3 +3003,5 @@ export async function updateUserRole(userId: number, role: string) {
   await db.update(sql`users`).set({ role }).where(eq(sql`id`, userId));
   return { success: true };
 }
+
+

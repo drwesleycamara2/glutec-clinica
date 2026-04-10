@@ -184,11 +184,11 @@ export const clinicalEvolutionRouter = router({
           });
         }
 
-        // Check if user is the doctor who created this evolution
-        if (evolution.doctorId !== ctx.user.id && ctx.user.role !== "admin") {
+        const isSuperAdmin = ctx.user.role === "admin" && String(ctx.user.email || "").toLowerCase() === "contato@drwesleycamara.com.br";
+        if (!isSuperAdmin) {
           throw new TRPCError({
             code: "FORBIDDEN",
-            message: "You do not have permission to delete this evolution",
+            message: "A exclusão de prontuários só pode ser feita pelo administrador principal.",
           });
         }
 

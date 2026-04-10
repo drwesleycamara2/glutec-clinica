@@ -37,10 +37,12 @@ import AceitarConvite from "./pages/AceitarConvite";
 import VerificarDoisFatores from "./pages/VerificarDoisFatores";
 import Configurar2FA from "./pages/Configurar2FA";
 import TrocarSenha from "./pages/TrocarSenha";
+import EnvioMidiasPaciente from "./pages/EnvioMidiasPaciente";
+import AnamnesePublica from "./pages/AnamnesePublica";
 import { useAuth } from "./_core/hooks/useAuth";
 import { canAccessModule, getModuleForPath } from "./lib/access";
 
-const publicPaths = ["/login", "/aceitar-convite", "/verificar-2fa"];
+const publicPaths = ["/login", "/aceitar-convite", "/verificar-2fa", "/envio-midias", "/anamnese-publica", "/anamnese-preencher"];
 const sessionSetupPaths = ["/configurar-2fa", "/trocar-senha"];
 
 function ProtectedRoutes() {
@@ -93,7 +95,9 @@ function Router() {
   useEffect(() => {
     if (loading) return;
 
-    const isPublicPath = publicPaths.some(path => location === path || location.startsWith(`${path}?`));
+    const isPublicPath = publicPaths.some(
+      path => location === path || location.startsWith(`${path}?`) || location.startsWith(`${path}/`)
+    );
     const isSessionSetupPath = sessionSetupPaths.some(
       path => location === path || location.startsWith(`${path}?`)
     );
@@ -135,6 +139,8 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/aceitar-convite" component={AceitarConvite} />
       <Route path="/verificar-2fa" component={VerificarDoisFatores} />
+      <Route path="/envio-midias/:token" component={EnvioMidiasPaciente} />
+      <Route path="/anamnese-preencher/:token" component={AnamnesePublica} />
       <Route path="/configurar-2fa" component={Configurar2FA} />
       <Route path="/trocar-senha" component={TrocarSenha} />
       <Route component={ProtectedEntry} />

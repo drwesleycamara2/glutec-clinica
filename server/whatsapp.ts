@@ -5,7 +5,7 @@
  */
 
 import axios, { AxiosInstance } from "axios";
-import * as db from "./db";
+import { getClinicSettings } from "./db_complete";
 
 export interface WhatsAppConfig {
   accessToken: string;
@@ -109,7 +109,7 @@ export class WhatsAppService {
  * Factory para criar o serviço de WhatsApp com base nas configurações da clínica
  */
 export async function createWhatsAppService(): Promise<WhatsAppService | null> {
-  const clinic = await db.getClinicSettings();
+  const clinic = await getClinicSettings();
 
   const accessToken = clinic?.whatsappAccessToken || process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = clinic?.whatsappPhoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID;

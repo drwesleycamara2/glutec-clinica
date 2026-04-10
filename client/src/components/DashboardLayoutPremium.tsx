@@ -419,6 +419,15 @@ function DashboardLayoutPremiumContent({
                 Versão 1.0
               </div>
             ) : null}
+            <Button
+              variant="outline"
+              className={`rounded-2xl border-gold/20 ${isCollapsed ? "h-11 w-11 px-0" : "w-full justify-start"}`}
+              onClick={logout}
+              title="Sair do sistema"
+            >
+              <LogOut className={`h-4 w-4 ${isCollapsed ? "" : "mr-2"}`} />
+              {!isCollapsed ? "Sair do sistema" : null}
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="app-sidebar-user flex w-full items-center gap-3 rounded-2xl px-2 py-2 text-left transition-colors hover:bg-accent/10 group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
