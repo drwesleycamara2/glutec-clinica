@@ -1918,8 +1918,13 @@ function normalizeRegimeTributario(value: unknown): RegimeTributario | null {
 function normalizeDecimalInput(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
 
-  const normalized = String(value).trim().replace(/\./g, "").replace(",", ".");
-  const parsed = Number.parseFloat(normalized);
+  let s = String(value).trim();
+  // Brazilian format "1.234,56": only strip dots when a comma is also present
+  // (dots are thousand separators in pt-BR; if no comma, dot is the decimal separator)
+  if (s.includes(",")) {
+    s = s.replace(/\./g, "").replace(",", ".");
+  }
+  const parsed = Number.parseFloat(s);
   if (!Number.isFinite(parsed)) return null;
 
   return Number(parsed.toFixed(4));

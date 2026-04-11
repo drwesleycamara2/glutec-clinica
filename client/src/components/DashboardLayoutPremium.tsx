@@ -54,6 +54,7 @@ import {
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
+import { SimplesNacionalReminder } from "./SimplesNacionalReminder";
 import { ThemeToggle } from "./ThemeToggle";
 import { Button } from "./ui/button";
 import { canAccessModule } from "@/lib/access";
@@ -640,6 +641,7 @@ function DashboardLayoutPremiumContent({
               </Button>
             </div>
           ) : null}
+          <SimplesNacionalReminder />
           {children}
         </main>
       </SidebarInset>
