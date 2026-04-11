@@ -1,28 +1,38 @@
 /**
  * Botão de Assinatura Digital A3 em Nuvem (VIDaaS / BirdID)
  *
- * Fluxo:
+ * Fluxo QR Code (principal):
  * 1. Calcula SHA-256 do conteúdo do documento
- * 2. Chama initiateA3 → provedor envia push para o app do médico
- * 3. Polling a cada 3s em pollA3 → aguarda aprovação no app
- * 4. Quando assinado: callback onSigned(validationCode)
+ * 2. Backend gera URL de autorização OAuth2+PKCE e converte em QR
+ * 3. Modal exibe o QR → médico escaneia no app VIDaaS/BirdID
+ * 4. App redireciona para /api/cloud-signature/callback
+ * 5. Callback completa a assinatura e envia postMessage para esta janela
+ * 6. Polling a cada 3s como fallback para detectar conclusão
  */
 
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Loader2, ShieldCheck, Smartphone, XCircle } from "lucide-react";
+import {
+  Loader2,
+  QrCode,
+  ShieldCheck,
+  Smartphone,
+  X,
+  XCircle,
+  CheckCircle2,
+  RefreshCw,
+} from "lucide-react";
 
 type DocumentType = "evolucao" | "atestado" | "prescricao" | "exame";
-type Status = "idle" | "iniciando" | "pendente" | "assinado" | "erro";
+type Status = "idle" | "gerando" | "aguardando_qr" | "assinado" | "erro";
 
 interface Props {
   documentType: DocumentType;
   documentId: number;
   documentAlias: string;
-  /** Conteúdo textual do documento — será hasheado no browser com SHA-256 */
+  /** Conteúdo textual do documento — será hasheado com SHA-256 */
   documentContent: string;
-  /** Chamado ao concluir com sucesso */
   onSigned?: (validationCode: string) => void;
   disabled?: boolean;
   className?: string;
@@ -32,9 +42,7 @@ async function sha256Base64(text: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(text);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const base64 = btoa(String.fromCharCode(...hashArray));
-  return base64;
+  return btoa(String.fromCharCode(...new Uint8Array(hashBuffer)));
 }
 
 export function SignatureA3Button({
@@ -48,19 +56,38 @@ export function SignatureA3Button({
 }: Props) {
   const [status, setStatus] = useState<Status>("idle");
   const [sessionId, setSessionId] = useState<number | null>(null);
-  const [message, setMessage] = useState("");
+  const [qrDataUrl, setQrDataUrl] = useState<string>("");
+  const [providerName, setProviderName] = useState("VIDaaS / BirdID");
+  const [validationCode, setValidationCode] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const popupRef = useRef<Window | null>(null);
 
-  const initiateMutation = trpc.cloudSignature.initiateA3.useMutation({
+  const qrMutation = trpc.cloudSignature.generateQrCode.useMutation({
     onSuccess: (data) => {
       setSessionId(data.sessionId);
-      setStatus("pendente");
-      setMessage(data.message || "Aguardando confirmação no app…");
-      toast.info(data.message || "Confirme a assinatura no app do seu celular.");
+      setQrDataUrl(data.qrDataUrl);
+      setProviderName(data.providerName);
+      setStatus("aguardando_qr");
+
+      // Abre janela popup para receber o redirect do OAuth2
+      const popup = window.open(
+        "",
+        "assinatura_a3",
+        "width=500,height=400,left=200,top=200",
+      );
+      if (popup) {
+        popup.document.write(`<html><body style="font-family:sans-serif;text-align:center;padding:40px">
+          <h3>Aguardando autenticação no app ${data.providerName}…</h3>
+          <p>Escaneie o QR code e confirme no celular.</p>
+          <p style="color:#888;font-size:12px">Esta janela fechará automaticamente após a confirmação.</p>
+        </body></html>`);
+        popupRef.current = popup;
+      }
     },
     onError: (err) => {
       setStatus("erro");
-      setMessage(err.message);
+      setErrorMsg(err.message);
       toast.error(err.message);
     },
   });
@@ -68,46 +95,67 @@ export function SignatureA3Button({
   const pollMutation = trpc.cloudSignature.pollA3.useMutation({
     onSuccess: (data) => {
       if (data.status === "assinado") {
-        clearInterval(pollRef.current!);
-        setStatus("assinado");
-        setMessage("Documento assinado com sucesso!");
-        toast.success("Documento assinado digitalmente com certificado A3 ICP-Brasil.");
-        onSigned?.(data.validationCode || "");
+        finish(data.validationCode || "");
       } else if (data.status === "erro" || data.status === "expirado") {
-        clearInterval(pollRef.current!);
+        clearPoll();
         setStatus("erro");
-        setMessage(data.error || "Tempo esgotado ou erro na assinatura.");
-        toast.error(data.error || "Assinatura não confirmada. Tente novamente.");
+        setErrorMsg(data.error || "Tempo esgotado. Tente novamente.");
+        toast.error(data.error || "Assinatura expirada.");
       }
-      // status "pendente" → continua polling
-    },
-    onError: () => {
-      // Erros de rede não interrompem o polling
     },
   });
 
-  // Inicia polling quando sessionId é definido
+  const clearPoll = () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = null;
+  };
+
+  const finish = (code: string) => {
+    clearPoll();
+    popupRef.current?.close();
+    setValidationCode(code);
+    setStatus("assinado");
+    toast.success("Documento assinado digitalmente com certificado A3 ICP-Brasil!");
+    onSigned?.(code);
+  };
+
+  // Inicia polling quando sessionId está disponível
   useEffect(() => {
-    if (!sessionId || status !== "pendente") return;
+    if (!sessionId || status !== "aguardando_qr") return;
 
     pollRef.current = setInterval(() => {
       pollMutation.mutate({ sessionId });
     }, 3000);
 
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
+    return clearPoll;
   }, [sessionId, status]);
 
-  const handleClick = async () => {
-    if (status === "pendente" || status === "iniciando") return;
+  // Escuta postMessage do popup/callback
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === "SIGNATURE_DONE") {
+        finish(event.data.validationCode || "");
+      } else if (event.data?.type === "SIGNATURE_ERROR") {
+        clearPoll();
+        setStatus("erro");
+        setErrorMsg(event.data.error || "Erro na assinatura.");
+        toast.error(event.data.error || "Erro ao assinar documento.");
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
 
-    setStatus("iniciando");
-    setMessage("Calculando hash do documento…");
+  const handleClick = async () => {
+    if (status === "gerando" || status === "aguardando_qr") return;
+    setStatus("gerando");
+    setErrorMsg("");
+    setQrDataUrl("");
+    setSessionId(null);
 
     try {
       const hashBase64 = await sha256Base64(documentContent);
-      initiateMutation.mutate({
+      qrMutation.mutate({
         documentType,
         documentId,
         documentAlias,
@@ -115,73 +163,127 @@ export function SignatureA3Button({
       });
     } catch {
       setStatus("erro");
-      setMessage("Erro ao calcular hash do documento.");
-      toast.error("Erro ao preparar o documento para assinatura.");
+      setErrorMsg("Erro ao calcular hash do documento.");
     }
   };
 
   const handleCancel = () => {
-    if (pollRef.current) clearInterval(pollRef.current);
+    clearPoll();
+    popupRef.current?.close();
     setStatus("idle");
     setSessionId(null);
-    setMessage("");
+    setQrDataUrl("");
   };
 
+  const handleRetry = () => {
+    setStatus("idle");
+    setErrorMsg("");
+    setQrDataUrl("");
+    setSessionId(null);
+  };
+
+  // ─── Estado: já assinado ──────────────────────────────────────────────────
   if (status === "assinado") {
     return (
-      <div className={`flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-700 ${className}`}>
-        <ShieldCheck size={16} className="shrink-0" />
-        <span className="font-medium">Assinado digitalmente (ICP-Brasil A3)</span>
+      <div className={`flex flex-col gap-1 rounded-lg border border-green-500/30 bg-green-500/5 px-3 py-2 ${className}`}>
+        <div className="flex items-center gap-2 text-sm font-medium text-green-700">
+          <CheckCircle2 size={15} className="shrink-0" />
+          Assinado digitalmente — ICP-Brasil A3
+        </div>
+        {validationCode && (
+          <p className="text-[11px] text-green-600 font-mono">
+            Código: {validationCode}
+          </p>
+        )}
       </div>
     );
   }
 
   return (
-    <div className={`flex flex-col gap-2 ${className}`}>
+    <div className={`flex flex-col gap-3 ${className}`}>
+      {/* Botão principal */}
       <button
         type="button"
-        disabled={disabled || status === "iniciando" || status === "pendente"}
+        disabled={disabled || status === "gerando" || status === "aguardando_qr"}
         onClick={handleClick}
         className="flex items-center gap-2 rounded-lg border border-[#C9A55B]/40 bg-[#C9A55B]/10 px-4 py-2 text-sm font-medium text-[#8A6526] transition-all hover:bg-[#C9A55B]/20 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {status === "iniciando" || status === "pendente" ? (
+        {status === "gerando" ? (
           <Loader2 size={16} className="animate-spin" />
         ) : (
-          <ShieldCheck size={16} />
+          <QrCode size={16} />
         )}
-        {status === "pendente"
-          ? "Aguardando app…"
-          : status === "iniciando"
-          ? "Iniciando…"
+        {status === "gerando"
+          ? "Gerando QR code…"
+          : status === "aguardando_qr"
+          ? "Aguardando assinatura…"
           : "Assinar com A3 (VIDaaS / BirdID)"}
       </button>
 
-      {status === "pendente" && (
-        <div className="flex items-start gap-3 rounded-lg border border-blue-500/20 bg-blue-500/5 p-3">
-          <Smartphone size={20} className="mt-0.5 shrink-0 text-blue-500" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-blue-700">Confirme no app do celular</p>
-            <p className="mt-0.5 text-xs text-blue-600">{message}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              Abra o app VIDaaS ou BirdID, toque na notificação e confirme com sua biometria ou PIN do certificado A3.
-            </p>
+      {/* Modal QR Code */}
+      {status === "aguardando_qr" && qrDataUrl && (
+        <div className="rounded-xl border border-[#C9A55B]/30 bg-white p-4 shadow-lg">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Smartphone size={18} className="text-[#C9A55B]" />
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  Escaneie com o app {providerName}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  QR expira em 5 minutos
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="text-muted-foreground hover:text-red-500 transition-colors"
+              title="Cancelar"
+            >
+              <X size={18} />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="shrink-0 text-muted-foreground hover:text-red-500"
-            title="Cancelar"
-          >
-            <XCircle size={16} />
-          </button>
+
+          <div className="flex justify-center mb-3">
+            <img
+              src={qrDataUrl}
+              alt="QR Code para assinatura A3"
+              className="w-48 h-48 border border-border/30 rounded-lg"
+            />
+          </div>
+
+          <div className="text-center space-y-1.5">
+            <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 size={12} className="animate-spin" />
+              Aguardando confirmação no app…
+            </div>
+            <ol className="text-[11px] text-left text-muted-foreground space-y-1 mt-2 bg-muted/30 rounded-lg p-2.5">
+              <li>1. Abra o app <strong>{providerName}</strong> no celular</li>
+              <li>2. Toque em <strong>Escanear QR</strong> ou use a câmera</li>
+              <li>3. Confirme com sua <strong>biometria ou PIN</strong> do certificado</li>
+              <li>4. O documento será assinado automaticamente</li>
+            </ol>
+          </div>
         </div>
       )}
 
+      {/* Erro */}
       {status === "erro" && (
-        <p className="flex items-center gap-1.5 text-xs text-red-600">
-          <XCircle size={13} />
-          {message}
-        </p>
+        <div className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/5 p-3">
+          <XCircle size={15} className="shrink-0 mt-0.5 text-red-500" />
+          <div className="flex-1">
+            <p className="text-xs text-red-600">{errorMsg}</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleRetry}
+            className="shrink-0 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+          >
+            <RefreshCw size={12} />
+            Tentar novamente
+          </button>
+        </div>
       )}
     </div>
   );

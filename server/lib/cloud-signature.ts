@@ -109,11 +109,11 @@ export class CloudSignatureClient {
     requests: SignatureRequest[],
     scope: "single_signature" | "multi_signature" | "signature_session" = "multi_signature",
     lifetimeSeconds = 300,
+    state?: string,
   ): InitiateResult {
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = generateCodeChallenge(codeVerifier);
 
-    // O scope multi_signature permite assinar N hashes numa requisição
     const params = new URLSearchParams({
       client_id: this.config.clientId,
       response_type: "code",
@@ -124,6 +124,9 @@ export class CloudSignatureClient {
       lifetime: String(lifetimeSeconds),
       redirect_uri: this.config.redirectUri,
     });
+
+    // state carrega o sessionId para o callback recuperar a sessão
+    if (state) params.set("state", state);
 
     const authorizeUrl = `${this.baseUrl}/v0/oauth/authorize?${params.toString()}`;
 

@@ -178,6 +178,108 @@ async function startServer() {
 
   registerAuthRoutes(app);
 
+  // ─── Cloud Signature OAuth2 Callback ─────────────────────────────────────
+  app.get("/api/cloud-signature/callback", async (req, res) => {
+    const { code, state, error } = req.query as Record<string, string>;
+
+    if (error) {
+      return res.send(`<html><body><script>
+        window.opener?.postMessage({ type: 'SIGNATURE_ERROR', error: '${error}' }, '*');
+        window.close();
+      </script><p>Erro: ${error}. Pode fechar esta janela.</p></body></html>`);
+    }
+
+    if (!code || !state) {
+      return res.send(`<html><body><p>Parâmetros inválidos. Feche esta janela.</p></body></html>`);
+    }
+
+    const sessionId = parseInt(state, 10);
+    if (!sessionId) {
+      return res.send(`<html><body><p>Sessão inválida. Feche esta janela.</p></body></html>`);
+    }
+
+    try {
+      const dbComplete = await import("../db_complete");
+      const { createCloudSignatureClient } = await import("../lib/cloud-signature");
+
+      const session = await dbComplete.getSignatureSession(sessionId);
+      if (!session) throw new Error("Sessão não encontrada.");
+
+      const config = await dbComplete.getCloudSignatureConfig(session.userId);
+      if (!config) throw new Error("Configuração de assinatura não encontrada.");
+
+      const appUrl = process.env.APP_URL || "https://sistema.drwesleycamara.com.br";
+      const client = createCloudSignatureClient(
+        config.provider, config.cpf, config.clientId, config.clientSecret,
+        `${appUrl}/api/cloud-signature/callback`,
+        config.ambiente ?? "homologacao",
+      );
+
+      const tokenResult = await client.exchangeCodeForToken(code, session.codeVerifier);
+      const signatures = await client.signHashes(tokenResult.accessToken, [
+        { documentId: `doc-${session.documentId}`, alias: session.documentAlias, hashBase64: session.documentHash },
+      ]);
+
+      const cms = signatures[0]?.signatureCms || "";
+      const validationCode = Buffer.from(session.documentHash.slice(0, 48))
+        .toString("hex").slice(0, 24).toUpperCase();
+
+      await dbComplete.updateSignatureSession(sessionId, {
+        status: "assinado", accessToken: tokenResult.accessToken, signatureCms: cms,
+      });
+
+      // Busca nome do usuário
+      const userRows: any[] = [];
+      try {
+        const db2 = await import("../db");
+        const getDb = db2.getDb;
+        const { sql } = await import("drizzle-orm");
+        const dbConn = await getDb();
+        if (dbConn) {
+          const rows = await dbConn.execute(sql`select name, email from users where id = ${session.userId} limit 1`);
+          const arr = Array.isArray(rows) ? (Array.isArray(rows[0]) ? rows[0] : rows) : [];
+          if (arr[0]) userRows.push(arr[0]);
+        }
+      } catch {}
+      const signedByName = userRows[0]?.name || userRows[0]?.email || "Médico";
+
+      await dbComplete.applyDocumentSignature({
+        documentType: session.documentType,
+        documentId: session.documentId,
+        sessionId,
+        provider: config.provider,
+        signedByName,
+        signatureCms: cms,
+        validationCode,
+      });
+
+      return res.send(`<html><head><meta charset="utf-8"></head><body><script>
+        window.opener?.postMessage({ type: 'SIGNATURE_DONE', sessionId: ${sessionId}, validationCode: '${validationCode}' }, '*');
+        setTimeout(() => window.close(), 1500);
+      </script>
+      <div style="font-family:sans-serif;text-align:center;padding:40px">
+        <h2 style="color:#2d7a2d">✓ Documento assinado com sucesso!</h2>
+        <p>Código de validação: <strong>${validationCode}</strong></p>
+        <p>Esta janela fechará automaticamente.</p>
+      </div></body></html>`);
+    } catch (err: any) {
+      const msg = err?.message || "Erro ao processar assinatura.";
+      try {
+        const dbComplete = await import("../db_complete");
+        await dbComplete.updateSignatureSession(sessionId, { status: "erro", errorMessage: msg });
+      } catch {}
+      return res.send(`<html><head><meta charset="utf-8"></head><body><script>
+        window.opener?.postMessage({ type: 'SIGNATURE_ERROR', error: '${msg.replace(/'/g, "\\'")}', sessionId: ${sessionId} }, '*');
+        setTimeout(() => window.close(), 3000);
+      </script>
+      <div style="font-family:sans-serif;text-align:center;padding:40px">
+        <h2 style="color:#c00">Erro na assinatura</h2>
+        <p>${msg}</p>
+        <p>Esta janela fechará automaticamente.</p>
+      </div></body></html>`);
+    }
+  });
+
   app.post("/api/upload", async (req, res) => {
     const user = await authenticateRequest(req);
     if (!user) {

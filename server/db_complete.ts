@@ -3184,6 +3184,8 @@ export async function updateSignatureSession(
     accessToken?: string;
     signatureCms?: string;
     errorMessage?: string;
+    codeVerifier?: string;
+    authorizeCode?: string;
   },
 ) {
   const db = await getDb();
@@ -3194,7 +3196,9 @@ export async function updateSignatureSession(
       status = ${data.status ?? sql`status`},
       accessToken = ${data.accessToken ?? sql`accessToken`},
       signatureCms = ${data.signatureCms ?? sql`signatureCms`},
-      errorMessage = ${data.errorMessage ?? sql`errorMessage`}
+      errorMessage = ${data.errorMessage ?? sql`errorMessage`},
+      codeVerifier = ${data.codeVerifier ?? sql`codeVerifier`},
+      authorizeCode = ${data.authorizeCode ?? sql`authorizeCode`}
     where id = ${sessionId}
   `);
 }

@@ -1319,6 +1319,82 @@ export const appRouter = router({
         }
       }),
 
+    /**
+     * Gera QR code com a URL de autorização OAuth2+PKCE.
+     * O médico escaneia com o app VIDaaS ou BirdID no celular.
+     * O callback em /api/cloud-signature/callback completa a assinatura.
+     */
+    generateQrCode: protectedProcedure
+      .input(z.object({
+        documentType: z.enum(["evolucao", "atestado", "prescricao", "exame"]),
+        documentId: z.number(),
+        documentAlias: z.string(),
+        documentHashBase64: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const config = await dbComplete.getCloudSignatureConfig(ctx.user.id);
+        if (!config?.clientId || !config?.cpf) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "Configure sua assinatura digital A3 em Perfil → Assinatura Digital.",
+          });
+        }
+
+        const appUrl = process.env.APP_URL || "https://sistema.drwesleycamara.com.br";
+        const redirectUri = `${appUrl}/api/cloud-signature/callback`;
+
+        const client = createCloudSignatureClient(
+          config.provider as CloudSignatureProvider,
+          config.cpf,
+          config.clientId,
+          config.clientSecret,
+          redirectUri,
+          (config.ambiente as "producao" | "homologacao") ?? "homologacao",
+        );
+
+        // Cria a sessão antes de gerar a URL para ter o sessionId como state
+        const sessionId = await dbComplete.createSignatureSession({
+          userId: ctx.user.id,
+          provider: config.provider as CloudSignatureProvider,
+          documentType: input.documentType,
+          documentId: input.documentId,
+          documentAlias: input.documentAlias,
+          documentHash: input.documentHashBase64,
+          authorizeCode: "",
+          codeVerifier: "",
+          expiresInSeconds: 300,
+        });
+
+        // Gera URL com state=sessionId para o callback recuperar a sessão
+        const { authorizeUrl, codeVerifier } = client.buildAuthorizeUrl(
+          [{ documentId: `doc-${input.documentId}`, alias: input.documentAlias, hashBase64: input.documentHashBase64 }],
+          "multi_signature",
+          300,
+          String(sessionId),
+        );
+
+        // Salva o codeVerifier na sessão (necessário para trocar o code)
+        await dbComplete.updateSignatureSession(sessionId, { codeVerifier });
+
+        // Gera o QR code como data URL (PNG base64)
+        const QRCode = await import("qrcode");
+        const qrDataUrl: string = await QRCode.toDataURL(authorizeUrl, {
+          width: 256,
+          margin: 2,
+          color: { dark: "#1a1a1a", light: "#ffffff" },
+        });
+
+        const providerName = config.provider === "vidaas" ? "VIDaaS" : "BirdID";
+        return {
+          sessionId,
+          qrDataUrl,
+          authorizeUrl,
+          providerName,
+          expiresIn: 300,
+          message: `Abra o app ${providerName} e escaneie o QR code para assinar o documento.`,
+        };
+      }),
+
     listSessions: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listSignatureSessions(ctx.user.id);
     }),
