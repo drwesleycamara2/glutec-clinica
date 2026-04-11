@@ -109,3 +109,5 @@ temp/
 # Webdev artifacts (checkpoint zips, migrations, etc.)
 .webdev/
 __pycache__/
+HANDOFF_CLAUDE_CODE_2026-04-10.docx.zip
+tmp_tuss_202601.zip
