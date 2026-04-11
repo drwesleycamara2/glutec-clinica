@@ -15,6 +15,7 @@ import { createAuditLog } from "./features_special";
 import { generateSecureSystemExport } from "./lib/system-export";
 import { createD4SignService, getD4SignIntegrationStatus } from "./lib/d4sign-integration";
 import { createD4SignService as createSignatureDispatchService, SAFE_MAP } from "./d4sign";
+import { createCloudSignatureClient, documentHash, type CloudSignatureProvider } from "./lib/cloud-signature";
 
 const SUPER_ADMIN_EMAIL = "contato@drwesleycamara.com.br";
 
@@ -1193,6 +1194,136 @@ export const appRouter = router({
   }),
 
   // â”€â”€â”€ TEMPLATES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── CLOUD SIGNATURE (VIDaaS / BirdID) ──────────────────────────────────────
+  cloudSignature: router({
+
+    getConfig: protectedProcedure.query(async ({ ctx }) => {
+      return dbComplete.getCloudSignatureConfig(ctx.user.id);
+    }),
+
+    saveConfig: protectedProcedure
+      .input(z.object({
+        provider: z.enum(["vidaas", "birdid"]),
+        cpf: z.string().min(11),
+        clientId: z.string().min(1),
+        clientSecret: z.string().min(1),
+        ambiente: z.enum(["producao", "homologacao"]).default("homologacao"),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return dbComplete.saveCloudSignatureConfig(ctx.user.id, input);
+      }),
+
+    initiateA3: protectedProcedure
+      .input(z.object({
+        documentType: z.enum(["evolucao", "atestado", "prescricao", "exame"]),
+        documentId: z.number(),
+        documentAlias: z.string(),
+        documentHashBase64: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const config = await dbComplete.getCloudSignatureConfig(ctx.user.id);
+        if (!config?.clientId || !config?.cpf) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "Configure sua assinatura digital A3 em Perfil → Assinatura Digital.",
+          });
+        }
+
+        const client = createCloudSignatureClient(
+          config.provider as CloudSignatureProvider,
+          config.cpf,
+          config.clientId,
+          config.clientSecret,
+          `${process.env.APP_URL || "https://sistema.drwesleycamara.com.br"}/api/cloud-signature/callback`,
+          (config.ambiente as "producao" | "homologacao") ?? "homologacao",
+        );
+
+        const { authorizeCode, codeVerifier } = await client.initiatePushSignature([
+          { documentId: `doc-${input.documentId}`, alias: input.documentAlias, hashBase64: input.documentHashBase64 },
+        ]);
+
+        const sessionId = await dbComplete.createSignatureSession({
+          userId: ctx.user.id,
+          provider: config.provider as CloudSignatureProvider,
+          documentType: input.documentType,
+          documentId: input.documentId,
+          documentAlias: input.documentAlias,
+          documentHash: input.documentHashBase64,
+          authorizeCode,
+          codeVerifier,
+          expiresInSeconds: 300,
+        });
+
+        const providerName = config.provider === "vidaas" ? "VIDaaS" : "BirdID";
+        return { sessionId, status: "pendente", message: `Confirme no app ${providerName} no seu celular.` };
+      }),
+
+    pollA3: protectedProcedure
+      .input(z.object({ sessionId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const session = await dbComplete.getSignatureSession(input.sessionId);
+        if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+        if (session.userId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+        if (session.status === "assinado") return { status: "assinado", sessionId: input.sessionId };
+        if (session.status === "expirado" || session.status === "erro") {
+          return { status: session.status, sessionId: input.sessionId, error: session.errorMessage };
+        }
+        if (new Date() > new Date(session.expiresAt)) {
+          await dbComplete.updateSignatureSession(input.sessionId, { status: "expirado" });
+          return { status: "expirado", sessionId: input.sessionId };
+        }
+
+        const config = await dbComplete.getCloudSignatureConfig(ctx.user.id);
+        if (!config) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configuração não encontrada." });
+
+        const client = createCloudSignatureClient(
+          config.provider as CloudSignatureProvider,
+          config.cpf,
+          config.clientId,
+          config.clientSecret,
+          `${process.env.APP_URL || "https://sistema.drwesleycamara.com.br"}/api/cloud-signature/callback`,
+          (config.ambiente as "producao" | "homologacao") ?? "homologacao",
+        );
+
+        try {
+          const poll = await client.pollPushAuthorization(session.authorizeCode);
+          if (!poll.done) return { status: "pendente", sessionId: input.sessionId };
+
+          const tokenResult = await client.exchangeCodeForToken(poll.authorizationToken!, session.codeVerifier);
+          const signatures = await client.signHashes(tokenResult.accessToken, [
+            { documentId: `doc-${session.documentId}`, alias: session.documentAlias, hashBase64: session.documentHash },
+          ]);
+
+          const cms = signatures[0]?.signatureCms || "";
+          const validationCode = Buffer.from(cms.slice(0, 48) || session.documentHash.slice(0, 48))
+            .toString("hex").slice(0, 24).toUpperCase();
+
+          await dbComplete.updateSignatureSession(input.sessionId, {
+            status: "assinado", accessToken: tokenResult.accessToken, signatureCms: cms,
+          });
+          await dbComplete.applyDocumentSignature({
+            documentType: session.documentType,
+            documentId: session.documentId,
+            sessionId: input.sessionId,
+            provider: config.provider,
+            signedByName: ctx.user.name || ctx.user.email,
+            signatureCms: cms,
+            validationCode,
+          });
+
+          return { status: "assinado", sessionId: input.sessionId, validationCode };
+        } catch (err: any) {
+          const msg = err?.message || "Erro ao verificar assinatura.";
+          await dbComplete.updateSignatureSession(input.sessionId, { status: "erro", errorMessage: msg });
+          return { status: "erro", sessionId: input.sessionId, error: msg };
+        }
+      }),
+
+    listSessions: protectedProcedure.query(async ({ ctx }) => {
+      return dbComplete.listSignatureSessions(ctx.user.id);
+    }),
+  }),
+
   templates: router({
     list: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listTemplatesNormalized();

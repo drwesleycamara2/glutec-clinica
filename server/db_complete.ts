@@ -3082,4 +3082,203 @@ export async function updateUserRole(userId: number, role: string) {
   return { success: true };
 }
 
+// ─── CLOUD SIGNATURE (VIDaaS / BirdID) ───────────────────────────────────────
+
+export async function getCloudSignatureConfig(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select cloudSignatureProvider, cloudSignatureCpf, cloudSignatureClientId,
+           cloudSignatureClientSecret, cloudSignatureAmbiente
+    from users
+    where id = ${userId}
+    limit 1
+  `));
+
+  const u = rows[0];
+  if (!u?.cloudSignatureClientId) return null;
+
+  return {
+    provider: (u.cloudSignatureProvider || "vidaas") as "vidaas" | "birdid",
+    cpf: String(u.cloudSignatureCpf || "").replace(/\D/g, ""),
+    clientId: u.cloudSignatureClientId || "",
+    clientSecret: u.cloudSignatureClientSecret || "",
+    ambiente: (u.cloudSignatureAmbiente || "homologacao") as "producao" | "homologacao",
+  };
+}
+
+export async function saveCloudSignatureConfig(
+  userId: number,
+  data: {
+    provider: "vidaas" | "birdid";
+    cpf: string;
+    clientId: string;
+    clientSecret: string;
+    ambiente: "producao" | "homologacao";
+  },
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  await db.execute(sql`
+    update users set
+      cloudSignatureProvider = ${data.provider},
+      cloudSignatureCpf = ${data.cpf.replace(/\D/g, "")},
+      cloudSignatureClientId = ${data.clientId},
+      cloudSignatureClientSecret = ${data.clientSecret},
+      cloudSignatureAmbiente = ${data.ambiente}
+    where id = ${userId}
+  `);
+
+  return { success: true };
+}
+
+export async function createSignatureSession(data: {
+  userId: number;
+  provider: "vidaas" | "birdid";
+  documentType: string;
+  documentId: number;
+  documentAlias: string;
+  documentHash: string;
+  authorizeCode: string;
+  codeVerifier: string;
+  expiresInSeconds: number;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const expiresAt = new Date(Date.now() + data.expiresInSeconds * 1000)
+    .toISOString()
+    .slice(0, 19)
+    .replace("T", " ");
+
+  const result: any = await db.execute(sql`
+    insert into signature_sessions
+      (userId, provider, documentType, documentId, documentAlias, documentHash,
+       authorizeCode, codeVerifier, status, expiresAt)
+    values
+      (${data.userId}, ${data.provider}, ${data.documentType}, ${data.documentId},
+       ${data.documentAlias}, ${data.documentHash},
+       ${data.authorizeCode}, ${data.codeVerifier}, ${"pendente"}, ${expiresAt})
+  `);
+
+  return result?.insertId ?? result?.[0]?.insertId;
+}
+
+export async function getSignatureSession(sessionId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select * from signature_sessions where id = ${sessionId} limit 1
+  `));
+
+  return rows[0] ?? null;
+}
+
+export async function updateSignatureSession(
+  sessionId: number,
+  data: {
+    status?: string;
+    accessToken?: string;
+    signatureCms?: string;
+    errorMessage?: string;
+  },
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  await db.execute(sql`
+    update signature_sessions set
+      status = ${data.status ?? sql`status`},
+      accessToken = ${data.accessToken ?? sql`accessToken`},
+      signatureCms = ${data.signatureCms ?? sql`signatureCms`},
+      errorMessage = ${data.errorMessage ?? sql`errorMessage`}
+    where id = ${sessionId}
+  `);
+}
+
+export async function listSignatureSessions(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select id, provider, documentType, documentId, documentAlias, status,
+           errorMessage, expiresAt, createdAt
+    from signature_sessions
+    where userId = ${userId}
+    order by createdAt desc
+    limit 50
+  `));
+
+  return rows;
+}
+
+export async function applyDocumentSignature(data: {
+  documentType: string;
+  documentId: number;
+  sessionId: number;
+  provider: string;
+  signedByName: string;
+  signatureCms: string;
+  validationCode: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const now = new Date().toISOString().slice(0, 19).replace("T", " ");
+
+  if (data.documentType === "evolucao") {
+    await db.execute(sql`
+      update clinical_evolutions set
+        signatureProvider = ${data.provider},
+        signedByDoctorName = ${data.signedByName},
+        signedPdfUrl = null,
+        signatureHash = ${data.validationCode},
+        signatureValidationCode = ${data.validationCode},
+        signatureCertificateLabel = ${data.provider === "vidaas" ? "VIDaaS ICP-Brasil A3" : "BirdID ICP-Brasil A3"},
+        signedAt = ${now},
+        d4signStatus = ${"assinado"},
+        signatureSessionId = ${data.sessionId}
+      where id = ${data.documentId}
+    `);
+  } else if (data.documentType === "atestado") {
+    await db.execute(sql`
+      update attestations set
+        signatureProvider = ${data.provider},
+        signedByName = ${data.signedByName},
+        signatureCms = ${data.signatureCms},
+        signatureValidationCode = ${data.validationCode},
+        signedAt = ${now},
+        signatureSessionId = ${data.sessionId}
+      where id = ${data.documentId}
+    `);
+  } else if (data.documentType === "prescricao") {
+    await db.execute(sql`
+      update prescriptions set
+        signatureProvider = ${data.provider},
+        signedByName = ${data.signedByName},
+        signatureCms = ${data.signatureCms},
+        signatureValidationCode = ${data.validationCode},
+        signedAt = ${now},
+        signatureSessionId = ${data.sessionId}
+      where id = ${data.documentId}
+    `);
+  } else if (data.documentType === "exame") {
+    await db.execute(sql`
+      update exam_requests set
+        signatureProvider = ${data.provider},
+        signedByName = ${data.signedByName},
+        signatureCms = ${data.signatureCms},
+        signatureValidationCode = ${data.validationCode},
+        signedAt = ${now},
+        signatureSessionId = ${data.sessionId}
+      where id = ${data.documentId}
+    `);
+  }
+
+  return { success: true };
+}
+
 

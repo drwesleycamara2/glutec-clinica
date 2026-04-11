@@ -15,6 +15,8 @@ import {
   Loader2,
   Save,
   Shield,
+  ShieldCheck,
+  Smartphone,
   Stethoscope,
   User,
   UserCheck,
@@ -388,6 +390,191 @@ export default function Perfil() {
           </div>
         </CardContent>
       </Card>
+
+      {["admin", "medico", "enfermeiro"].includes(role) ? (
+        <CloudSignatureConfigCard />
+      ) : null}
     </div>
+  );
+}
+
+function CloudSignatureConfigCard() {
+  const { data: config, isLoading, refetch } = trpc.cloudSignature.getConfig.useQuery();
+  const [form, setForm] = useState({
+    provider: "vidaas" as "vidaas" | "birdid",
+    cpf: "",
+    clientId: "",
+    clientSecret: "",
+    ambiente: "homologacao" as "producao" | "homologacao",
+  });
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    if (config && !editing) {
+      setForm({
+        provider: config.provider,
+        cpf: config.cpf,
+        clientId: config.clientId,
+        clientSecret: "",
+        ambiente: config.ambiente,
+      });
+    }
+  }, [config, editing]);
+
+  const saveMutation = trpc.cloudSignature.saveConfig.useMutation({
+    onSuccess: () => {
+      toast.success("Configuração de assinatura A3 salva!");
+      setEditing(false);
+      refetch();
+    },
+    onError: (err: any) => toast.error(err.message || "Erro ao salvar configuração."),
+  });
+
+  if (isLoading) return null;
+
+  return (
+    <Card className="border shadow-sm">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            Assinatura Digital A3 (VIDaaS / BirdID)
+          </CardTitle>
+          {!editing ? (
+            <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+              <Edit className="mr-1 h-3 w-3" />
+              {config ? "Editar" : "Configurar"}
+            </Button>
+          ) : (
+            <div className="flex gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+                <X className="mr-1 h-3 w-3" />Cancelar
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => saveMutation.mutate(form)}
+                disabled={saveMutation.isPending}
+              >
+                {saveMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Save className="mr-1 h-3 w-3" />}
+                Salvar
+              </Button>
+            </div>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {!editing ? (
+          config ? (
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Provedor</span>
+                <span className="font-medium flex items-center gap-1">
+                  <Smartphone className="h-3.5 w-3.5" />
+                  {config.provider === "vidaas" ? "VIDaaS (Valid)" : "BirdID (Certisign)"}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">CPF cadastrado</span>
+                <span className="font-mono font-medium">
+                  {config.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Ambiente</span>
+                <Badge className={config.ambiente === "producao" ? "bg-green-100 text-green-700 text-xs" : "bg-yellow-100 text-yellow-700 text-xs"}>
+                  {config.ambiente === "producao" ? "Produção" : "Homologação"}
+                </Badge>
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Para assinar documentos, clique em "Assinar com A3" em qualquer evolução, atestado ou prescrição.
+                Você receberá uma notificação no app do celular para confirmar.
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Configure seu certificado digital A3 em nuvem para assinar prontuários,
+              atestados, prescrições e pedidos de exame com validade ICP-Brasil.
+            </p>
+          )
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <Label>Provedor</Label>
+              <div className="mt-1 flex gap-2">
+                {(["vidaas", "birdid"] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, provider: p }))}
+                    className={`flex-1 rounded border px-3 py-2 text-sm font-medium transition-all ${
+                      form.provider === p
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:border-primary/50"
+                    }`}
+                  >
+                    {p === "vidaas" ? "VIDaaS (Valid)" : "BirdID (Certisign)"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <Label>CPF (do titular do certificado A3)</Label>
+              <Input
+                className="mt-1 font-mono"
+                placeholder="000.000.000-00"
+                value={form.cpf}
+                onChange={(e) => setForm((f) => ({ ...f, cpf: e.target.value.replace(/\D/g, "") }))}
+                maxLength={14}
+              />
+            </div>
+            <div>
+              <Label>Client ID</Label>
+              <Input
+                className="mt-1"
+                placeholder="Obtido ao registrar seu app no provedor"
+                value={form.clientId}
+                onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>Client Secret</Label>
+              <Input
+                className="mt-1"
+                type="password"
+                placeholder="Client secret do seu app"
+                value={form.clientSecret}
+                onChange={(e) => setForm((f) => ({ ...f, clientSecret: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>Ambiente</Label>
+              <div className="mt-1 flex gap-2">
+                {(["homologacao", "producao"] as const).map((a) => (
+                  <button
+                    key={a}
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, ambiente: a }))}
+                    className={`flex-1 rounded border px-3 py-2 text-sm font-medium transition-all ${
+                      form.ambiente === a
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:border-primary/50"
+                    }`}
+                  >
+                    {a === "producao" ? "Produção" : "Homologação (testes)"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 text-xs text-blue-700">
+              <p className="font-medium mb-1">Como obter Client ID e Secret:</p>
+              <ul className="space-y-0.5 list-disc list-inside">
+                <li><b>VIDaaS:</b> Registre em hml-certificado.vidaas.com.br/v0/oauth/application</li>
+                <li><b>BirdID:</b> Registre em apihom.birdid.com.br/v0/oauth/application</li>
+              </ul>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
