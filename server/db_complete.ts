@@ -1899,6 +1899,22 @@ const DEFAULT_FISCAL_SERVICE_DESCRIPTION =
 const DEFAULT_FISCAL_LEGAL_TEXT =
   "NÃO SUJEITO A RETENCAO A SEGURIDADE SOCIAL, CONFORME ART-31 DA LEI-8.212/91, OS/INSS-209/99, IN/INSS-DC-100/03 E IN 971/09 ART.120 INCISO III. OS SERVICOS ACIMA DESCRITOS FORAM PRESTADOS PESSOALMENTE PELO(S) SOCIO(S) E SEM O CONCURSO DE EMPREGADOS OU OUTROS CONTRIBUINTES INDIVIDUAIS.";
 
+const REGIME_TRIBUTARIO_ENUM = ["simples_nacional", "lucro_presumido", "lucro_real", "mei"] as const;
+type RegimeTributario = typeof REGIME_TRIBUTARIO_ENUM[number];
+
+function normalizeRegimeTributario(value: unknown): RegimeTributario | null {
+  if (!value) return null;
+  const s = String(value).trim().toLowerCase();
+  // exact match
+  if (REGIME_TRIBUTARIO_ENUM.includes(s as RegimeTributario)) return s as RegimeTributario;
+  // fuzzy match for human-readable values sent from frontend
+  if (s.includes("simples")) return "simples_nacional";
+  if (s.includes("presumido")) return "lucro_presumido";
+  if (s.includes("real")) return "lucro_real";
+  if (s.includes("mei")) return "mei";
+  return "simples_nacional"; // safe default
+}
+
 function normalizeDecimalInput(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
 
@@ -2064,7 +2080,7 @@ export async function upsertFiscalSettings(data: any) {
     telefone: data.telefone ?? null,
     email: data.email ?? null,
     optanteSimplesNacional: data.optanteSimplesNacional ? 1 : 0,
-    regimeTributario: data.regimeTributario ?? data.regimeApuracao ?? null,
+    regimeTributario: normalizeRegimeTributario(data.regimeTributario ?? data.regimeApuracao),
     regimeApuracao: data.regimeApuracao ?? data.regimeTributario ?? null,
     codigoTributacaoNacional: data.codigoTributacaoNacional ?? data.codigoServico ?? null,
     descricaoTributacao: data.descricaoTributacao ?? null,

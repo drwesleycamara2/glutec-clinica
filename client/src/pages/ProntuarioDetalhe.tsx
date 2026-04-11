@@ -102,6 +102,80 @@ function groupDocumentsByType(documents: any[]) {
   }, {});
 }
 
+function HistoricoTab({ patientId }: { patientId: number }) {
+  const { data: evolutions, isLoading } = trpc.clinicalEvolution.getByPatient.useQuery({ patientId });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-[#C9A55B]" />
+      </div>
+    );
+  }
+
+  if (!evolutions || evolutions.length === 0) {
+    return (
+      <Card className="border-border/50">
+        <CardContent className="py-12 text-center">
+          <History className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+          <p className="text-sm text-muted-foreground">Nenhum atendimento registrado neste prontuário ainda.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {evolutions.map((ev: any) => {
+        const date = ev.createdAt
+          ? new Date(ev.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
+          : "—";
+        const attendanceLabel =
+          ev.attendanceType === "online" ? "Online" :
+          ev.attendanceType === "presencial" ? "Presencial" : null;
+
+        return (
+          <Card key={ev.id} className="border-border/50">
+            <CardContent className="p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-[#C9A55B]" />
+                  <span className="text-sm font-semibold text-foreground">
+                    Evolução #{ev.id}
+                  </span>
+                  {attendanceLabel && (
+                    <Badge variant="outline" className="text-[10px]">{attendanceLabel}</Badge>
+                  )}
+                </div>
+                <span className="text-xs text-muted-foreground">{date}</span>
+              </div>
+
+              {ev.clinicalNotes && (
+                <div className="mb-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Notas clínicas</p>
+                  <p className="text-sm whitespace-pre-wrap">{ev.clinicalNotes}</p>
+                </div>
+              )}
+              {ev.audioTranscription && (
+                <div className="mb-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Transcrição de áudio</p>
+                  <p className="text-sm whitespace-pre-wrap text-muted-foreground">{ev.audioTranscription}</p>
+                </div>
+              )}
+              {ev.icdCode && (
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">CID-10</p>
+                  <Badge variant="outline" className="text-xs">{ev.icdCode}{ev.icdDescription ? ` — ${ev.icdDescription}` : ""}</Badge>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 function AnamneseTab({ patientId }: { patientId: number }) {
   const { data: templates } = trpc.medicalRecords.listTemplates.useQuery();
   const { data: savedAnamneses, refetch: refetchAnamneses } = trpc.anamneses.listByPatient.useQuery({ patientId });
