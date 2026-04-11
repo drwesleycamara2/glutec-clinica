@@ -22,10 +22,11 @@ import { toast } from "sonner";
 
 const ROLE_CONFIG = {
   admin: { label: "Administrador", icon: Shield, color: "text-[#6B6B6B] bg-[#6B6B6B]/10" },
-  medico: { label: "Medico", icon: Stethoscope, color: "text-[#C9A55B] bg-[#C9A55B]/10" },
+  gerente: { label: "Gerente", icon: Shield, color: "text-blue-600 bg-blue-100" },
+  medico: { label: "Médico", icon: Stethoscope, color: "text-[#C9A55B] bg-[#C9A55B]/10" },
   enfermeiro: { label: "Enfermeiro", icon: UserCheck, color: "text-[#C9A55B] bg-[#C9A55B]/10" },
   recepcionista: { label: "Recepcionista", icon: ClipboardList, color: "text-yellow-500 bg-yellow-500/10" },
-  user: { label: "Usuario", icon: User, color: "text-gray-500 bg-gray-500/10" },
+  user: { label: "Usuário", icon: User, color: "text-gray-500 bg-gray-500/10" },
 };
 
 const MODULES = AVAILABLE_MODULES;

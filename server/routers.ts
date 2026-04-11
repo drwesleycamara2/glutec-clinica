@@ -284,7 +284,7 @@ export const appRouter = router({
       .input(z.object({
         email: z.string().email(),
         name: z.string(),
-        role: z.enum(['user', 'admin', 'medico', 'recepcionista', 'enfermeiro']),
+        role: z.enum(['user', 'admin', 'medico', 'recepcionista', 'enfermeiro', 'gerente']),
         permissions: z.string(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -406,7 +406,7 @@ export const appRouter = router({
     updateUserRole: protectedProcedure
       .input(z.object({
         userId: z.number(),
-        role: z.enum(['user', 'admin', 'medico', 'recepcionista', 'enfermeiro']),
+        role: z.enum(['user', 'admin', 'medico', 'recepcionista', 'enfermeiro', 'gerente']),
       }))
       .mutation(async ({ ctx, input }) => {
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });

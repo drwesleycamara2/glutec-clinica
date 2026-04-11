@@ -70,6 +70,7 @@ type MenuItem = {
   label: string;
   path: string;
   adminOnly?: boolean;
+  adminOrGerente?: boolean;
   moduleId?: string;
 };
 
@@ -98,10 +99,10 @@ const menuSections: MenuSection[] = [
     label: "Operacional",
     items: [
       { icon: Wallet, label: "Fiscal", path: "/fiscal", adminOnly: true, moduleId: "fiscal" },
-      { icon: Wallet, label: "Financeiro", path: "/financeiro", moduleId: "financeiro" },
+      { icon: Wallet, label: "Financeiro", path: "/financeiro", adminOrGerente: true, moduleId: "financeiro" },
       { icon: Package, label: "Estoque", path: "/estoque", moduleId: "estoque" },
       { icon: MessageSquare, label: "CRM", path: "/crm", moduleId: "crm" },
-      { icon: BarChart3, label: "Relatórios", path: "/relatorios", moduleId: "relatorios" },
+      { icon: BarChart3, label: "Relatórios", path: "/relatorios", adminOnly: true, moduleId: "relatorios" },
       { icon: MessageSquare, label: "Chat", path: "/chat", moduleId: "chat" },
       { icon: UserCircle2, label: "Perfil", path: "/perfil", moduleId: "perfil" },
       { icon: ShieldCheck, label: "Usuários", path: "/usuarios", adminOnly: true, moduleId: "usuarios" },
@@ -248,6 +249,7 @@ function DashboardLayoutPremiumContent({
         ...section,
         items: section.items.filter(item => {
           if (item.adminOnly && user?.role !== "admin") return false;
+          if (item.adminOrGerente && user?.role !== "admin" && user?.role !== "gerente") return false;
           return canAccessModule(user, item.moduleId);
         }),
       })),

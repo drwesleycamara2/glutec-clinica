@@ -2,7 +2,7 @@
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Dashboard from "./pages/Dashboard.premium";
@@ -56,6 +56,31 @@ const publicPaths = [
 ];
 const sessionSetupPaths = ["/configurar-2fa", "/trocar-senha"];
 
+function AccessDenied() {
+  return (
+    <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+      <div className="text-5xl">🔒</div>
+      <h2 className="text-xl font-semibold">Acesso restrito</h2>
+      <p className="text-sm text-muted-foreground max-w-sm">
+        Você não tem permissão para acessar esta página. Entre em contato com o administrador do sistema.
+      </p>
+    </div>
+  );
+}
+
+function AdminOnly({ component: Component }: { component: React.ComponentType }) {
+  const { user } = useAuth();
+  if ((user as any)?.role !== "admin") return <AccessDenied />;
+  return <Component />;
+}
+
+function AdminOrGerente({ component: Component }: { component: React.ComponentType }) {
+  const { user } = useAuth();
+  const role = (user as any)?.role;
+  if (role !== "admin" && role !== "gerente") return <AccessDenied />;
+  return <Component />;
+}
+
 function ProtectedRoutes() {
   return (
     <DashboardLayout>
@@ -72,16 +97,16 @@ function ProtectedRoutes() {
         <Route path="/exames" component={Exames} />
         <Route path="/assinaturas" component={Assinaturas} />
         <Route path="/orcamentos" component={Orcamentos} />
-        <Route path="/financeiro" component={Financeiro} />
+        <Route path="/financeiro">{() => <AdminOrGerente component={Financeiro} />}</Route>
         <Route path="/estoque" component={Estoque} />
         <Route path="/nfse" component={NfseEmissao} />
         <Route path="/fiscal" component={ConfiguracoesFiscais} />
         <Route path="/documentos" component={Documentos} />
         <Route path="/fotos" component={Fotos} />
         <Route path="/crm" component={CRM} />
-        <Route path="/relatorios/prontuario" component={RelatorioProntuario} />
-        <Route path="/relatorios/portabilidade" component={PortabilidadeDados} />
-        <Route path="/relatorios" component={Relatorios} />
+        <Route path="/relatorios/prontuario">{() => <AdminOnly component={RelatorioProntuario} />}</Route>
+        <Route path="/relatorios/portabilidade">{() => <AdminOnly component={PortabilidadeDados} />}</Route>
+        <Route path="/relatorios">{() => <AdminOnly component={Relatorios} />}</Route>
         <Route path="/chat" component={Chat} />
         <Route path="/perfil" component={Perfil} />
         <Route path="/configuracoes" component={Configuracoes} />
