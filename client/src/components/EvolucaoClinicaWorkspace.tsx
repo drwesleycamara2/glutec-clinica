@@ -40,6 +40,7 @@ type Icd10Code = {
 
 type EvolutionFormState = {
   id?: number;
+  attendanceType: "presencial" | "online" | "";
   icd10: Icd10Code | null;
   clinicalNotes: string;
   audioTranscription: string;
@@ -85,6 +86,7 @@ const DEFAULT_CLINICAL_NOTES_TEMPLATE = [
 ].join("");
 
 const emptyForm = (): EvolutionFormState => ({
+  attendanceType: "",
   icd10: null,
   clinicalNotes: DEFAULT_CLINICAL_NOTES_TEMPLATE,
   audioTranscription: "",
@@ -254,6 +256,9 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
   });
 
   const buildPayload = (status: "rascunho" | "finalizado") => {
+    if (!form.attendanceType) {
+      throw new Error("Selecione o tipo de atendimento: Presencial ou Online.");
+    }
     if (!form.icd10) {
       throw new Error("Selecione um CID-10.");
     }
@@ -279,6 +284,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
       : form.endedAt || "";
 
     return {
+      attendanceType: form.attendanceType as "presencial" | "online",
       icdCode: form.icd10.code,
       icdDescription: form.icd10.description,
       clinicalNotes: form.clinicalNotes,
@@ -403,6 +409,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
     setStartedSessionAt(record.startedAt ? toDateTimeInputValue(new Date(record.startedAt)) : "");
     setForm({
       id: record.id,
+      attendanceType: (record.attendanceType === "presencial" || record.attendanceType === "online") ? record.attendanceType : "",
       icd10: record.icdCode ? { id: record.id, code: record.icdCode, description: record.icdDescription } : null,
       clinicalNotes: record.clinicalNotes || "",
       audioTranscription: record.audioTranscription || "",
@@ -531,6 +538,40 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Tipo de atendimento — seleção obrigatória */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold">
+              Tipo de atendimento <span className="text-red-500">*</span>
+            </Label>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setForm((c) => ({ ...c, attendanceType: "presencial" }))}
+                className={`flex-1 rounded-lg border-2 px-4 py-3 text-sm font-medium transition-all ${
+                  form.attendanceType === "presencial"
+                    ? "border-[#C9A55B] bg-[#C9A55B]/10 text-[#8A6526]"
+                    : "border-border/50 text-muted-foreground hover:border-[#C9A55B]/50"
+                }`}
+              >
+                🏥 Presencial
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm((c) => ({ ...c, attendanceType: "online" }))}
+                className={`flex-1 rounded-lg border-2 px-4 py-3 text-sm font-medium transition-all ${
+                  form.attendanceType === "online"
+                    ? "border-[#C9A55B] bg-[#C9A55B]/10 text-[#8A6526]"
+                    : "border-border/50 text-muted-foreground hover:border-[#C9A55B]/50"
+                }`}
+              >
+                💻 Online / Teleconsulta
+              </button>
+            </div>
+            {!form.attendanceType && (
+              <p className="text-xs text-red-500">Selecione o tipo de atendimento para continuar.</p>
+            )}
+          </div>
+
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" onClick={handleStart} variant="outline" className="border-[#C9A55B]/30 text-[#8A6526]">
               <PlayCircle className="mr-2 h-4 w-4" />

@@ -2762,7 +2762,12 @@ export async function listMedicalRecordTemplatesNormalized() {
   const db = await getDb();
   if (!db) return [];
 
-  const rows = await db.select().from(sql`medical_record_templates`).where(eq(sql`active`, true));
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from medical_record_templates
+    where active = 1
+    order by name asc
+  `));
   return rows.map((row: any) => normalizeTemplateRow(row));
 }
 
@@ -2980,27 +2985,36 @@ export async function updateUserProfile(userId: number, data: any) {
     }
   }
 
-  const payload = {
-    ...data,
-    email: normalizedEmail ?? null,
-    name: data.name ? String(data.name).trim() : null,
-    specialty: data.specialty ? String(data.specialty).trim() : null,
-    profession: data.profession ? String(data.profession).trim() : null,
-    crm: data.crm ? String(data.crm).trim() : null,
-    professionalLicenseType: data.professionalLicenseType ? String(data.professionalLicenseType).trim().toUpperCase() : null,
-    professionalLicenseState: data.professionalLicenseState ? String(data.professionalLicenseState).trim().toUpperCase() : null,
-    phone: data.phone ? String(data.phone).trim() : null,
-  };
+  const name = data.name ? String(data.name).trim() : null;
+  const specialty = data.specialty ? String(data.specialty).trim() : null;
+  const profession = data.profession ? String(data.profession).trim() : null;
+  const crm = data.crm ? String(data.crm).trim() : null;
+  const professionalLicenseType = data.professionalLicenseType ? String(data.professionalLicenseType).trim().toUpperCase() : null;
+  const professionalLicenseState = data.professionalLicenseState ? String(data.professionalLicenseState).trim().toUpperCase() : null;
+  const phone = data.phone ? String(data.phone).trim() : null;
 
-  await db.update(sql`users`).set(payload).where(eq(sql`id`, userId));
+  await db.execute(sql`
+    update users set
+      name = ${name},
+      email = ${normalizedEmail},
+      specialty = ${specialty},
+      profession = ${profession},
+      crm = ${crm},
+      professionalLicenseType = ${professionalLicenseType},
+      professionalLicenseState = ${professionalLicenseState},
+      phone = ${phone}
+    where id = ${userId}
+  `);
   return { success: true };
 }
 
 export async function updateUserRole(userId: number, role: string) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
-  await db.update(sql`users`).set({ role }).where(eq(sql`id`, userId));
+
+  await db.execute(sql`
+    update users set role = ${role} where id = ${userId}
+  `);
   return { success: true };
 }
 

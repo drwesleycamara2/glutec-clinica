@@ -320,7 +320,7 @@ function DashboardLayoutPremiumContent({
       }
       inactivityTimeoutRef.current = window.setTimeout(() => {
         void handleTimeout();
-      }, 30 * 60 * 1000);
+      }, 20 * 60 * 1000);
     };
 
     const events: Array<keyof WindowEventMap> = ["mousemove", "mousedown", "keydown", "scroll", "touchstart"];

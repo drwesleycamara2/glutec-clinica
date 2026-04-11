@@ -18,6 +18,9 @@ export const clinicalEvolutions = mysqlTable("clinical_evolutions", {
   audioUrl: text("audioUrl"), // URL do áudio original
   audioKey: varchar("audioKey", { length: 256 }), // Chave S3 do áudio
   
+  // Tipo de atendimento (obrigatório)
+  attendanceType: mysqlEnum("attendanceType", ["presencial", "online"]),
+
   // Status and Workflow
   status: mysqlEnum("status", ["rascunho", "finalizado", "assinado", "cancelado"]).default("rascunho").notNull(),
   startedAt: timestamp("startedAt"),

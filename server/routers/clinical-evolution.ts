@@ -10,6 +10,7 @@ export const clinicalEvolutionRouter = router({
     .input(
       z.object({
         patientId: z.number(),
+        attendanceType: z.enum(["presencial", "online"]),
         icdCode: z.string().min(1),
         icdDescription: z.string().min(1),
         clinicalNotes: z.string(),
@@ -33,6 +34,7 @@ export const clinicalEvolutionRouter = router({
       try {
         const evolution = await db.createClinicalEvolution({
           patientId: input.patientId,
+          attendanceType: input.attendanceType,
           doctorId: ctx.user.id,
           assistantName: input.assistantName.trim(),
           assistantUserId: input.assistantUserId ?? null,
@@ -88,6 +90,7 @@ export const clinicalEvolutionRouter = router({
     .input(
       z.object({
         id: z.number(),
+        attendanceType: z.enum(["presencial", "online"]).optional(),
         icdCode: z.string().optional(),
         icdDescription: z.string().optional(),
         clinicalNotes: z.string().optional(),
@@ -133,6 +136,7 @@ export const clinicalEvolutionRouter = router({
 
         await db.updateClinicalEvolution(input.id, {
           doctorId: ctx.user.id,
+          attendanceType: input.attendanceType,
           icdCode: input.icdCode,
           icdDescription: input.icdDescription,
           clinicalNotes: input.clinicalNotes,
