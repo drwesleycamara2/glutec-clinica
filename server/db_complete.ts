@@ -1897,7 +1897,7 @@ function centsToDecimal(value: unknown): number {
 const DEFAULT_FISCAL_SERVICE_DESCRIPTION =
   "Referente a procedimentos médicos ambulatoriais.";
 const DEFAULT_FISCAL_LEGAL_TEXT =
-  "Não sujeito à retenção de seguridade social, conforme art-31 da lei-8.212/91, os/inss-209/99, In/inss-dc-100/03 e in 971/09 art.120 inciso III. Os serviços acima descritos foram prestados pessoalmente pelo(s) sócio(s) e sem o concurso de empregados ou outros contribuintes individuais.";
+  "NÃO SUJEITO A RETENCAO A SEGURIDADE SOCIAL, CONFORME ART-31 DA LEI-8.212/91, OS/INSS-209/99, IN/INSS-DC-100/03 E IN 971/09 ART.120 INCISO III. OS SERVICOS ACIMA DESCRITOS FORAM PRESTADOS PESSOALMENTE PELO(S) SOCIO(S) E SEM O CONCURSO DE EMPREGADOS OU OUTROS CONTRIBUINTES INDIVIDUAIS.";
 
 function normalizeDecimalInput(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
@@ -2005,23 +2005,23 @@ async function logNfseEvent(
   const db = await getDb();
   if (!db) return;
 
-  await db.insert(sql`nfse_events`).values({
-    nfseId,
-    event,
-    status: params.status ?? null,
-    message: params.message ?? null,
-    xmlRequest: params.xmlRequest ?? null,
-    xmlResponse: params.xmlResponse ?? null,
-    userId: params.userId ?? null,
-  });
+  await db.execute(sql`
+    insert into nfse_events (nfseId, event, status, message, xmlRequest, xmlResponse, userId)
+    values (
+      ${nfseId}, ${event},
+      ${params.status ?? null}, ${params.message ?? null},
+      ${params.xmlRequest ?? null}, ${params.xmlResponse ?? null},
+      ${params.userId ?? null}
+    )
+  `);
 }
 
 export async function getFiscalSettings() {
   const db = await getDb();
   if (!db) return null;
   
-  const result = await db.select().from(sql`fiscal_config`).limit(1);
-  const fiscal = result[0];
+  const rows = unwrapRows<any>(await db.execute(sql`select * from fiscal_config limit 1`));
+  const fiscal = rows[0];
   if (!fiscal) return null;
 
   return {
@@ -2093,9 +2093,56 @@ export async function upsertFiscalSettings(data: any) {
   };
   
   if (existing) {
-    await db.update(sql`fiscal_config`).set(payload).where(eq(sql`id`, existing.id));
+    await db.execute(sql`
+      update fiscal_config set
+        cnpj = ${payload.cnpj}, razaoSocial = ${payload.razaoSocial}, nomeFantasia = ${payload.nomeFantasia},
+        inscricaoMunicipal = ${payload.inscricaoMunicipal}, inscricaoEstadual = ${payload.inscricaoEstadual},
+        codigoMunicipio = ${payload.codigoMunicipio}, municipio = ${payload.municipio}, uf = ${payload.uf},
+        cep = ${payload.cep}, logradouro = ${payload.logradouro}, numero = ${payload.numero},
+        complemento = ${payload.complemento}, bairro = ${payload.bairro},
+        telefone = ${payload.telefone}, email = ${payload.email},
+        optanteSimplesNacional = ${payload.optanteSimplesNacional},
+        regimeTributario = ${payload.regimeTributario}, regimeApuracao = ${payload.regimeApuracao},
+        codigoTributacaoNacional = ${payload.codigoTributacaoNacional}, codigoServico = ${payload.codigoServico},
+        itemListaServico = ${payload.itemListaServico}, cnaeServico = ${payload.cnaeServico},
+        descricaoTributacao = ${payload.descricaoTributacao},
+        itemNbs = ${payload.itemNbs}, descricaoNbs = ${payload.descricaoNbs},
+        aliquotaSimplesNacional = ${payload.aliquotaSimplesNacional}, aliquotaIss = ${payload.aliquotaIss},
+        descricaoServico = ${payload.descricaoServico}, descricaoServicoPadrao = ${payload.descricaoServicoPadrao},
+        textoLegalFixo = ${payload.textoLegalFixo},
+        municipioIncidencia = ${payload.municipioIncidencia}, ufIncidencia = ${payload.ufIncidencia},
+        provedor = ${payload.provedor}, ambiente = ${payload.ambiente}, ativo = ${payload.ativo},
+        webserviceUrl = ${payload.webserviceUrl}
+      where id = ${existing.id}
+    `);
   } else {
-    await db.insert(sql`fiscal_config`).values(payload);
+    await db.execute(sql`
+      insert into fiscal_config (
+        cnpj, razaoSocial, nomeFantasia, inscricaoMunicipal, inscricaoEstadual,
+        codigoMunicipio, municipio, uf, cep, logradouro, numero, complemento, bairro,
+        telefone, email, optanteSimplesNacional,
+        regimeTributario, regimeApuracao, codigoTributacaoNacional, codigoServico,
+        itemListaServico, cnaeServico, descricaoTributacao,
+        itemNbs, descricaoNbs, aliquotaSimplesNacional, aliquotaIss,
+        descricaoServico, descricaoServicoPadrao, textoLegalFixo,
+        municipioIncidencia, ufIncidencia, provedor, ambiente, ativo, webserviceUrl
+      ) values (
+        ${payload.cnpj}, ${payload.razaoSocial}, ${payload.nomeFantasia},
+        ${payload.inscricaoMunicipal}, ${payload.inscricaoEstadual},
+        ${payload.codigoMunicipio}, ${payload.municipio}, ${payload.uf},
+        ${payload.cep}, ${payload.logradouro}, ${payload.numero},
+        ${payload.complemento}, ${payload.bairro},
+        ${payload.telefone}, ${payload.email}, ${payload.optanteSimplesNacional},
+        ${payload.regimeTributario}, ${payload.regimeApuracao},
+        ${payload.codigoTributacaoNacional}, ${payload.codigoServico},
+        ${payload.itemListaServico}, ${payload.cnaeServico}, ${payload.descricaoTributacao},
+        ${payload.itemNbs}, ${payload.descricaoNbs},
+        ${payload.aliquotaSimplesNacional}, ${payload.aliquotaIss},
+        ${payload.descricaoServico}, ${payload.descricaoServicoPadrao}, ${payload.textoLegalFixo},
+        ${payload.municipioIncidencia}, ${payload.ufIncidencia},
+        ${payload.provedor}, ${payload.ambiente}, ${payload.ativo}, ${payload.webserviceUrl}
+      )
+    `);
   }
   
   return { success: true };
@@ -2133,13 +2180,15 @@ export async function saveFiscalCertificate(data: {
     throw new Error("Arquivo do certificado inválido.");
   }
 
-  await db.update(sql`fiscal_config`).set({
-    certificadoDigital: encryptSensitiveValue(cleanedBase64),
-    certificadoSenha: encryptSensitiveValue(data.password),
-    certificadoArquivoNome: data.fileName,
-    certificadoMimeType: data.mimeType ?? null,
-    certificadoAtualizadoEm: new Date(),
-  }).where(eq(sql`id`, existing.id));
+  await db.execute(sql`
+    update fiscal_config set
+      certificadoDigital = ${encryptSensitiveValue(cleanedBase64)},
+      certificadoSenha = ${encryptSensitiveValue(data.password)},
+      certificadoArquivoNome = ${data.fileName},
+      certificadoMimeType = ${data.mimeType ?? null},
+      certificadoAtualizadoEm = NOW()
+    where id = ${existing.id}
+  `);
 
   return {
     success: true,
@@ -2181,14 +2230,16 @@ export async function syncFiscalMunicipalParameters(ambiente?: "homologacao" | "
   const source = params?.convenio || params?.prestador || params?.parametros || params?.data || params;
 
   if (source && typeof source === "object") {
-    await db.update(sql`fiscal_config`).set({
-      municipio: source.municipio ?? fiscal.municipio ?? null,
-      uf: source.uf ?? fiscal.uf ?? null,
-      codigoMunicipio: source.codigoMunicipio ?? fiscal.codigoMunicipio ?? null,
-      codigoServico: source.codigoServico ?? fiscal.codigoServico ?? null,
-      itemListaServico: source.itemListaServico ?? fiscal.itemListaServico ?? null,
-      webserviceUrl: source.webserviceUrl ?? fiscal.webserviceUrl ?? null,
-    }).where(eq(sql`id`, fiscal.id));
+    await db.execute(sql`
+      update fiscal_config set
+        municipio = ${source.municipio ?? fiscal.municipio ?? null},
+        uf = ${source.uf ?? fiscal.uf ?? null},
+        codigoMunicipio = ${source.codigoMunicipio ?? fiscal.codigoMunicipio ?? null},
+        codigoServico = ${source.codigoServico ?? fiscal.codigoServico ?? null},
+        itemListaServico = ${source.itemListaServico ?? fiscal.itemListaServico ?? null},
+        webserviceUrl = ${source.webserviceUrl ?? fiscal.webserviceUrl ?? null}
+      where id = ${fiscal.id}
+    `);
   }
 
   return {
@@ -2202,7 +2253,7 @@ export async function listNfse() {
   const db = await getDb();
   if (!db) return [];
   
-  const rows = await db.select().from(sql`nfse`).orderBy(desc(sql`createdAt`));
+  const rows = unwrapRows<any>(await db.execute(sql`select * from nfse order by createdAt desc`));
   return rows.map(normalizeNfseRow);
 }
 
@@ -2235,72 +2286,63 @@ export async function createNfse(data: any, userId: number) {
     complemento: data.tomadorComplemento || null,
   });
   
-  const result = await db.insert(sql`nfse`).values({
-    patientId: data.patientId ?? null,
-    budgetId: data.budgetId ?? null,
-    tomadorNome: data.tomadorNome,
-    tomadorCpfCnpj: data.tomadorDocumento,
-    tomadorTipoDocumento: data.tomadorTipoDocumento ?? inferDocumentType(data.tomadorDocumento),
-    tomadorEmail: data.tomadorEmail ?? null,
-    tomadorEndereco,
-    numeroRps,
-    dataEmissao: new Date(),
-    dataCompetencia,
-    descricaoServico,
-    codigoServico: fiscal.codigoServico ?? fiscal.codigoTributacaoNacional ?? null,
-    itemListaServico: fiscal.itemListaServico ?? null,
-    cnaeServico: fiscal.cnaeServico ?? null,
-    codigoMunicipioIncidencia: fiscal.codigoMunicipio ?? null,
-    valorServicos,
-    valorDeducoes,
-    valorIss,
-    baseCalculo,
-    aliquota,
-    valorLiquidoNfse,
-    descontoIncondicionado,
-    formaPagamento: data.formaPagamento ?? null,
-    detalhesPagamento: data.detalhesPagamento ?? null,
-    ambiente: data.ambiente ?? fiscal.ambiente ?? "homologacao",
-    enviadoPorId: userId,
-    status: 'rascunho',
-  });
+  const insertResult: any = await db.execute(sql`
+    insert into nfse (
+      patientId, budgetId,
+      tomadorNome, tomadorCpfCnpj, tomadorTipoDocumento, tomadorEmail, tomadorEndereco,
+      numeroRps, dataEmissao, dataCompetencia,
+      descricaoServico, codigoServico, itemListaServico, cnaeServico, codigoMunicipioIncidencia,
+      valorServicos, valorDeducoes, valorIss, baseCalculo, aliquota, valorLiquidoNfse,
+      descontoIncondicionado, formaPagamento, detalhesPagamento,
+      ambiente, enviadoPorId, status
+    ) values (
+      ${data.patientId ?? null}, ${data.budgetId ?? null},
+      ${data.tomadorNome}, ${data.tomadorDocumento},
+      ${data.tomadorTipoDocumento ?? inferDocumentType(data.tomadorDocumento)},
+      ${data.tomadorEmail ?? null}, ${tomadorEndereco},
+      ${numeroRps}, NOW(), ${dataCompetencia},
+      ${descricaoServico},
+      ${fiscal.codigoServico ?? fiscal.codigoTributacaoNacional ?? null},
+      ${fiscal.itemListaServico ?? null}, ${fiscal.cnaeServico ?? null},
+      ${fiscal.codigoMunicipio ?? null},
+      ${valorServicos}, ${valorDeducoes}, ${valorIss}, ${baseCalculo}, ${aliquota}, ${valorLiquidoNfse},
+      ${descontoIncondicionado}, ${data.formaPagamento ?? null}, ${data.detalhesPagamento ?? null},
+      ${data.ambiente ?? fiscal.ambiente ?? "homologacao"}, ${userId}, ${"rascunho"}
+    )
+  `);
 
-  await db
-    .update(sql`fiscal_config`)
-    .set({ numeracaoSequencial: numeroRps + 1 })
-    .where(eq(sql`id`, fiscal.id));
-
-  const insertedId =
-    typeof result[0] === "number"
-      ? result[0]
-      : result[0]?.insertId ?? result[0]?.id;
+  const insertedId = insertResult?.insertId ?? insertResult?.[0]?.insertId;
   if (!insertedId) {
     throw new Error("Não foi possível identificar o rascunho da NFS-e criado.");
   }
 
-  const inserted = await db
-    .select()
-    .from(sql`nfse`)
-    .where(eq(sql`id`, insertedId))
-    .limit(1);
+  await db.execute(sql`
+    update fiscal_config set numeracaoSequencial = ${numeroRps + 1} where id = ${fiscal.id}
+  `);
 
-  return normalizeNfseRow(inserted[0]);
+  const insertedRows = unwrapRows<any>(await db.execute(sql`
+    select * from nfse where id = ${insertedId} limit 1
+  `));
+
+  return normalizeNfseRow(insertedRows[0]);
 }
 
 export async function emitNfse(nfseId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  const current = await db.select().from(sql`nfse`).where(eq(sql`id`, nfseId)).limit(1);
+  const current = unwrapRows<any>(await db.execute(sql`select * from nfse where id = ${nfseId} limit 1`));
   if (!current[0]) throw new Error("NFS-e não encontrada.");
-  
+
   const pendingMessage =
     "A emissão automática no Emissor Nacional ainda não está integrada. O rascunho foi preparado para conferência e emissão manual no portal nfse.gov.br.";
 
-  await db.update(sql`nfse`).set({
-    status: 'aguardando',
-    erroMensagem: pendingMessage,
-    tentativas: sql`tentativas + 1`,
-  }).where(eq(sql`id`, nfseId));
+  await db.execute(sql`
+    update nfse set
+      status = ${'aguardando'},
+      erroMensagem = ${pendingMessage},
+      tentativas = tentativas + 1
+    where id = ${nfseId}
+  `);
 
   return {
     success: true,
@@ -2313,11 +2355,13 @@ export async function cancelNfse(nfseId: number, reason: string) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   
-  await db.update(sql`nfse`).set({
-    status: 'cancelada',
-    motivoCancelamento: reason,
-    dataCancelamento: new Date(),
-  }).where(eq(sql`id`, nfseId));
+  await db.execute(sql`
+    update nfse set
+      status = ${'cancelada'},
+      motivoCancelamento = ${reason},
+      dataCancelamento = NOW()
+    where id = ${nfseId}
+  `);
   return { success: true };
 }
 
@@ -2325,7 +2369,7 @@ export async function emitNfseThroughNationalApi(nfseId: number, userId?: number
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
-  const current = await db.select().from(sql`nfse`).where(eq(sql`id`, nfseId)).limit(1);
+  const current = unwrapRows<any>(await db.execute(sql`select * from nfse where id = ${nfseId} limit 1`));
   if (!current[0]) throw new Error("NFS-e não encontrada.");
 
   const fiscal = await getRawFiscalConfig();
@@ -2342,21 +2386,23 @@ export async function emitNfseThroughNationalApi(nfseId: number, userId?: number
       current[0] as any,
     );
 
-    await db.update(sql`nfse`).set({
-      status: result.status,
-      numeroNfse: result.numeroNfse ?? null,
-      chaveAcesso: result.chaveAcesso ?? null,
-      protocolo: result.protocolo ?? null,
-      numeroDps: result.numeroDps ?? null,
-      codigoVerificacao: result.codigoVerificacao ?? null,
-      linkNfse: result.linkNfse ?? null,
-      xmlEnviado: result.xmlEnviado,
-      xmlRetorno: result.xmlRetorno,
-      xmlNfse: result.xmlNfse,
-      erroMensagem: null,
-      tentativas: sql`tentativas + 1`,
-      updatedAt: new Date(),
-    }).where(eq(sql`id`, nfseId));
+    await db.execute(sql`
+      update nfse set
+        status = ${result.status},
+        numeroNfse = ${result.numeroNfse ?? null},
+        chaveAcesso = ${result.chaveAcesso ?? null},
+        protocolo = ${result.protocolo ?? null},
+        numeroDps = ${result.numeroDps ?? null},
+        codigoVerificacao = ${result.codigoVerificacao ?? null},
+        linkNfse = ${result.linkNfse ?? null},
+        xmlEnviado = ${result.xmlEnviado},
+        xmlRetorno = ${result.xmlRetorno},
+        xmlNfse = ${result.xmlNfse},
+        erroMensagem = null,
+        tentativas = tentativas + 1,
+        updatedAt = NOW()
+      where id = ${nfseId}
+    `);
 
     await logNfseEvent(nfseId, "emissao", {
       status: result.status,
@@ -2378,12 +2424,14 @@ export async function emitNfseThroughNationalApi(nfseId: number, userId?: number
   } catch (error: any) {
     const message = error?.message || "Falha ao emitir a NFS-e na API nacional.";
 
-    await db.update(sql`nfse`).set({
-      status: "erro",
-      erroMensagem: message,
-      tentativas: sql`tentativas + 1`,
-      updatedAt: new Date(),
-    }).where(eq(sql`id`, nfseId));
+    await db.execute(sql`
+      update nfse set
+        status = ${'erro'},
+        erroMensagem = ${message},
+        tentativas = tentativas + 1,
+        updatedAt = NOW()
+      where id = ${nfseId}
+    `);
 
     await logNfseEvent(nfseId, "erro", {
       status: "erro",
