@@ -589,6 +589,7 @@ export const appRouter = router({
       .input(z.object({
         name: z.string(),
         content: z.string(),
+        specialty: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         return dbComplete.createExamTemplateNormalized(input, ctx.user.id);
@@ -1087,6 +1088,20 @@ export const appRouter = router({
     getIntegrationStatus: protectedProcedure.query(async ({ ctx }) => {
       return getD4SignIntegrationStatus();
     }),
+
+    saveCredentials: protectedProcedure
+      .input(z.object({
+        tokenAPI: z.string().min(1),
+        cryptKey: z.string().min(1),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        await dbComplete.updateClinicSettings({
+          d4signTokenApi: input.tokenAPI,
+          d4signCryptKey: input.cryptKey,
+        });
+        return { success: true };
+      }),
     testConnection: protectedProcedure.query(async ({ ctx }) => {
       const service = await createD4SignService();
       if (!service) {

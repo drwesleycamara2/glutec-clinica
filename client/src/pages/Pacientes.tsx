@@ -164,7 +164,7 @@ export default function Pacientes() {
                   <Avatar className="h-11 w-11 shrink-0">
                     {patient.photoUrl && <AvatarImage src={patient.photoUrl} alt={patient.fullName} />}
                     <AvatarFallback className="bg-[#C9A55B]/10 text-[#C9A55B] text-xs font-bold">
-                      {patient.fullName.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}
+                      {(patient.fullName || "?").split(" ").map((n: string) => n[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">

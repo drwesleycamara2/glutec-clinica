@@ -1,8 +1,11 @@
-﻿import { trpc } from "@/lib/trpc";
+﻿import { useState } from "react";
+import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, CheckCircle2, ExternalLink, Key, Loader2, RefreshCcw, ShieldCheck } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { AlertTriangle, CheckCircle2, ExternalLink, Key, Loader2, RefreshCcw, Save, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 function statusBadgeClass(configured: boolean) {
@@ -12,9 +15,22 @@ function statusBadgeClass(configured: boolean) {
 }
 
 export default function Assinaturas() {
+  const [credForm, setCredForm] = useState({
+    tokenAPI: "live_7d0a13cc11af0765b3100c9bdca360c862b57ae63bf9f5836d41cb67394dd790",
+    cryptKey: "live_crypt_hShAdQ3il2jfdGWF7U1wybozsqGGouPC",
+  });
+
   const statusQuery = trpc.signatures.getIntegrationStatus.useQuery();
   const safesQuery = trpc.signatures.listSafes.useQuery(undefined, { enabled: false });
   const testConnectionQuery = trpc.signatures.testConnection.useQuery(undefined, { enabled: false, retry: false });
+
+  const saveCredMutation = trpc.signatures.saveCredentials.useMutation({
+    onSuccess: () => {
+      toast.success("Credenciais D4Sign salvas com sucesso!");
+      statusQuery.refetch();
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   const status = statusQuery.data;
   const safes = safesQuery.data ?? [];
@@ -145,6 +161,50 @@ export default function Assinaturas() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Configurar Credenciais D4Sign */}
+      <Card className="card-premium border-border/70">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+            <Key className="h-4 w-4 text-[#C9A55B]" />
+            Configurar credenciais D4Sign
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Insira as credenciais de produção da D4Sign. Elas serão salvas de forma segura no banco de dados da clínica.
+          </p>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="d4-token">Token API</Label>
+              <Input
+                id="d4-token"
+                placeholder="live_..."
+                value={credForm.tokenAPI}
+                onChange={(e) => setCredForm((f) => ({ ...f, tokenAPI: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="d4-crypt">Crypt Key</Label>
+              <Input
+                id="d4-crypt"
+                placeholder="live_crypt_..."
+                value={credForm.cryptKey}
+                onChange={(e) => setCredForm((f) => ({ ...f, cryptKey: e.target.value }))}
+              />
+            </div>
+          </div>
+          <Button
+            variant="premium"
+            size="sm"
+            disabled={saveCredMutation.isPending || !credForm.tokenAPI || !credForm.cryptKey}
+            onClick={() => saveCredMutation.mutate(credForm)}
+          >
+            {saveCredMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Salvar credenciais
+          </Button>
+        </CardContent>
+      </Card>
 
       <Card className="card-premium border-border/70">
         <CardHeader className="pb-3">

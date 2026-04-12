@@ -742,8 +742,14 @@ export async function createExamRequest(data: any, userId: number) {
 export async function getExamRequestsByPatient(patientId: number) {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(sql`exam_requests`).where(eq(sql`patientId`, patientId));
+
+  return unwrapRows<any>(await db.execute(sql`
+    SELECT er.*, p.fullName as patientName, p.phone as patientPhone
+    FROM exam_requests er
+    LEFT JOIN patients p ON p.id = er.patientId
+    WHERE er.patientId = ${patientId}
+    ORDER BY er.createdAt DESC
+  `));
 }
 
 export async function getExamRequestById(id: number) {
@@ -1861,23 +1867,33 @@ export async function createChatMessage(channelId: string, userId: number, conte
 export async function getClinicSettings() {
   const db = await getDb();
   if (!db) return null;
-  
-  const result = await db.select().from(sql`clinic_settings`).limit(1);
-  return result[0];
+
+  const rows = unwrapRows<any>(await db.execute(sql`SELECT * FROM clinic_settings LIMIT 1`));
+  return rows[0] ?? null;
 }
 
 export async function updateClinicSettings(data: any) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
+
   const existing = await getClinicSettings();
-  
+
   if (existing) {
-    await db.update(sql`clinic_settings`).set(data).where(eq(sql`id`, existing.id));
+    // Build SET clause dynamically using raw SQL for column names (trusted keys only)
+    const entries = Object.entries(data).filter(([_, v]) => v !== undefined);
+    if (entries.length === 0) return { success: true };
+
+    const setClauses = entries.map(([key, val]) => sql`${sql.raw(`\`${key}\``)} = ${val}`);
+    await db.execute(sql`UPDATE clinic_settings SET ${sql.join(setClauses, sql`, `)} WHERE id = ${existing.id}`);
   } else {
-    await db.insert(sql`clinic_settings`).values(data);
+    const entries = Object.entries(data).filter(([_, v]) => v !== undefined);
+    if (entries.length === 0) return { success: true };
+
+    const colNames = entries.map(([key]) => sql.raw(`\`${key}\``));
+    const colVals = entries.map(([_, v]) => sql`${v}`);
+    await db.execute(sql`INSERT INTO clinic_settings (${sql.join(colNames, sql`, `)}) VALUES (${sql.join(colVals, sql`, `)})`);
   }
-  
+
   return { success: true };
 }
 

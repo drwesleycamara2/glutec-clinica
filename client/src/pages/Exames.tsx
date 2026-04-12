@@ -47,10 +47,9 @@ const URGENCY_CONFIG = {
   emergencia: { label: "Emergência", color: "bg-[#2F2F2F]/10 text-[#2F2F2F]" },
 };
 
-const defaultExamItem = { name: "", code: "", instructions: "", urgency: "rotina" as const };
 const defaultForm = {
   patientId: "", specialty: "", clinicalIndication: "", observations: "",
-  exams: [{ ...defaultExamItem }],
+  content: "",
 };
 
 export default function Exames() {
@@ -62,6 +61,11 @@ export default function Exames() {
   const [showTemplates, setShowTemplates] = useState(false);
 
   const { data: patients } = trpc.patients.list.useQuery({ limit: 200 });
+  const { data: templates } = trpc.examRequests.listTemplates.useQuery();
+  const saveTemplateMutation = trpc.examRequests.createTemplate.useMutation({
+    onSuccess: () => toast.success("Modelo salvo com sucesso!"),
+    onError: (err: any) => toast.error(err.message),
+  });
   const { data: examRequests, refetch } = trpc.examRequests.getByPatient.useQuery(
     { patientId: filterPatientId ?? 0 },
     { enabled: !!filterPatientId }
@@ -73,28 +77,6 @@ export default function Exames() {
   });
 
   const canCreate = ["admin", "medico"].includes(userRole);
-
-  const updateExam = (idx: number, field: string, value: string) => {
-    const exams = [...form.exams];
-    exams[idx] = { ...exams[idx], [field]: value };
-    setForm({ ...form, exams });
-  };
-
-  const addExam = () => setForm({ ...form, exams: [...form.exams, { ...defaultExamItem }] });
-  const removeExam = (idx: number) => setForm({ ...form, exams: form.exams.filter((_, i) => i !== idx) });
-
-  const addFromTemplate = (exam: { name: string; code?: string }) => {
-    const newExam = { name: exam.name, code: exam.code ?? "", instructions: "", urgency: "rotina" as const };
-    const hasEmpty = form.exams.some((e) => !e.name);
-    if (hasEmpty) {
-      const exams = [...form.exams];
-      const idx = exams.findIndex((e) => !e.name);
-      exams[idx] = newExam;
-      setForm({ ...form, exams });
-    } else {
-      setForm({ ...form, exams: [...form.exams, newExam] });
-    }
-  };
 
   return (
     <div className="space-y-5">
@@ -166,7 +148,7 @@ export default function Exames() {
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0 space-y-2">
-                  {exams.map((exam: any, idx: number) => {
+                  {exams.length > 0 ? exams.map((exam: any, idx: number) => {
                     const urgencyInfo = URGENCY_CONFIG[exam.urgency as keyof typeof URGENCY_CONFIG] ?? URGENCY_CONFIG.rotina;
                     return (
                       <div key={idx} className="flex items-center gap-3 p-2 rounded-lg bg-muted/50">
@@ -178,7 +160,11 @@ export default function Exames() {
                         <Badge className={`text-xs shrink-0 ${urgencyInfo.color}`}>{urgencyInfo.label}</Badge>
                       </div>
                     );
-                  })}
+                  }) : (req as any).content ? (
+                    <div className="p-3 rounded-lg bg-muted/50 whitespace-pre-wrap text-sm font-mono">
+                      {(req as any).content}
+                    </div>
+                  ) : null}
                   {req.clinicalIndication && (
                     <p className="text-xs text-muted-foreground mt-2"><span className="font-medium">Indicação:</span> {req.clinicalIndication}</p>
                   )}
