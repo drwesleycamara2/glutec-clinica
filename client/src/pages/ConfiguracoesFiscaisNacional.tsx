@@ -24,6 +24,14 @@ import { trpc } from "@/lib/trpc";
 
 type Ambiente = "homologacao" | "producao";
 
+/** Formata alíquota do banco (19.4000) para exibição pt-BR: "19,40" */
+function formatAliquota(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "";
+  const num = parseFloat(String(value).replace(",", "."));
+  if (!isFinite(num)) return "";
+  return num.toFixed(2).replace(".", ",");
+}
+
 type FiscalForm = {
   cnpj: string;
   razaoSocial: string;
@@ -172,8 +180,8 @@ export default function ConfiguracoesFiscaisNacional() {
       descricaoTributacao: fiscal.descricaoTributacao || "",
       itemNbs: fiscal.itemNbs || "",
       descricaoNbs: fiscal.descricaoNbs || "",
-      aliquotaSimplesNacional: String(fiscal.aliquotaSimplesNacional || ""),
-      aliquotaIss: String(fiscal.aliquotaIss || ""),
+      aliquotaSimplesNacional: formatAliquota(fiscal.aliquotaSimplesNacional),
+      aliquotaIss: formatAliquota(fiscal.aliquotaIss),
       municipioIncidencia: fiscal.municipioIncidencia || fiscal.municipio || "Mogi Guaçu",
       ufIncidencia: fiscal.ufIncidencia || fiscal.uf || "SP",
       descricaoServicoPadrao: fiscal.descricaoServicoPadrao || "Procedimentos médicos ambulatoriais",

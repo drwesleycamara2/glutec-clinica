@@ -22,6 +22,14 @@ import {
   Zap,
 } from "lucide-react";
 
+/** Formata alíquota do banco (19.4000) para exibição pt-BR: "19,40" */
+function formatAliquota(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "";
+  const num = parseFloat(String(value).replace(",", "."));
+  if (!isFinite(num)) return "";
+  return num.toFixed(2).replace(".", ",");
+}
+
 export default function ConfiguracoesFiscaisPage() {
   const { data: fiscal, isLoading, refetch } = trpc.fiscal.get.useQuery();
 
@@ -52,7 +60,7 @@ export default function ConfiguracoesFiscaisPage() {
     descricaoTributacao: "Clínicas, sanatórios, manicômios, casas de saúde, prontos-socorros, ambulatórios e congêneres",
     itemNbs: "123012100",
     descricaoNbs: "Serviços de clínica médica",
-    aliquotaSimplesNacional: "18.63",
+    aliquotaSimplesNacional: "18,63",
     aliquotaIss: "",
     municipioIncidencia: "Mogi Guaçu",
     ufIncidencia: "SP",
@@ -83,8 +91,8 @@ export default function ConfiguracoesFiscaisPage() {
         descricaoTributacao: fiscal.descricaoTributacao || "",
         itemNbs: fiscal.itemNbs || "123012100",
         descricaoNbs: fiscal.descricaoNbs || "Serviços de clínica médica",
-        aliquotaSimplesNacional: String(fiscal.aliquotaSimplesNacional || "18.63"),
-        aliquotaIss: String(fiscal.aliquotaIss || ""),
+        aliquotaSimplesNacional: formatAliquota(fiscal.aliquotaSimplesNacional) || "18,63",
+        aliquotaIss: formatAliquota(fiscal.aliquotaIss),
         municipioIncidencia: fiscal.municipioIncidencia || "Mogi Guaçu",
         ufIncidencia: fiscal.ufIncidencia || "SP",
         descricaoServicoPadrao: fiscal.descricaoServicoPadrao || "Procedimentos Médicos Ambulatoriais",
