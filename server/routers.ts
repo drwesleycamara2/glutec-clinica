@@ -1790,6 +1790,50 @@ export const appRouter = router({
         return special.getResourceAuditLog(input.resourceType, input.resourceId, input.limit);
       }),
   }),
+
+  // ─── CERTIFICADO A1 PF (assinatura de documentos) ──────────────────────────
+  a1Certificate: router({
+    getStatus: protectedProcedure.query(async ({ ctx }) => {
+      return dbComplete.getUserA1CertificateStatus(ctx.user.id);
+    }),
+
+    upload: protectedProcedure
+      .input(z.object({
+        fileName: z.string().min(1),
+        fileBase64: z.string().min(16),
+        password: z.string().min(1),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Valida o PFX antes de salvar
+        const { inspectPfx } = await import("./lib/a1-pdf-signer");
+        const info = inspectPfx(input.fileBase64, input.password);
+        await dbComplete.saveUserA1Certificate(ctx.user.id, input);
+        return { success: true, fileName: input.fileName, commonName: info.commonName, validTo: info.validTo.toISOString() };
+      }),
+
+    signDocument: protectedProcedure
+      .input(z.object({
+        pdfBase64: z.string().min(16),
+        signerName: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const certRaw = await dbComplete.getUserA1CertificateRaw(ctx.user.id);
+        if (!certRaw?.fileBase64) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "Certificado A1 PF não configurado. Faça o upload em Perfil → Certificado Digital.",
+          });
+        }
+        const { signPdfWithA1 } = await import("./lib/a1-pdf-signer");
+        const result = await signPdfWithA1(
+          input.pdfBase64,
+          certRaw.fileBase64,
+          certRaw.password,
+          input.signerName ?? ctx.user.name ?? undefined,
+        );
+        return result;
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

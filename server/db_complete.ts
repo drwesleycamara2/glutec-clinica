@@ -3290,4 +3290,65 @@ export async function applyDocumentSignature(data: {
   return { success: true };
 }
 
+// ─── CERTIFICADO A1 PF POR USUÁRIO ────────────────────────────────────────────
 
+export async function saveUserA1Certificate(
+  userId: number,
+  data: { fileName: string; fileBase64: string; password: string },
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const cleanedBase64 = String(data.fileBase64 ?? "").trim();
+  if (!cleanedBase64) throw new Error("Arquivo do certificado inválido.");
+
+  await db.execute(sql`
+    update users set
+      a1PfCertificado = ${encryptSensitiveValue(cleanedBase64)},
+      a1PfSenha       = ${encryptSensitiveValue(data.password)},
+      a1PfArquivoNome = ${data.fileName},
+      a1PfAtualizadoEm = NOW()
+    where id = ${userId}
+  `);
+
+  return { success: true, fileName: data.fileName };
+}
+
+export async function getUserA1CertificateRaw(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select a1PfCertificado, a1PfSenha, a1PfArquivoNome, a1PfAtualizadoEm
+    from users where id = ${userId} limit 1
+  `));
+
+  const u = rows[0];
+  if (!u?.a1PfCertificado || !u?.a1PfSenha) return null;
+
+  const { decryptSensitiveValue } = await import("./lib/secure-storage");
+  return {
+    fileBase64: decryptSensitiveValue(u.a1PfCertificado) ?? "",
+    password:   decryptSensitiveValue(u.a1PfSenha) ?? "",
+    fileName:   u.a1PfArquivoNome ?? "",
+    updatedAt:  u.a1PfAtualizadoEm ?? null,
+  };
+}
+
+export async function getUserA1CertificateStatus(userId: number) {
+  const db = await getDb();
+  if (!db) return { configured: false };
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select a1PfArquivoNome, a1PfAtualizadoEm,
+           (a1PfCertificado IS NOT NULL AND a1PfSenha IS NOT NULL) as configured
+    from users where id = ${userId} limit 1
+  `));
+
+  const u = rows[0];
+  return {
+    configured: Boolean(u?.configured),
+    fileName: u?.a1PfArquivoNome ?? null,
+    updatedAt: u?.a1PfAtualizadoEm ?? null,
+  };
+}

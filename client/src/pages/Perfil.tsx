@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import {
   ClipboardList,
   Edit,
+  FileKey,
   KeyRound,
   Loader2,
   Save,
@@ -18,6 +19,7 @@ import {
   ShieldCheck,
   Smartphone,
   Stethoscope,
+  Upload,
   User,
   UserCheck,
   X,
@@ -392,7 +394,10 @@ export default function Perfil() {
       </Card>
 
       {["admin", "medico", "enfermeiro"].includes(role) ? (
-        <CloudSignatureConfigCard />
+        <>
+          <A1CertificateCard />
+          <CloudSignatureConfigCard />
+        </>
       ) : null}
     </div>
   );
@@ -574,6 +579,108 @@ function CloudSignatureConfigCard() {
             </div>
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Card: Certificado A1 PF ──────────────────────────────────────────────────
+function A1CertificateCard() {
+  const { data: status, refetch } = trpc.a1Certificate.getStatus.useQuery();
+  const [file, setFile] = useState<File | null>(null);
+  const [password, setPassword] = useState("");
+  const [showPwd, setShowPwd] = useState(false);
+
+  const uploadMutation = trpc.a1Certificate.upload.useMutation({
+    onSuccess: (res) => {
+      toast.success(`Certificado "${res.fileName}" salvo com sucesso! (${res.commonName})`);
+      setFile(null);
+      setPassword("");
+      refetch();
+    },
+    onError: (e) => toast.error(e.message || "Erro ao salvar o certificado."),
+  });
+
+  const handleUpload = async () => {
+    if (!file) return toast.error("Selecione o arquivo .pfx do certificado.");
+    if (!password) return toast.error("Informe a senha do certificado.");
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(",")[1];
+      uploadMutation.mutate({ fileName: file.name, fileBase64: base64, password });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <Card className="rounded-2xl border border-border/50 shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <FileKey size={18} className="text-[#C9A55B]" />
+          Certificado A1 PF — Assinatura de Documentos
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {status?.configured ? (
+          <div className="flex items-center gap-3 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 px-4 py-3">
+            <ShieldCheck size={18} className="text-green-600 shrink-0" />
+            <div className="text-sm">
+              <p className="font-medium text-green-800 dark:text-green-300">Certificado configurado</p>
+              <p className="text-green-700 dark:text-green-400 text-xs mt-0.5">
+                {status.fileName}
+                {status.updatedAt ? ` · Atualizado em ${new Date(status.updatedAt).toLocaleDateString("pt-BR")}` : ""}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+            Nenhum certificado A1 PF configurado. Faça o upload para assinar prontuários, atestados e prescrições.
+          </div>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Arquivo do certificado (.pfx)</Label>
+            <Input
+              type="file"
+              accept=".pfx,.p12"
+              className="cursor-pointer text-sm"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Senha do certificado</Label>
+            <div className="relative">
+              <Input
+                type={showPwd ? "text" : "password"}
+                placeholder="Senha do arquivo .pfx"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPwd(!showPwd)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showPwd ? <X size={14} /> : <KeyRound size={14} />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          O certificado é armazenado de forma criptografada e usado exclusivamente para assinar seus documentos dentro do sistema. Apenas você tem acesso.
+        </p>
+
+        <Button
+          onClick={handleUpload}
+          disabled={uploadMutation.isPending || !file}
+          className="btn-gold-gradient gap-2"
+        >
+          {uploadMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+          {status?.configured ? "Atualizar certificado" : "Salvar certificado"}
+        </Button>
       </CardContent>
     </Card>
   );
