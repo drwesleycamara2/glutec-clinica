@@ -386,13 +386,57 @@ export async function listPatients(query?: string, limit: number = 5000) {
 export async function createPatient(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
-  const result = await db.insert(sql`patients`).values({
-    ...data,
-    createdBy: userId,
-    active: true,
+
+  // Store full address (including neighborhood) as JSON in the `address` column
+  const addressJson = JSON.stringify({
+    street: data.address || "",
+    number: data.addressNumber || "",
+    neighborhood: data.neighborhood || "",
+    city: data.city || "",
+    state: data.state || "",
+    zip: data.zipCode || "",
   });
-  return result[0];
+
+  const result = await db.execute(sql`
+    INSERT INTO patients (
+      fullName, cpf, birthDate, gender,
+      phone, email, address,
+      city, state, zipCode,
+      rg, bloodType, allergies, chronicConditions,
+      insuranceName, insuranceNumber,
+      emergencyContactName, emergencyContactPhone,
+      active, createdBy
+    ) VALUES (
+      ${data.fullName},
+      ${data.cpf || null},
+      ${data.birthDate || null},
+      ${data.gender || "nao_informado"},
+      ${data.phone || null},
+      ${data.email || null},
+      ${addressJson},
+      ${data.city || null},
+      ${data.state || null},
+      ${data.zipCode || null},
+      ${data.rg || null},
+      ${data.bloodType || "desconhecido"},
+      ${data.allergies || null},
+      ${data.chronicConditions || null},
+      ${data.insuranceName || null},
+      ${data.insuranceNumber || null},
+      ${data.emergencyContactName || null},
+      ${data.emergencyContactPhone || null},
+      true,
+      ${userId}
+    )
+  `);
+
+  const insertId = (result as any)?.[0]?.insertId ?? (result as any)?.insertId;
+  if (!insertId) return { id: null, fullName: data.fullName };
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    SELECT * FROM patients WHERE id = ${insertId} LIMIT 1
+  `));
+  return rows[0] ?? { id: insertId, fullName: data.fullName };
 }
 
 export async function getPatientById(id: number) {

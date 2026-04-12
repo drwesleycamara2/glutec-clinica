@@ -54,6 +54,49 @@ function formatCEP(value: string) {
   return `${digits.slice(0, 5)}-${digits.slice(5)}`;
 }
 
+// Converte qualquer formato de data colado para ISO (YYYY-MM-DD)
+function parsePastedDate(raw: string): { iso: string; display: string } | null {
+  const trimmed = raw.trim();
+  // Tenta YYYY-MM-DD ou YYYY/MM/DD
+  const isoMatch = trimmed.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch;
+    if (parseInt(y) < 1000) return null;
+    const mm = m.padStart(2, "0"), dd = d.padStart(2, "0");
+    return { iso: `${y}-${mm}-${dd}`, display: `${dd}/${mm}/${y}` };
+  }
+  // Tenta DD/MM/YYYY ou DD-MM-YYYY
+  const brMatch = trimmed.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+  if (brMatch) {
+    const [, d, m, y] = brMatch;
+    if (parseInt(y) < 1000) return null;
+    const mm = m.padStart(2, "0"), dd = d.padStart(2, "0");
+    return { iso: `${y}-${mm}-${dd}`, display: `${dd}/${mm}/${y}` };
+  }
+  // Tenta YYYYMMDD (8 dígitos seguidos)
+  const compact = trimmed.replace(/\D/g, "");
+  if (compact.length === 8) {
+    const y = compact.slice(0, 4), m = compact.slice(4, 6), d = compact.slice(6, 8);
+    if (parseInt(y) >= 1000 && parseInt(y) <= 2100)
+      return { iso: `${y}-${m}-${d}`, display: `${d}/${m}/${y}` };
+  }
+  return null;
+}
+
+// Formata digitação: DD/MM/AAAA e retorna ISO quando completo
+function handleBirthDateTyping(raw: string, current: string): { display: string; iso: string } {
+  // Permite apagar livremente
+  const digits = raw.replace(/\D/g, "").slice(0, 8);
+  let display = digits;
+  if (digits.length > 4) display = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+  else if (digits.length > 2) display = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  if (digits.length === 8) {
+    const d = digits.slice(0, 2), m = digits.slice(2, 4), y = digits.slice(4, 8);
+    if (parseInt(y) >= 1000) return { display, iso: `${y}-${m}-${d}` };
+  }
+  return { display, iso: "" };
+}
+
 const defaultForm = {
   // Obrigatórios
   fullName: "", cpf: "", birthDate: "",
@@ -75,6 +118,7 @@ export default function Pacientes() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState(defaultForm);
+  const [birthDateDisplay, setBirthDateDisplay] = useState("");
   const [loadingCep, setLoadingCep] = useState(false);
 
   const handleSearch = (val: string) => {
@@ -94,6 +138,7 @@ export default function Pacientes() {
       setShowCreate(false);
       refetch();
       setForm(defaultForm);
+      setBirthDateDisplay("");
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -187,7 +232,7 @@ export default function Pacientes() {
       )}
 
       {/* Modal Cadastro */}
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+      <Dialog open={showCreate} onOpenChange={(open) => { setShowCreate(open); if (!open) { setForm(defaultForm); setBirthDateDisplay(""); } }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -211,7 +256,28 @@ export default function Pacientes() {
                 </div>
                 <div>
                   <Label>Data de Nascimento <span className="text-[#6B6B6B]">*</span></Label>
-                  <Input type="date" value={form.birthDate} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} className="mt-1" />
+                  <Input
+                    placeholder="DD/MM/AAAA"
+                    maxLength={10}
+                    value={birthDateDisplay}
+                    className="mt-1"
+                    onChange={(e) => {
+                      const { display, iso } = handleBirthDateTyping(e.target.value, birthDateDisplay);
+                      setBirthDateDisplay(display);
+                      setForm({ ...form, birthDate: iso });
+                    }}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      const pasted = e.clipboardData.getData("text");
+                      const parsed = parsePastedDate(pasted);
+                      if (parsed) {
+                        setBirthDateDisplay(parsed.display);
+                        setForm({ ...form, birthDate: parsed.iso });
+                      } else {
+                        toast.error("Formato de data inválido. Use DD/MM/AAAA ou AAAA-MM-DD com ano de 4 dígitos.");
+                      }
+                    }}
+                  />
                 </div>
                 <div>
                   <Label>Gênero <span className="text-[#6B6B6B]">*</span></Label>
