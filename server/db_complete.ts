@@ -1895,7 +1895,7 @@ function centsToDecimal(value: unknown): number {
 }
 
 const DEFAULT_FISCAL_SERVICE_DESCRIPTION =
-  "Referente a procedimentos médicos ambulatoriais.";
+  "REFERENTE A PROCEDIMENTOS MÉDICOS AMBULATORIAIS.";
 const DEFAULT_FISCAL_LEGAL_TEXT =
   "NÃO SUJEITO A RETENCAO A SEGURIDADE SOCIAL, CONFORME ART-31 DA LEI-8.212/91, OS/INSS-209/99, IN/INSS-DC-100/03 E IN 971/09 ART.120 INCISO III. OS SERVICOS ACIMA DESCRITOS FORAM PRESTADOS PESSOALMENTE PELO(S) SOCIO(S) E SEM O CONCURSO DE EMPREGADOS OU OUTROS CONTRIBUINTES INDIVIDUAIS.";
 
@@ -1940,18 +1940,18 @@ function formatPaymentDescription(formaPagamento: string | null | undefined, det
   const details = String(detalhesPagamento ?? "").trim();
 
   const labels: Record<string, string> = {
-    pix: "Pix",
-    dinheiro: "Dinheiro",
-    cartao_credito: "Cartão de crédito",
-    cartao_debito: "Cartão de débito",
-    boleto: "Boleto",
-    transferencia: "Transferência bancária",
-    financiamento: "Financiamento",
-    outro: "Outro",
+    pix: "PIX",
+    dinheiro: "DINHEIRO",
+    cartao_credito: "CARTÃO DE CRÉDITO",
+    cartao_debito: "CARTÃO DE DÉBITO",
+    boleto: "BOLETO",
+    transferencia: "TRANSFERÊNCIA BANCÁRIA",
+    financiamento: "FINANCIAMENTO",
+    outro: "OUTRO",
   };
 
-  const baseLabel = labels[normalized] ?? (normalized ? normalized.replace(/_/g, " ") : "Forma de pagamento não informada");
-  return details ? `${baseLabel} ${details}`.trim() : baseLabel;
+  const baseLabel = labels[normalized] ?? (normalized ? normalized.replace(/_/g, " ").toUpperCase() : "FORMA DE PAGAMENTO NÃO INFORMADA");
+  return details ? `${baseLabel} ${details}`.trim().toUpperCase() : baseLabel;
 }
 
 function buildFiscalServiceDescription(
@@ -1975,14 +1975,14 @@ function buildFiscalServiceDescription(
     overrides.detalhesPagamento,
   );
   const parts = [
-    baseDescription || DEFAULT_FISCAL_SERVICE_DESCRIPTION,
-    `Forma de Pagamento: ${paymentDescription}`,
-    legalText || DEFAULT_FISCAL_LEGAL_TEXT,
+    (baseDescription || DEFAULT_FISCAL_SERVICE_DESCRIPTION).toUpperCase(),
+    `FORMA DE PAGAMENTO: ${paymentDescription.toUpperCase()}`,
+    (legalText || DEFAULT_FISCAL_LEGAL_TEXT).toUpperCase(),
   ];
 
   const complemento = String(overrides.complementoDescricao || "").trim();
   if (complemento) {
-    parts.push(`Informações complementares: ${complemento}`);
+    parts.push(`INFORMAÇÕES COMPLEMENTARES: ${complemento.toUpperCase()}`);
   }
 
   return parts.filter(Boolean).join("\n");
