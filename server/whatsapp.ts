@@ -5,6 +5,7 @@
  */
 
 import axios, { AxiosInstance } from "axios";
+import FormData from "form-data";
 import { getClinicSettings } from "./db_complete";
 
 export interface WhatsAppConfig {
@@ -32,16 +33,18 @@ export interface WhatsAppMessagePayload {
 export class WhatsAppService {
   private client: AxiosInstance;
   private phoneNumberId: string;
+  private accessToken: string;
 
   constructor(config: WhatsAppConfig) {
     this.phoneNumberId = config.phoneNumberId;
+    this.accessToken = config.accessToken;
     this.client = axios.create({
       baseURL: `https://graph.facebook.com/v20.0/${this.phoneNumberId}`,
       headers: {
         "Authorization": `Bearer ${config.accessToken}`,
         "Content-Type": "application/json",
       },
-      timeout: 20000,
+      timeout: 30000,
     });
   }
 
@@ -86,6 +89,61 @@ export class WhatsAppService {
     } catch (error: any) {
       console.error("[WhatsApp API Error]", error.response?.data || error.message);
       throw new Error(`Erro ao enviar template WhatsApp: ${JSON.stringify(error.response?.data || error.message)}`);
+    }
+  }
+
+  /**
+   * Faz upload de um arquivo de mídia para a API da Meta e retorna o media_id
+   * Necessário para enviar documentos/imagens iniciados pela empresa
+   */
+  async uploadMedia(buffer: Buffer, filename: string, mimeType: string): Promise<string> {
+    const form = new FormData();
+    form.append("messaging_product", "whatsapp");
+    form.append("type", mimeType);
+    form.append("file", buffer, { filename, contentType: mimeType });
+
+    try {
+      const response = await axios.post(
+        `https://graph.facebook.com/v20.0/${this.phoneNumberId}/media`,
+        form,
+        {
+          headers: {
+            "Authorization": `Bearer ${this.accessToken}`,
+            ...form.getHeaders(),
+          },
+          timeout: 60000,
+        },
+      );
+      const mediaId = response.data?.id;
+      if (!mediaId) throw new Error("Media ID não retornado pela API.");
+      return String(mediaId);
+    } catch (error: any) {
+      console.error("[WhatsApp Upload Error]", error.response?.data || error.message);
+      throw new Error(`Erro ao fazer upload de mídia: ${JSON.stringify(error.response?.data || error.message)}`);
+    }
+  }
+
+  /**
+   * Envia um documento (PDF) via media_id previamente obtido pelo uploadMedia()
+   */
+  async sendDocument(to: string, mediaId: string, filename: string, caption?: string): Promise<any> {
+    const payload: any = {
+      messaging_product: "whatsapp",
+      to: this.formatPhoneNumber(to),
+      type: "document",
+      document: {
+        id: mediaId,
+        filename,
+        ...(caption ? { caption } : {}),
+      },
+    };
+
+    try {
+      const response = await this.client.post("/messages", payload);
+      return response.data;
+    } catch (error: any) {
+      console.error("[WhatsApp Send Document Error]", error.response?.data || error.message);
+      throw new Error(`Erro ao enviar documento WhatsApp: ${JSON.stringify(error.response?.data || error.message)}`);
     }
   }
 

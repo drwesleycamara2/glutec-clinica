@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
 import {
   Receipt,
   Users,
@@ -902,7 +903,7 @@ export default function NfseEmissao() {
                         <p className="text-sm font-bold">{formatCurrency(nfse.valorServico)}</p>
                         <p className="text-xs text-muted-foreground">{nfse.formaPagamento?.replace(/_/g, " ")}</p>
                       </div>
-                      <div className="flex gap-1">
+                      <div className="flex gap-1 flex-wrap items-center">
                         <Button
                           size="sm"
                           variant="ghost"
@@ -910,6 +911,16 @@ export default function NfseEmissao() {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
+                        {nfse.status === "autorizada" && (
+                          <WhatsAppSendButton
+                            documentType="nfse"
+                            documentId={nfse.id}
+                            defaultPhone={nfse.patientPhone ?? nfse.tomadorTelefone ?? ""}
+                            label=""
+                            size="sm"
+                            variant="ghost"
+                          />
+                        )}
                         {nfse.status === "rascunho" && (
                           <Button
                             size="sm"

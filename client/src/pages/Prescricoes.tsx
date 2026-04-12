@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { exportPrescriptionPdf } from "@/components/PdfExporter";
+import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
 import { toast } from "sonner";
 import { CheckCircle, Clock, FileText, Loader2, Pill, Plus, Printer, Send, XCircle } from "lucide-react";
 
@@ -201,6 +202,11 @@ export default function Prescricoes() {
                         <Printer className="mr-1 h-3 w-3" />
                         Imprimir / PDF
                       </Button>
+                      <WhatsAppSendButton
+                        documentType="prescricao"
+                        documentId={rx.id}
+                        defaultPhone={patient?.phone ?? ""}
+                      />
                       <Button
                         size="sm"
                         variant="outline"

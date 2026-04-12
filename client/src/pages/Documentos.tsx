@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
 import {
   Plus, Search, FileText, Pill, Stethoscope, Award, Send, Download,
   Bold, Italic, Underline, List, Save, Eye, Printer, PenTool, Trash2,
@@ -462,10 +463,16 @@ export default function Documentos() {
               )}
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button variant="outline" onClick={handlePrint} className="border-gray-300">
               <Printer className="h-4 w-4 mr-2" /> Imprimir / PDF
             </Button>
+            {editingDoc?.id ? (
+              <WhatsAppSendButton
+                documentType="atestado"
+                documentId={editingDoc.id}
+              />
+            ) : null}
             <Button variant="outline" onClick={() => setShowPreview(true)} className="border-gray-300">
               <Eye className="h-4 w-4 mr-2" /> Visualizar
             </Button>

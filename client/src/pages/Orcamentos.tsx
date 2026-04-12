@@ -35,6 +35,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { toast } from "sonner";
+import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
 
 interface BudgetItemDraft {
   procedureId: number;
@@ -954,6 +955,13 @@ export default function Orcamentos() {
                         </Button>
                       ) : null}
 
+                      <WhatsAppSendButton
+                        documentType="orcamento"
+                        documentId={budget.id}
+                        defaultPhone={budget.patientPhone ?? ""}
+                        label="Enviar Orçamento via WhatsApp"
+                      />
+
                       {budget.status === "enviado" ? (
                         <Button
                           onClick={() => approveMutation.mutate({ budgetId: budget.id })}
@@ -990,10 +998,12 @@ export default function Orcamentos() {
                             <FileDown className="mr-2 h-4 w-4" />
                             Baixar nota
                           </Button>
-                          <Button variant="outline" onClick={() => sendInvoiceByWhatsapp(budget)}>
-                            <WalletCards className="mr-2 h-4 w-4" />
-                            Enviar por WhatsApp
-                          </Button>
+                          <WhatsAppSendButton
+                            documentType="nfse"
+                            documentId={budget.latestNfse?.id ?? 0}
+                            defaultPhone={budget.patientPhone ?? ""}
+                            label="Enviar NFS-e via WhatsApp"
+                          />
                           <Button variant="outline" onClick={() => sendInvoiceByEmail(budget)}>
                             <Mail className="mr-2 h-4 w-4" />
                             Enviar por e-mail

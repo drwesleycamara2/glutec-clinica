@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
 import { toast } from "sonner";
 import { Plus, FlaskConical, Loader2, FileText, AlertTriangle, Clock } from "lucide-react";
 
@@ -156,6 +157,11 @@ export default function Exames() {
                           </a>
                         </Button>
                       )}
+                      <WhatsAppSendButton
+                        documentType="exame"
+                        documentId={req.id}
+                        defaultPhone={req.patientPhone ?? ""}
+                      />
                     </div>
                   </div>
                 </CardHeader>

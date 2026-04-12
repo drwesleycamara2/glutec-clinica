@@ -14,6 +14,7 @@ import { verifyTotpCode } from "./_core/totp";
 import { createAuditLog } from "./features_special";
 import { generateSecureSystemExport } from "./lib/system-export";
 import { createD4SignService, getD4SignIntegrationStatus } from "./lib/d4sign-integration";
+import { createWhatsAppService } from "./whatsapp";
 import { createD4SignService as createSignatureDispatchService, SAFE_MAP } from "./d4sign";
 import { createCloudSignatureClient, documentHash, type CloudSignatureProvider } from "./lib/cloud-signature";
 
@@ -1481,6 +1482,141 @@ export const appRouter = router({
       .mutation(async ({ ctx }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
         return dbComplete.sendTomorrowAppointmentReminders(ctx.user.id, getAppBaseUrl(ctx.req));
+      }),
+
+    // ─── Envio de documentos em PDF via WhatsApp ─────────────────────────────
+    sendDocumentToPatient: protectedProcedure
+      .input(z.object({
+        documentType: z.enum(["prescricao", "exame", "orcamento", "atestado", "nfse"]),
+        documentId: z.number(),
+        phone: z.string().optional(), // sobrescreve o telefone do paciente se informado
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const wa = await createWhatsAppService();
+        if (!wa) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "WhatsApp não configurado. Configure o Access Token e Phone Number ID nas configurações da clínica." });
+
+        const { documentType, documentId } = input;
+        let phone = input.phone ?? "";
+        let pdfBuffer: Buffer;
+        let filename: string;
+        let caption: string;
+
+        // ── Prescrição ────────────────────────────────────────────────────────
+        if (documentType === "prescricao") {
+          const rx = await dbComplete.getPrescriptionById(documentId);
+          if (!rx) throw new TRPCError({ code: "NOT_FOUND", message: "Prescrição não encontrada." });
+          if (!phone) phone = rx.patientPhone ?? rx.phone ?? "";
+
+          const content = stripHtmlForSignature(rx.content ?? rx.medicamentos ?? "");
+          pdfBuffer = buildSimplePdfBuffer("PRESCRIÇÃO MÉDICA", [
+            `Paciente: ${rx.patientName ?? ""}`,
+            `Data: ${new Date(rx.date ?? rx.createdAt).toLocaleDateString("pt-BR")}`,
+            `CRM: ${rx.doctorCrm ?? ""}`,
+            "",
+            content,
+            "",
+            `Dr(a). ${rx.doctorName ?? ctx.user.name}`,
+          ]);
+          filename = `prescricao_${documentId}.pdf`;
+          caption = `Prescrição médica — Clínica Glutée`;
+        }
+
+        // ── Pedido de Exames ──────────────────────────────────────────────────
+        else if (documentType === "exame") {
+          const exam = await dbComplete.getExamRequestById(documentId);
+          if (!exam) throw new TRPCError({ code: "NOT_FOUND", message: "Pedido de exames não encontrado." });
+          if (!phone) phone = exam.patientPhone ?? exam.phone ?? "";
+
+          const exams = Array.isArray(exam.exams) ? exam.exams.join(", ") : String(exam.exams ?? exam.content ?? "");
+          pdfBuffer = buildSimplePdfBuffer("PEDIDO DE EXAMES", [
+            `Paciente: ${exam.patientName ?? ""}`,
+            `Data: ${new Date(exam.date ?? exam.createdAt).toLocaleDateString("pt-BR")}`,
+            "",
+            "Exames solicitados:",
+            exams,
+            exam.clinicalIndication ? `\nIndicação clínica: ${exam.clinicalIndication}` : "",
+            "",
+            `Dr(a). ${exam.doctorName ?? ctx.user.name}`,
+          ]);
+          filename = `pedido_exames_${documentId}.pdf`;
+          caption = `Pedido de exames — Clínica Glutée`;
+        }
+
+        // ── Orçamento ─────────────────────────────────────────────────────────
+        else if (documentType === "orcamento") {
+          const budget = await dbComplete.getBudgetById(documentId);
+          if (!budget) throw new TRPCError({ code: "NOT_FOUND", message: "Orçamento não encontrado." });
+          if (!phone) phone = budget.patientPhone ?? "";
+
+          const total = (budget.totalInCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+          const itemLines = (budget.items ?? []).map((item: any) =>
+            `- ${item.procedureName ?? item.areaName ?? "Item"}: R$ ${((item.unitPriceInCents ?? 0) / 100 * (item.quantity ?? 1)).toFixed(2).replace(".", ",")}`,
+          );
+          pdfBuffer = buildSimplePdfBuffer("ORÇAMENTO", [
+            `Paciente: ${budget.patientName}`,
+            `Data: ${new Date(budget.createdAt).toLocaleDateString("pt-BR")}`,
+            "",
+            "Procedimentos:",
+            ...itemLines,
+            "",
+            `Total: ${total}`,
+            budget.validUntil ? `Validade: ${new Date(budget.validUntil).toLocaleDateString("pt-BR")}` : "",
+            "",
+            "Clínica Glutée",
+          ]);
+          filename = `orcamento_${documentId}.pdf`;
+          caption = `Orçamento — Clínica Glutée`;
+        }
+
+        // ── Atestado / Documento do Paciente ──────────────────────────────────
+        else if (documentType === "atestado") {
+          const doc = await dbComplete.getPatientDocumentById(documentId);
+          if (!doc) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado." });
+          if (!phone) phone = (doc as any).patientPhone ?? "";
+
+          const docContent = stripHtmlForSignature((doc as any).content ?? (doc as any).text ?? "");
+          pdfBuffer = buildSimplePdfBuffer(((doc as any).title ?? "ATESTADO MÉDICO").toUpperCase(), [
+            `Paciente: ${(doc as any).patientName ?? ""}`,
+            `Data: ${new Date((doc as any).date ?? (doc as any).createdAt).toLocaleDateString("pt-BR")}`,
+            "",
+            docContent,
+            "",
+            `Dr(a). ${(doc as any).doctorName ?? ctx.user.name}`,
+          ]);
+          filename = `atestado_${documentId}.pdf`;
+          caption = `${(doc as any).title ?? "Atestado"} — Clínica Glutée`;
+        }
+
+        // ── NFSe ─────────────────────────────────────────────────────────────
+        else if (documentType === "nfse") {
+          const nfse = await dbComplete.getNfseById(documentId);
+          if (!nfse) throw new TRPCError({ code: "NOT_FOUND", message: "Nota Fiscal não encontrada." });
+          if (!phone) phone = (nfse as any).patientPhone ?? "";
+
+          const valor = ((nfse as any).valorServicos ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+          pdfBuffer = buildSimplePdfBuffer("NOTA FISCAL DE SERVIÇO ELETRÔNICA (NFS-e)", [
+            `Número: ${(nfse as any).numero ?? (nfse as any).rpsNumero ?? ""}`,
+            `Data: ${new Date((nfse as any).dataEmissao ?? (nfse as any).createdAt).toLocaleDateString("pt-BR")}`,
+            `Tomador: ${(nfse as any).tomadorNome ?? (nfse as any).patientName ?? ""}`,
+            `Valor: ${valor}`,
+            "",
+            `Descrição: ${(nfse as any).descricaoServico ?? ""}`,
+            "",
+            "Clínica Glutée — CNPJ 37.249.024/0001-40",
+          ]);
+          filename = `nfse_${documentId}.pdf`;
+          caption = `NFS-e nº ${(nfse as any).numero ?? documentId} — Clínica Glutée`;
+        } else {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Tipo de documento inválido." });
+        }
+
+        if (!phone) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Telefone do paciente não encontrado. Informe o número antes de enviar." });
+
+        // Upload do PDF e envio
+        const mediaId = await wa.uploadMedia(pdfBuffer!, filename!, "application/pdf");
+        await wa.sendDocument(phone, mediaId, filename!, caption!);
+
+        return { success: true, phone, filename };
       }),
   }),
 

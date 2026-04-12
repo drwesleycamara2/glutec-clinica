@@ -2517,6 +2517,65 @@ export async function listBudgets() {
   });
 }
 
+export async function getBudgetById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select b.*, p.fullName as patientName, p.email as patientEmail, p.phone as patientPhone
+    from budgets b
+    left join patients p on p.id = b.patientId
+    where b.id = ${id}
+    limit 1
+  `));
+
+  if (!rows[0]) return null;
+  const b = rows[0];
+  const total = Number.parseFloat(String(b.total ?? 0));
+  const subtotal = Number.parseFloat(String(b.subtotal ?? total));
+  const discount = Number.parseFloat(String(b.discount ?? 0));
+  return {
+    ...b,
+    items: parseBudgetItems(b.items),
+    totalInCents: decimalToCents(total),
+    subtotalInCents: decimalToCents(subtotal),
+    discountInCents: decimalToCents(discount),
+    patientName: b.patientName ?? `Paciente #${b.patientId}`,
+    patientPhone: b.patientPhone ?? null,
+  };
+}
+
+export async function getPatientDocumentById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select pd.*, p.fullName as patientName, p.phone as patientPhone, u.name as doctorName
+    from patient_documents pd
+    left join patients p on p.id = pd.patientId
+    left join users u on u.id = pd.doctorId
+    where pd.id = ${id}
+    limit 1
+  `));
+
+  return rows[0] ? normalizeDocumentRow(rows[0]) : null;
+}
+
+export async function getNfseById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select n.*, p.fullName as patientName, p.phone as patientPhone, p.email as patientEmail
+    from nfse n
+    left join patients p on p.id = n.patientId
+    where n.id = ${id}
+    limit 1
+  `));
+
+  return rows[0] ? normalizeNfseRow(rows[0]) : null;
+}
+
 export async function createBudget(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
