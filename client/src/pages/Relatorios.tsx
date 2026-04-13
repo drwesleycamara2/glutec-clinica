@@ -33,10 +33,10 @@ export default function Relatorios() {
   }, [period]);
 
   const { data: stats, isLoading: statsLoading } = trpc.admin.getDashboardStats.useQuery();
-  const { data: appointmentStats, isLoading: apptLoading } = trpc.admin.getAppointmentStats.useQuery(dateRange);
-  const { data: financialSummary } = trpc.financial.getSummary.useQuery(dateRange);
+  const { data: appointmentStats, isLoading: apptLoading } = trpc.admin.getAppointmentStats.useQuery(dateRange) as { data: any; isLoading: boolean };
+  const { data: financialSummary } = trpc.financial.getSummary.useQuery(dateRange) as { data: any };
   const { data: lowStock } = trpc.inventory.getLowStock.useQuery();
-  const { data: crmList } = trpc.crm.list.useQuery({ limit: 100 });
+  const { data: crmList } = trpc.crm.list.useQuery({ limit: 100 }) as { data: any };
   const { data: budgetList } = trpc.budgets.list.useQuery({ limit: 100 });
 
   // Computed metrics
@@ -106,7 +106,7 @@ export default function Relatorios() {
         {[
           { label: "Pacientes", value: stats?.totalPatients ?? 0, icon: Users, color: "text-[#C9A55B]", bg: "bg-[#C9A55B]/10" },
           { label: "Consultas Hoje", value: stats?.todayAppointments ?? 0, icon: Calendar, color: "text-[#C9A55B]", bg: "bg-[#C9A55B]/10" },
-          { label: "Médicos Ativos", value: stats?.totalDoctors ?? 0, icon: Activity, color: "text-[#8A6526]", bg: "bg-[#8A6526]/10" },
+          { label: "Médicos Ativos", value: (stats as any)?.totalDoctors ?? 0, icon: Activity, color: "text-[#8A6526]", bg: "bg-[#8A6526]/10" },
           { label: "Orçamentos", value: budgetMetrics.pending, icon: DollarSign, color: "text-[#C9A55B]", bg: "bg-[#C9A55B]/10", suffix: " pendentes" },
           { label: "Estoque Baixo", value: lowStock?.length ?? 0, icon: Package, color: "text-[#6B6B6B]", bg: "bg-[#6B6B6B]/10" },
           { label: "Indicações CRM", value: crmMetrics.pending, icon: HeartPulse, color: "text-[#C9A55B]", bg: "bg-[#C9A55B]/10", suffix: " abertas" },
@@ -241,7 +241,7 @@ export default function Relatorios() {
                   <span className="text-sm text-muted-foreground">Receitas</span>
                 </div>
                 <p className="text-2xl font-bold text-[#C9A55B]">
-                  {formatCurrency(financialSummary?.totalReceitas ?? 0)}
+                  {formatCurrency((financialSummary as any)?.totalReceita ?? (financialSummary as any)?.totalReceitas ?? 0)}
                 </p>
               </CardContent>
             </Card>
@@ -252,7 +252,7 @@ export default function Relatorios() {
                   <span className="text-sm text-muted-foreground">Despesas</span>
                 </div>
                 <p className="text-2xl font-bold text-[#6B6B6B]">
-                  {formatCurrency(financialSummary?.totalDespesas ?? 0)}
+                  {formatCurrency((financialSummary as any)?.totalDespesa ?? (financialSummary as any)?.totalDespesas ?? 0)}
                 </p>
               </CardContent>
             </Card>

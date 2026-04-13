@@ -153,8 +153,8 @@ function DashboardLayoutContent({
 }) {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
-  const { isCollapsed, toggleSidebar } = useSidebar();
-  const { isMobile } = useIsMobile();
+  const { state, toggleSidebar, isMobile } = useSidebar();
+  const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
 

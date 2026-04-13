@@ -176,10 +176,10 @@ export default function PacienteDetalheContent() {
             {canSendAnamnesis ? (
               <Button
                 onClick={() => sendAnamnesisRequestMutation.mutate({ patientId })}
-                disabled={sendAnamnesisRequestMutation.isLoading}
+                disabled={sendAnamnesisRequestMutation.isPending}
                 className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] text-white hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]"
               >
-                {sendAnamnesisRequestMutation.isLoading ? (
+                {sendAnamnesisRequestMutation.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <MessageCircle className="mr-2 h-4 w-4" />

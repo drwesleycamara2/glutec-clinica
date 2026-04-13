@@ -19,7 +19,7 @@ export default function Financeiro() {
   const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
   const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
-  const { data: transactions, isLoading, refetch } = trpc.financial.list.useQuery({});
+  const { data: transactions, isLoading, refetch } = trpc.financial.list.useQuery(undefined as any);
   const { data: summary } = trpc.financial.getSummary.useQuery({
     from: firstDay.toISOString(),
     to: lastDay.toISOString(),
@@ -114,7 +114,7 @@ export default function Financeiro() {
               <div className="p-2 rounded-lg bg-green-100"><TrendingUp className="h-5 w-5 text-[#8A6526]" /></div>
               <div>
                 <p className="text-xs text-muted-foreground">Receitas do Mês</p>
-                <p className="text-xl font-bold text-[#8A6526]">{formatCurrency(summary.totalReceitas)}</p>
+                <p className="text-xl font-bold text-[#8A6526]">{formatCurrency((summary as any).totalReceita ?? (summary as any).totalReceitas ?? 0)}</p>
               </div>
             </CardContent>
           </Card>
@@ -123,7 +123,7 @@ export default function Financeiro() {
               <div className="p-2 rounded-lg bg-red-100"><TrendingDown className="h-5 w-5 text-[#2F2F2F]" /></div>
               <div>
                 <p className="text-xs text-muted-foreground">Despesas do Mês</p>
-                <p className="text-xl font-bold text-[#2F2F2F]">{formatCurrency(summary.totalDespesas)}</p>
+                <p className="text-xl font-bold text-[#2F2F2F]">{formatCurrency((summary as any).totalDespesa ?? (summary as any).totalDespesas ?? 0)}</p>
               </div>
             </CardContent>
           </Card>

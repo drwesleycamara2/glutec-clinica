@@ -156,7 +156,7 @@ export default function NfseEmissao() {
 
   // Queries
   const { data: fiscalSettings } = trpc.fiscal.get.useQuery();
-  const { data: nfseList, isLoading: loadingList, refetch } = trpc.nfse.list.useQuery({});
+  const { data: nfseList, isLoading: loadingList, refetch } = trpc.nfse.list.useQuery(undefined as any);
   const { data: patients } = trpc.patients.list.useQuery({ limit: 5000 });
   const needsAliquotaConfirmation = confirmedAliquotaMonth !== currentMonthKey;
 

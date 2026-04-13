@@ -116,7 +116,7 @@ function buildPaymentLabel(method: string, details?: string | null) {
 
 export default function Orcamentos() {
   const { data: budgetsList, isLoading: loadingBudgets, refetch } =
-    trpc.budgets.list.useQuery({});
+    trpc.budgets.list.useQuery(undefined as any);
   const { data: procedures } = trpc.catalog.listProcedures.useQuery();
   const { data: paymentPlans } = trpc.catalog.listPaymentPlans.useQuery();
   const { data: fiscalSettings } = trpc.fiscal.get.useQuery();

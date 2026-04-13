@@ -91,10 +91,11 @@ export default function Dashboard() {
     return doctors?.find((d) => d.id === doctorId)?.name ?? `Médico #${doctorId}`;
   };
 
+  const s = stats as any;
   const statCards = [
     {
       title: "Total de Pacientes",
-      value: statsLoading ? "..." : stats?.totalPatients ?? 0,
+      value: statsLoading ? "..." : s?.totalPatients ?? 0,
       icon: Users,
       color: "text-primary",
       bg: "bg-primary/10",
@@ -102,7 +103,7 @@ export default function Dashboard() {
     },
     {
       title: "Consultas Hoje",
-      value: statsLoading ? "..." : stats?.todayAppointments ?? 0,
+      value: statsLoading ? "..." : s?.todayAppointments ?? 0,
       icon: CalendarDays,
       color: "text-primary",
       bg: "bg-primary/10",
@@ -110,7 +111,7 @@ export default function Dashboard() {
     },
     {
       title: "Assinaturas Pendentes",
-      value: statsLoading ? "..." : stats?.pendingSignatures ?? 0,
+      value: statsLoading ? "..." : s?.pendingSignatures ?? 0,
       icon: FileSignature,
       color: "text-primary",
       bg: "bg-primary/10",
@@ -118,7 +119,7 @@ export default function Dashboard() {
     },
     {
       title: "Médicos Ativos",
-      value: statsLoading ? "..." : stats?.totalDoctors ?? 0,
+      value: statsLoading ? "..." : s?.totalDoctors ?? 0,
       icon: Stethoscope,
       color: "text-primary",
       bg: "bg-primary/10",
@@ -126,7 +127,7 @@ export default function Dashboard() {
     },
     {
       title: "Orçamentos Pendentes",
-      value: statsLoading ? "..." : stats?.pendingBudgets ?? 0,
+      value: statsLoading ? "..." : s?.pendingBudgets ?? 0,
       icon: DollarSign,
       color: "text-primary",
       bg: "bg-primary/10",
@@ -134,10 +135,10 @@ export default function Dashboard() {
     },
     {
       title: "Estoque Baixo",
-      value: statsLoading ? "..." : stats?.lowStockItems ?? 0,
+      value: statsLoading ? "..." : s?.lowStockItems ?? 0,
       icon: Package,
-      color: (stats?.lowStockItems ?? 0) > 0 ? "text-[#6B6B6B]" : "text-primary",
-      bg: (stats?.lowStockItems ?? 0) > 0 ? "bg-[#6B6B6B]/10" : "bg-primary/10",
+      color: (s?.lowStockItems ?? 0) > 0 ? "text-[#6B6B6B]" : "text-primary",
+      bg: (s?.lowStockItems ?? 0) > 0 ? "bg-[#6B6B6B]/10" : "bg-primary/10",
       action: () => setLocation("/estoque"),
     },
   ];

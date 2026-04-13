@@ -100,8 +100,8 @@ export default function Usuarios() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <Badge className={u.active ? "bg-[#C9A55B]/15 text-[#6B5B2A] text-xs" : "bg-gray-100 text-gray-700 text-xs"}>
-                      {u.active ? "Ativo" : "Inativo"}
+                    <Badge className={(u as any).active !== false ? "bg-[#C9A55B]/15 text-[#6B5B2A] text-xs" : "bg-gray-100 text-gray-700 text-xs"}>
+                      {(u as any).active !== false ? "Ativo" : "Inativo"}
                     </Badge>
                     <Button size="sm" variant="outline" onClick={() => openEdit(u)}>
                       <Edit className="h-3 w-3 mr-1" />Editar

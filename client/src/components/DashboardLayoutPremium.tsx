@@ -227,8 +227,7 @@ function DashboardLayoutPremiumContent({
 }) {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
-  const { state, toggleSidebar } = useSidebar();
-  const { isMobile } = useIsMobile();
+  const { state, toggleSidebar, isMobile } = useSidebar();
   const [isResizing, setIsResizing] = useState(false);
   const [openClinicalDrafts, setOpenClinicalDrafts] = useState<ClinicalDraftMeta[]>(() => readClinicalDraftMetas());
   const [navigationPromptOpen, setNavigationPromptOpen] = useState(false);
