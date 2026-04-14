@@ -45,7 +45,20 @@ const DAY_STATUS_COLORS = {
   livre: "bg-green-500",
   parcial: "bg-yellow-500",
   ocupado: "bg-red-500",
+  bloqueado: "bg-purple-500",
   fechado: "bg-black",
+  sabado_vazio: "bg-gray-400",
+  sabado_ocupado: "bg-red-500",
+};
+
+const DAY_STATUS_LABELS: Record<keyof typeof DAY_STATUS_COLORS, string> = {
+  livre: "Livre",
+  parcial: "Parcialmente livre",
+  ocupado: "Ocupado",
+  bloqueado: "Bloqueado ou feriado",
+  fechado: "Domingo (fechado)",
+  sabado_vazio: "Sábado livre",
+  sabado_ocupado: "Sábado com atendimento",
 };
 
 const defaultAppointmentForm = {
@@ -265,7 +278,7 @@ export default function Agenda() {
   };
 
   const getDayStatus = (date: Date): keyof typeof DAY_STATUS_COLORS => {
-    if (date.getDay() === 0) return "fechado";
+    const dayOfWeek = date.getDay();
 
     const dayAppointments = filteredAppointments.filter((appointment) => isSameDay(new Date(appointment.scheduledAt), date));
     const dayStart = new Date(date);
@@ -276,8 +289,25 @@ export default function Agenda() {
       doesRangeOverlap(new Date(block.startsAt), new Date(block.endsAt), dayStart, dayEnd)
     );
 
-    if (dayAppointments.length === 0 && dayBlocks.length === 0) return "livre";
-    if (dayAppointments.length >= TIME_SLOTS.length / 2) return "ocupado";
+    // Domingo: sempre preto (fechado)
+    if (dayOfWeek === 0) return "fechado";
+
+    // Sábado: cinza se vazio, vermelho se tiver qualquer agendamento
+    if (dayOfWeek === 6) {
+      if (dayBlocks.length > 0) return "bloqueado";
+      return dayAppointments.length > 0 ? "sabado_ocupado" : "sabado_vazio";
+    }
+
+    // Dias bloqueados ou feriados: roxo
+    if (dayBlocks.length > 0) return "bloqueado";
+
+    // Dia livre: verde
+    if (dayAppointments.length === 0) return "livre";
+
+    // Agenda cheia: vermelho
+    if (dayAppointments.length >= TIME_SLOTS.length) return "ocupado";
+
+    // Parcialmente ocupado: amarelo
     return "parcial";
   };
 
@@ -863,21 +893,34 @@ export default function Agenda() {
         </div>
 
         <div className="space-y-2 rounded-lg border border-gray-300 bg-white p-4 text-xs">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-500">Legenda</p>
           <div className="flex items-center gap-2">
             <div className="h-4 w-4 rounded bg-green-500" />
-            <span className="text-gray-700">Livre</span>
+            <span className="text-gray-700">Dia livre</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="h-4 w-4 rounded bg-yellow-500" />
-            <span className="text-gray-700">Parcialmente livre</span>
+            <span className="text-gray-700">Alguns horários vagos</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="h-4 w-4 rounded bg-red-500" />
-            <span className="text-gray-700">Ocupado</span>
+            <span className="text-gray-700">Agenda cheia</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="h-4 w-4 rounded bg-purple-500" />
+            <span className="text-gray-700">Bloqueado / feriado</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="h-4 w-4 rounded bg-black" />
-            <span className="text-gray-700">Fechado ou bloqueado</span>
+            <span className="text-gray-700">Domingo (fechado)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="h-4 w-4 rounded bg-gray-400" />
+            <span className="text-gray-700">Sábado sem agenda</span>
+          </div>
+          <div className="flex items-center gap-2 border-t border-gray-100 pt-2">
+            <div className="h-4 w-4 rounded bg-red-500" />
+            <span className="text-gray-700">Sábado com atendimento (exceção)</span>
           </div>
         </div>
 
