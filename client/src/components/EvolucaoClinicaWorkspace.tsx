@@ -124,8 +124,13 @@ function buildValidationCode(id?: number) {
   return `GLUTEC-${id ?? "DOC"}-${Date.now().toString(36).toUpperCase()}`;
 }
 
-function canPersistDraft(form: EvolutionFormState) {
-  return Boolean(form.id) || Boolean(form.icd10) || stripHtml(form.clinicalNotes).length > 0 || form.audioTranscription.trim().length > 0;
+function canPersistDraft(form: EvolutionFormState, startedSessionAt: string) {
+  // So persistimos rascunho/notificacao apos o usuario clicar em "Iniciar atendimento"
+  // (ou ao abrir um registro existente). Se ele apenas navegar para a tela e sair,
+  // nenhum rastro deve ser salvo.
+  if (form.id) return true;
+  if (!startedSessionAt) return false;
+  return Boolean(form.icd10) || stripHtml(form.clinicalNotes).length > 0 || form.audioTranscription.trim().length > 0 || Boolean(form.attendanceType);
 }
 
 interface Props {
@@ -194,7 +199,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
   }, [draftStorageKey]);
 
   useEffect(() => {
-    const shouldPersist = canPersistDraft(form);
+    const shouldPersist = canPersistDraft(form, startedSessionAt);
 
     if (!shouldPersist) {
       localStorage.removeItem(draftStorageKey);
@@ -214,11 +219,19 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
     }, 600);
 
     return () => window.clearTimeout(timeout);
-  }, [draftStorageKey, form, patientId, patientName]);
+  }, [draftStorageKey, form, patientId, patientName, startedSessionAt]);
 
   useEffect(() => {
     return () => {
-      if (!canPersistDraft(form)) return;
+      if (!canPersistDraft(form, startedSessionAt)) {
+        // Usuario abriu e saiu sem iniciar atendimento: limpa qualquer rascunho
+        // e metadados de notificacao que possam existir para nao deixar rastro.
+        if (!form.id) {
+          localStorage.removeItem(draftStorageKey);
+          clearClinicalDraftMeta(patientId);
+        }
+        return;
+      }
       localStorage.setItem(draftStorageKey, JSON.stringify(form));
       writeClinicalDraftMeta({
         patientId,
@@ -228,7 +241,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
         status: form.id ? "rascunho" : "em_andamento",
       });
     };
-  }, [draftStorageKey, form, patientId, patientName]);
+  }, [draftStorageKey, form, patientId, patientName, startedSessionAt]);
 
   useEffect(() => {
     if (!startedSessionAt || form.isRetroactive || form.endedAt) {
@@ -326,7 +339,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
 
   useEffect(() => {
     const handleAutosave = async () => {
-      if (!canPersistDraft(form)) return;
+      if (!canPersistDraft(form, startedSessionAt)) return;
       localStorage.setItem(draftStorageKey, JSON.stringify(form));
       writeClinicalDraftMeta({
         patientId,
@@ -345,7 +358,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
 
     window.addEventListener(CLINICAL_DRAFT_AUTOSAVE_EVENT, handleAutosave as EventListener);
     return () => window.removeEventListener(CLINICAL_DRAFT_AUTOSAVE_EVENT, handleAutosave as EventListener);
-  }, [draftStorageKey, form, patientId, patientName]);
+  }, [draftStorageKey, form, patientId, patientName, startedSessionAt]);
 
   const handleFinalize = async () => {
     const confirmed = window.confirm("Finalizar a consulta agora? Depois disso ela ficará registrada como concluída.");
