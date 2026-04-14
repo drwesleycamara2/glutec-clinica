@@ -1,9 +1,40 @@
 # Handoff para IA Codex — Glutec Clinica
 **Data:** 13/04/2026  
 **Repo:** https://github.com/drwesleycamara2/glutec-clinica.git (branch `main`)  
-**Ultimo commit:** `80a4f14 feat(agenda): novo esquema de cores do calendario mensal`
+**Ultimo commit:** `8f765a8 fix(evolucao): so registra atendimento apos clicar em Iniciar`
 
-## Sessao mais recente (2026-04-13 - deploy #2)
+## Sessao mais recente (2026-04-13 - deploy #3)
+
+### Fix: Inicio de atendimento so conta apos clicar em "Iniciar atendimento"
+
+Arquivo: `client/src/components/EvolucaoClinicaWorkspace.tsx`
+
+Problema: abrir a tela de Evolucao Clinica salvava um rascunho no localStorage
+e criava metadado de "consulta iniciada" nas notificacoes assim que o usuario
+digitasse qualquer coisa (ou mesmo so por abrir a tela). Se ele saisse sem
+iniciar o atendimento, ficava um rastro indevido.
+
+Solucao: `canPersistDraft(form, startedSessionAt)` agora exige:
+- `form.id` definido (atendimento ja criado, portanto continuar salvando) OU
+- `startedSessionAt` definido (clicou em "Iniciar atendimento")
+
+Alem disso:
+- O cleanup `useEffect` que rodava no unmount agora tambem limpa
+  `localStorage` e `clearClinicalDraftMeta(patientId)` quando o usuario sai
+  sem ter iniciado o atendimento, garantindo zero rastro.
+- Todos os 3 call sites de `canPersistDraft` foram atualizados para passar
+  `startedSessionAt`.
+- Os dep arrays dos `useEffect` que usam essa funcao tambem incluem
+  `startedSessionAt` agora.
+
+Deploy:
+- ✅ GitHub `main` = `8f765a8`
+- ✅ VPS bundle = `index-CjDuII-v.js` (2.42MB)
+- ✅ Servico `glutec.service` ativo
+
+---
+
+## Sessao anterior (2026-04-13 - deploy #2)
 
 ### Redesign da Agenda — Novo esquema de cores do calendario
 
