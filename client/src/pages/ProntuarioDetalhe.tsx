@@ -26,6 +26,7 @@ import {
   ArrowLeft, Plus, FileText, Activity, Stethoscope, ClipboardList, Loader2,
   Calendar, User, ShieldCheck, FileDown, UserCheck, Copy, Link2, Paperclip,
   FlaskConical, Package, Save, Upload, Trash2, Search, CheckCircle2, History, FolderOpen, ImageIcon,
+  ScrollText,
 } from "lucide-react";
 import { AllergyAlert } from "@/components/AllergyAlert";
 import { ExportProntuarioButton } from "@/components/ExportProntuario";
@@ -676,6 +677,116 @@ function AnexosTab({ patientId }: { patientId: number }) {
 }
 
 /* ─────────────────────────────────────────────────
+   ContratosTab — lista contratos e termos assinados
+   (inclui os importados do Prontuario Verde via sourceSystem)
+   ───────────────────────────────────────────────── */
+function ContratosTab({ patientId }: { patientId: number }) {
+  const { data: documents, isLoading } = trpc.medicalRecords.getDocuments.useQuery({ patientId });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-[#C9A55B]" />
+      </div>
+    );
+  }
+
+  const contratosTermos = ((documents as any[]) || []).filter((d) =>
+    d.type === "contrato" || d.type === "termo"
+  );
+
+  if (contratosTermos.length === 0) {
+    return (
+      <Card className="border-border/50">
+        <CardContent className="py-12 text-center">
+          <ScrollText className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+          <p className="text-sm text-muted-foreground">
+            Nenhum contrato ou termo registrado para este paciente.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const contratos = contratosTermos.filter((d) => d.type === "contrato");
+  const termos = contratosTermos.filter((d) => d.type === "termo");
+
+  const renderList = (items: any[], emptyLabel: string) => (
+    items.length === 0 ? (
+      <p className="text-xs text-muted-foreground italic px-1">{emptyLabel}</p>
+    ) : (
+      <div className="space-y-2">
+        {items.map((doc: any) => (
+          <div
+            key={doc.id}
+            className="flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-muted/20 p-2.5"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <ScrollText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">
+                  {doc.name || doc.fileName || "Documento"}
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {doc.createdAt && (
+                    <p className="text-[10px] text-muted-foreground">
+                      {new Date(doc.createdAt).toLocaleDateString("pt-BR")}
+                    </p>
+                  )}
+                  {doc.sourceSystem === "prontuario_verde" && (
+                    <Badge variant="outline" className="text-[9px] h-4 px-1">Importado · Verde</Badge>
+                  )}
+                  {doc.sourceSystem === "onedoctor" && (
+                    <Badge variant="outline" className="text-[9px] h-4 px-1">Importado · OnDoctor</Badge>
+                  )}
+                  {doc.description && (
+                    <span className="text-[10px] text-muted-foreground truncate">{doc.description}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+            {(doc.url || doc.fileUrl) && (
+              <a href={doc.url || doc.fileUrl} target="_blank" rel="noopener noreferrer">
+                <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
+                  <FileDown className="h-3.5 w-3.5" />
+                </Button>
+              </a>
+            )}
+          </div>
+        ))}
+      </div>
+    )
+  );
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-border/50">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <ScrollText className="h-4 w-4 text-[#C9A55B]" />
+            Contratos <span className="text-xs text-muted-foreground font-normal">({contratos.length})</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {renderList(contratos, "Nenhum contrato registrado.")}
+        </CardContent>
+      </Card>
+      <Card className="border-border/50">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <ScrollText className="h-4 w-4 text-[#C9A55B]" />
+            Termos <span className="text-xs text-muted-foreground font-normal">({termos.length})</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {renderList(termos, "Nenhum termo registrado.")}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────
    ExamesTab — exam requests for patient
    ───────────────────────────────────────────────── */
 function ExamesTab({ patientId }: { patientId: number }) {
@@ -758,7 +869,7 @@ export default function ProntuarioDetalhe() {
   const params = useParams<{ id: string }>();
   const patientId = parseInt(params.id ?? "0");
   const [, setLocation] = useLocation();
-  const validTabs = ["historico", "anamnese", "evolucao", "atestados", "prescricoes", "orcamentos", "imagens", "anexos", "exames", "procedimentos"];
+  const validTabs = ["historico", "anamnese", "evolucao", "atestados", "contratos", "prescricoes", "orcamentos", "imagens", "anexos", "exames", "procedimentos"];
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window === "undefined") return "historico";
     const hashTab = window.location.hash.replace("#", "");
@@ -835,6 +946,9 @@ export default function ProntuarioDetalhe() {
           <TabsTrigger value="atestados" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
             <FileText className="h-3.5 w-3.5" />Atestados / Docs
           </TabsTrigger>
+          <TabsTrigger value="contratos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+            <ScrollText className="h-3.5 w-3.5" />Contratos / Termos
+          </TabsTrigger>
           <TabsTrigger value="prescricoes" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
             <Stethoscope className="h-3.5 w-3.5" />Prescrições
           </TabsTrigger>
@@ -859,6 +973,7 @@ export default function ProntuarioDetalhe() {
         <TabsContent value="anamnese" className="mt-4"><AnamneseTab patientId={patientId} /></TabsContent>
         <TabsContent value="evolucao" className="mt-4"><EvolucaoClinicaWorkspace patientId={patientId} patientName={patient.fullName} /></TabsContent>
         <TabsContent value="atestados" className="mt-4"><AtestadosTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
+        <TabsContent value="contratos" className="mt-4"><ContratosTab patientId={patientId} /></TabsContent>
         <TabsContent value="prescricoes" className="mt-4"><PrescricoesTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
         <TabsContent value="orcamentos" className="mt-4"><OrcamentoTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
         <TabsContent value="imagens" className="mt-4"><ImagensTab patientId={patientId} /></TabsContent>
