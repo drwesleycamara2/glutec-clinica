@@ -1,9 +1,81 @@
 # Handoff para IA Codex — Glutec Clinica
-**Data:** 13/04/2026  
+**Data:** 16/04/2026  
 **Repo:** https://github.com/drwesleycamara2/glutec-clinica.git (branch `main`)  
 **Ultimo commit:** `8f765a8 fix(evolucao): so registra atendimento apos clicar em Iniciar`
 
-## Sessao mais recente (2026-04-13 - deploy #3)
+## Sessao mais recente (2026-04-16) — Importacao de dados legados
+
+### Objetivo
+Importar todos os dados historicos dos sistemas antigos (Prontuario Verde + OnDoctor)
+para o Glutec Clinica, garantindo que nada se perdesse: anamneses, prescricoes,
+atendimentos, contratos/termos, agendas, orcamentos e anexos.
+
+### Regras aprovadas pelo usuario
+1. Em duplicidades, **OnDoctor prevalece** (atualiza campos vazios no Glutec)
+2. Consultas/anamneses/exames existentes em AMBOS os sistemas → importa os 2 (sem dedup)
+3. Paciente sem CPF: match por **nome + data de nascimento**; se nao bater,
+   cria novo com prefixo chamativo `⚠️ SEM CPF - CONFIRMAR - <nome>`
+4. Atribuir todos os registros legados ao `DOCTOR_ID = 1` (usuario atual)
+
+### Infraestrutura descoberta (importante!)
+- MySQL e um **container Docker** (`glutec-mysql`), nao servico systemd
+- Backend tambem e Docker (`glutec-backend` em `/app`) — ja tem mysql2 instalado
+- Stack real vive em `/app/docker-compose.yml` (nao em `/var/www/glutec-clinica`)
+- Usuario DB: `glutec_user` / senha `Glutec@User2026!` (url-encoded)
+- Root DB: `Glutec@2026!`
+- URL interna: `mysql://glutec_user:Glutec%40User2026!@mysql:3306/glutec`
+- Como MySQL escuta apenas em 127.0.0.1 DENTRO do container, `mysqldump` e imports
+  rodam via `docker exec` no container `glutec-mysql` ou `glutec-backend`.
+
+### Ferramentas criadas
+- `import_tool/import_legacy.js` (~710 linhas) — importador idempotente
+  - Le CSVs do Verde (Windows-1252) e OnDoctor (UTF-8)
+  - Match por CPF normalizado; fallback nome+data_nascimento
+  - Usa tabela `import_id_map` para evitar reimportacoes
+  - Todos os inserts tem `sourceSystem='prontuario_verde'|'onedoctor'` + `sourceId`
+- `deploy_tool/upload_and_run.js` — orquestrador que:
+  1. SFTP dos CSVs para `/root/glutec_import/` no VPS
+  2. `mysqldump` via `docker exec glutec-mysql` → `backup_pre_import.sql`
+  3. `docker cp` dos CSVs para dentro do container `glutec-backend`
+  4. `docker exec node import_legacy.cjs` (precisa ser `.cjs` pois
+     `/app/package.json` tem `"type": "module"`)
+- `deploy_tool/run_import_bg.js` — disparar em background com `setsid nohup`
+- `deploy_tool/verify.js` — conta registros importados por tabela/sourceSystem
+
+### Resultado da importacao
+
+| Tabela | Antes | Depois | Importado |
+|---|---|---|---|
+| patients | 635 | 638 | +3 novos (967 matched via id_map) |
+| medical_records | 0 | 1.289 | 617 Verde evolutions + 440 OnDoctor (232 prontuarios + 208 anamneses) |
+| prescriptions | 0 | 2.347 | 2.345 Verde prescricao_items |
+| appointments | 0 | 3.110 | 2.488 Verde + 311 OnDoctor + 311 antigos |
+| patient_documents | 0 | 3.274 | 347 contratos + 467 termos + 2.460 anexos (metadata) |
+| budgets | 0 | 302 | 296 Verde orcamentos |
+| import_id_map | 0 | 13.401 | rastreio de links |
+
+### Backup de seguranca
+- `/root/glutec_import/backup_pre_import.sql` (8.2 MB) — estado do DB antes da importacao
+- Para restaurar: `docker exec -i glutec-mysql mysql -uroot -p'Glutec@2026!' glutec < /root/glutec_import/backup_pre_import.sql`
+
+### PENDENCIAS (proxima sessao)
+1. **Binarios**: os anexos Verde (146 MB, zip) e arquivos OnDoctor (~500 MB)
+   ainda nao foram subidos. Os `patient_documents` tem apenas os metadados
+   (nome, tipo, data). Depois precisa:
+   - Extrair os zips em `/root/glutec_import/anexos_bin/`
+   - Subir para R2/S3 (bucket `glutec-clinica`)
+   - UPDATE `patient_documents` SET `fileKey`, `fileUrl` onde `sourceSystem` bater
+2. **UI**: `ProntuarioDetalhe.tsx` — aba "Contratos e Termos" ainda nao existe.
+   O `db_complete.getHistory` ja retorna `medical_records` legados via
+   `sourceSystem='prontuario_verde'|'onedoctor'`, entao anamneses/evolucoes ja
+   aparecem na aba Evolucoes. Falta criar aba "Contratos/Termos" lendo
+   `patient_documents WHERE type IN ('contrato','termo')`.
+3. **Verificacao visual**: abrir o prontuario de 3-5 pacientes e conferir se
+   os dados legados aparecem nas abas (Evolucao, Prescricoes, Anexos, Orcamentos).
+
+---
+
+## Sessao anterior (2026-04-13 - deploy #3)
 
 ### Fix: Inicio de atendimento so conta apos clicar em "Iniciar atendimento"
 
