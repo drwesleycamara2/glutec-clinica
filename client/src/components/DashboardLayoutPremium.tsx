@@ -558,7 +558,7 @@ function DashboardLayoutPremiumContent({
               <Users className="h-4 w-4" />
               Novo Paciente
             </Button>
-            <Button variant="premium" className="rounded-xl px-4" onClick={() => navigateWithDraftProtection("/agenda")}>
+            <Button variant="premium" className="rounded-xl px-4" onClick={() => navigateWithDraftProtection("/prontuarios?novo=1")}>
               <CalendarDays className="h-4 w-4" />
               Nova Consulta
             </Button>

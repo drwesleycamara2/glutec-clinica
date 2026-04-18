@@ -465,12 +465,15 @@ export async function getPatientById(id: number) {
   return {
     ...row,
     name: row.fullName ?? "",
-    zipCode: addressData.zip ?? "",
-    city: addressData.city ?? "",
-    state: addressData.state ?? "",
+    zipCode: row.zipCode ?? addressData.zip ?? "",
+    city: row.city ?? addressData.city ?? "",
+    state: row.state ?? addressData.state ?? "",
     neighborhood: addressData.neighborhood ?? "",
     address: addressData.street ?? row.address ?? "",
     addressNumber: addressData.number ?? "",
+    // Compat: schema legado tinha healthInsurance/healthInsuranceNumber
+    insuranceName: row.insuranceName ?? row.healthInsurance ?? null,
+    insuranceNumber: row.insuranceNumber ?? row.healthInsuranceNumber ?? null,
   };
 }
 
@@ -2989,6 +2992,21 @@ export async function createTemplateNormalized(data: any, userId: number) {
     active: true,
   });
   return result[0];
+}
+
+/**
+ * Soft delete de modelo (prescrição / exames / evolução / etc.).
+ * Usa active=0 para preservar documentos já gerados a partir do modelo.
+ */
+export async function deleteTemplateNormalized(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.execute(sql`
+    UPDATE medical_record_templates
+       SET active = 0, updatedAt = NOW()
+     WHERE id = ${id}
+  `);
+  return { ok: true, id };
 }
 
 export async function listMedicalRecordTemplatesNormalized() {

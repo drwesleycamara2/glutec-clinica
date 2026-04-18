@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Search, Star, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface Icd10SearchProps {
   onSelect: (code: { id: number; code: string; description: string }) => void;
@@ -25,6 +26,7 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
     { enabled: query.length > 0 }
   );
 
+  const utils = trpc.useUtils();
   const { data: serverFavorites } = trpc.icd10.getFavorites.useQuery();
   const defaultFavorites = [
     { id: -1, code: "M79", description: "Outros transtornos dos tecidos moles, não classificados em outra parte" },
@@ -36,10 +38,39 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
     { id: -7, code: "Z76.0", description: "Emissão de prescrição de repetição" },
   ];
   const favorites = serverFavorites && serverFavorites.length > 0 ? serverFavorites : defaultFavorites;
-  const { mutate: toggleFavorite } = trpc.icd10.addFavorite.useMutation();
-  const { mutate: removeFavorite } = trpc.icd10.removeFavorite.useMutation();
+  const addFavoriteMutation = trpc.icd10.addFavorite.useMutation({
+    onSuccess: () => {
+      utils.icd10.getFavorites.invalidate();
+      toast.success("CID adicionado aos seus favoritos.");
+    },
+    onError: (err) => toast.error(err.message || "Não foi possível favoritar o CID."),
+  });
+  const removeFavoriteMutation = trpc.icd10.removeFavorite.useMutation({
+    onSuccess: () => {
+      utils.icd10.getFavorites.invalidate();
+      toast.success("CID removido dos seus favoritos.");
+    },
+    onError: (err) => toast.error(err.message || "Não foi possível remover o CID."),
+  });
 
-  const isFavorite = selectedCode && favorites?.some((f) => f.id === selectedCode.id);
+  const handleToggleFavorite = (item: { id: number; code: string; description: string }) => {
+    if (!item || item.id <= 0) return;
+    const isFav = (serverFavorites ?? []).some((f) => f.id === item.id);
+    if (isFav) {
+      const ok = window.confirm(
+        `Remover "${item.code} - ${item.description}" dos seus favoritos?`,
+      );
+      if (!ok) return;
+      removeFavoriteMutation.mutate({ icd10CodeId: item.id });
+    } else {
+      addFavoriteMutation.mutate({ icd10CodeId: item.id });
+    }
+  };
+
+  const isFavorite =
+    selectedCode &&
+    selectedCode.id > 0 &&
+    (serverFavorites ?? []).some((f) => f.id === selectedCode.id);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -131,7 +162,7 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
         )}
       </div>
 
-      {selectedCode && (
+      {selectedCode && selectedCode.id > 0 && (
         <div className="mt-2 p-3 rounded-lg bg-blue-50 border border-blue-200 dark:bg-blue-950/20 dark:border-blue-900">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1">
@@ -140,15 +171,29 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
               </Badge>
               <p className="text-sm text-foreground">{selectedCode.description}</p>
             </div>
-            <button
-              onClick={() => {
-                onSelect({ id: 0, code: "", description: "" });
-                setQuery("");
-              }}
-              className="text-muted-foreground hover:text-foreground mt-1"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                title={isFavorite ? "Remover dos favoritos" : "Adicionar aos meus favoritos"}
+                onClick={() => handleToggleFavorite(selectedCode)}
+                className={cn(
+                  "mt-1 transition-colors",
+                  isFavorite ? "text-amber-500 hover:text-amber-600" : "text-muted-foreground hover:text-amber-500",
+                )}
+                disabled={addFavoriteMutation.isPending || removeFavoriteMutation.isPending}
+              >
+                <Star className="h-4 w-4" fill={isFavorite ? "currentColor" : "none"} />
+              </button>
+              <button
+                onClick={() => {
+                  onSelect({ id: 0, code: "", description: "" });
+                  setQuery("");
+                }}
+                className="text-muted-foreground hover:text-foreground mt-1"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -199,18 +244,24 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      const isFav = favorites?.some((f) => f.id === item.id);
-                      if (isFav) {
-                        removeFavorite({ icd10CodeId: item.id });
-                      } else {
-                        toggleFavorite({ icd10CodeId: item.id });
-                      }
+                      handleToggleFavorite(item);
                     }}
-                    className="mt-1 text-muted-foreground hover:text-amber-500 transition-colors shrink-0"
+                    title={
+                      (serverFavorites ?? []).some((f) => f.id === item.id)
+                        ? "Remover dos favoritos"
+                        : "Favoritar CID"
+                    }
+                    className={cn(
+                      "mt-1 transition-colors shrink-0",
+                      (serverFavorites ?? []).some((f) => f.id === item.id)
+                        ? "text-amber-500 hover:text-amber-600"
+                        : "text-muted-foreground hover:text-amber-500",
+                    )}
+                    disabled={addFavoriteMutation.isPending || removeFavoriteMutation.isPending}
                   >
                     <Star
                       className="h-4 w-4"
-                      fill={favorites?.some((f) => f.id === item.id) ? "currentColor" : "none"}
+                      fill={(serverFavorites ?? []).some((f) => f.id === item.id) ? "currentColor" : "none"}
                     />
                   </button>
                 )}

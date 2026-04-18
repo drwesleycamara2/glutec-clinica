@@ -588,6 +588,12 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         return dbComplete.createPrescriptionTemplateNormalized(input, ctx.user.id);
       }),
+
+    deleteTemplate: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return dbComplete.deleteTemplateNormalized(input.id);
+      }),
   }),
 
   // â”€â”€â”€ EXAM REQUESTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -622,6 +628,12 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         return dbComplete.createExamTemplateNormalized(input, ctx.user.id);
+      }),
+
+    deleteTemplate: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return dbComplete.deleteTemplateNormalized(input.id);
       }),
   }),
 
@@ -1629,6 +1641,12 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         return dbComplete.createTemplateNormalized(input, ctx.user.id);
+      }),
+
+    remove: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return dbComplete.deleteTemplateNormalized(input.id);
       }),
   }),
 

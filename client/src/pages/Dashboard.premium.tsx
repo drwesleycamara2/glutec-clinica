@@ -253,7 +253,7 @@ export default function DashboardPremium() {
             variant="primary"
             size="md"
             icon={<CalendarDays size={18} />}
-            onClick={() => setLocation("/agenda")}
+            onClick={() => setLocation("/prontuarios?novo=1")}
           >
             Nova Consulta
           </PremiumButton>

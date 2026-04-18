@@ -45,6 +45,10 @@ export default function Templates() {
     onSuccess: () => { toast.success("Template criado com sucesso!"); refetch(); setShowCreate(false); resetForm(); },
     onError: (err) => toast.error(err.message),
   });
+  const deleteMutation = trpc.templates.remove.useMutation({
+    onSuccess: () => { toast.success("Modelo excluído."); refetch(); setPreviewTemplate(null); },
+    onError: (err) => toast.error(err.message || "Não foi possível excluir o modelo."),
+  });
 
   const [showCreate, setShowCreate] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<any>(null);
@@ -256,11 +260,27 @@ export default function Templates() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {templates.map((t: any) => (
-            <Card key={t.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setPreviewTemplate(t)}>
+            <Card key={t.id} className="hover:shadow-md transition-shadow cursor-pointer relative group" onClick={() => setPreviewTemplate(t)}>
               <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <CardTitle className="text-sm font-semibold">{t.name}</CardTitle>
-                  {t.isDefault && <Badge variant="secondary" className="text-xs">Padrão</Badge>}
+                  <div className="flex items-center gap-1">
+                    {t.isDefault && <Badge variant="secondary" className="text-xs">Padrão</Badge>}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`Excluir o modelo "${t.name}"? Esta ação não poderá ser desfeita.`)) {
+                          deleteMutation.mutate({ id: Number(t.id) });
+                        }
+                      }}
+                      disabled={deleteMutation.isPending}
+                      title="Excluir modelo"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-600"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
                 {t.specialty && <p className="text-xs text-muted-foreground">{t.specialty}</p>}
               </CardHeader>

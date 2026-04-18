@@ -590,21 +590,9 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
               <PlayCircle className="mr-2 h-4 w-4" />
               Iniciar atendimento
             </Button>
-            <Button type="button" onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>
-              {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              <Save className="mr-2 h-4 w-4" />
-              Salvar
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleFinalize}
-              disabled={createMutation.isPending || updateMutation.isPending}
-              className="border-emerald-600/30 text-emerald-700"
-            >
-              <StopCircle className="mr-2 h-4 w-4" />
-              Finalizar consulta
-            </Button>
+            <p className="text-xs text-muted-foreground">
+              Os botões de <strong>Salvar</strong> e <strong>Finalizar consulta</strong> ficam abaixo, ao final da ficha de evolução.
+            </p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -721,34 +709,25 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
           <CardTitle className="text-sm">Evolução clínica</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-            <div className="space-y-2">
-              <Label>CID-10</Label>
-              <Icd10Search
-                selectedCode={form.icd10}
-                onSelect={(value) => setForm((current) => ({ ...current, icd10: value?.code ? value : null }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Modelo de evolução</Label>
-              <Select onValueChange={handleApplyTemplate}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Carregar modelo clínico" />
-                </SelectTrigger>
-                <SelectContent>
-                  {templates.map((template: any) => (
-                    <SelectItem key={template.id} value={String(template.id)}>
-                      {template.name}
-                    </SelectItem>
-                  ))}
-                  {templates.length === 0 && (
-                    <SelectItem value="sem-modelos" disabled>
-                      Nenhum modelo cadastrado
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-2">
+            <Label>Modelo de evolução</Label>
+            <Select onValueChange={handleApplyTemplate}>
+              <SelectTrigger className="max-w-md">
+                <SelectValue placeholder="Carregar modelo clínico" />
+              </SelectTrigger>
+              <SelectContent>
+                {templates.map((template: any) => (
+                  <SelectItem key={template.id} value={String(template.id)}>
+                    {template.name}
+                  </SelectItem>
+                ))}
+                {templates.length === 0 && (
+                  <SelectItem value="sem-modelos" disabled>
+                    Nenhum modelo cadastrado
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
@@ -769,6 +748,34 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
               rows={5}
               placeholder="A transcrição aparecerá aqui e pode ser editada antes de salvar."
             />
+          </div>
+
+          {/* CID-10 agora fica ABAIXO da evolução, conforme regra clínica */}
+          <div className="space-y-2 pt-2 border-t border-border/40">
+            <Label>CID-10 (selecione após descrever a evolução)</Label>
+            <Icd10Search
+              selectedCode={form.icd10}
+              onSelect={(value) => setForm((current) => ({ ...current, icd10: value?.code ? value : null }))}
+            />
+          </div>
+
+          {/* Botões de Salvar / Finalizar no fim da ficha */}
+          <div className="flex flex-wrap items-center justify-end gap-2 pt-4 border-t border-border/40">
+            <Button type="button" onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>
+              {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Save className="mr-2 h-4 w-4" />
+              Salvar
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleFinalize}
+              disabled={createMutation.isPending || updateMutation.isPending}
+              className="border-emerald-600/30 text-emerald-700"
+            >
+              <StopCircle className="mr-2 h-4 w-4" />
+              Finalizar consulta
+            </Button>
           </div>
         </CardContent>
       </Card>

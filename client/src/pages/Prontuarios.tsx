@@ -1,18 +1,29 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, FileText, User, ChevronRight, Loader2, Pencil } from "lucide-react";
+import { Search, FileText, User, ChevronRight, Loader2, Pencil, Stethoscope } from "lucide-react";
 import { PatientEditDialog } from "@/components/PatientEditDialog";
 
 export default function Prontuarios() {
   const [, setLocation] = useLocation();
   const [query, setQuery] = useState("");
   const [editId, setEditId] = useState<number | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const novoConsulta = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("novo") === "1";
+  }, []);
   const { data: patients, isLoading, refetch } = trpc.patients.list.useQuery({ query: query || undefined, limit: 50 });
+
+  useEffect(() => {
+    if (novoConsulta) {
+      searchInputRef.current?.focus();
+    }
+  }, [novoConsulta]);
 
   return (
     <div className="space-y-5">
@@ -23,9 +34,22 @@ export default function Prontuarios() {
         </div>
       </div>
 
+      {novoConsulta && (
+        <div className="flex items-start gap-3 rounded-xl border border-[#C9A55B]/40 bg-[#C9A55B]/10 px-4 py-3 text-sm text-[#8a6d2e] dark:text-[#d5b978]">
+          <Stethoscope className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p className="font-semibold">Nova consulta</p>
+            <p className="text-xs opacity-80">
+              Selecione o paciente abaixo para abrir o prontuário e iniciar o atendimento (inclusive retroativo).
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
+          ref={searchInputRef}
           placeholder="Buscar paciente por nome ou CPF..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}

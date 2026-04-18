@@ -160,7 +160,7 @@ export default function Dashboard() {
             <Users className="h-4 w-4 mr-2" />
             Novo Paciente
           </Button>
-          <Button size="sm" variant="premium" onClick={() => setLocation("/agenda")}>
+          <Button size="sm" variant="premium" onClick={() => setLocation("/prontuarios?novo=1")}>
             <CalendarDays className="h-4 w-4 mr-2" />
             Nova Consulta
           </Button>

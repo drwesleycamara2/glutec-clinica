@@ -13,7 +13,7 @@ import { exportPrescriptionPdf } from "@/components/PdfExporter";
 import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
 import { SignatureCertillionButton } from "@/components/SignatureCertillionButton";
 import { toast } from "sonner";
-import { CheckCircle, Clock, FileText, Loader2, Pill, Plus, Printer, Send, XCircle } from "lucide-react";
+import { CheckCircle, Clock, FileText, Loader2, Pill, Plus, Printer, Send, XCircle, Trash2 } from "lucide-react";
 
 const PRESCRIPTION_TYPES = [
   { value: "simples", label: "Receituário simples (1 via)", color: "bg-[#C9A55B]/10 text-[#8A6526]" },
@@ -78,6 +78,14 @@ export default function Prescricoes() {
       void utils.prescriptions.listTemplates.invalidate();
     },
     onError: (err: any) => toast.error(err.message || "Não foi possível salvar o modelo."),
+  });
+
+  const deleteTemplateMutation = trpc.prescriptions.deleteTemplate.useMutation({
+    onSuccess: () => {
+      toast.success("Modelo excluído.");
+      void utils.prescriptions.listTemplates.invalidate();
+    },
+    onError: (err: any) => toast.error(err.message || "Não foi possível excluir o modelo."),
   });
 
   const sendToSignMutation = trpc.signatures.sendForSignature.useMutation({
@@ -325,18 +333,34 @@ export default function Prescricoes() {
                   <div className="flex flex-wrap gap-2">
                     {filteredTemplates.length > 0 ? (
                       filteredTemplates.map((template: any) => (
-                        <Button
-                          key={template.id}
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => {
-                            setForm((current) => ({ ...current, content: template.content }));
-                            setShowTemplates(false);
-                          }}
-                        >
-                          {template.name}
-                        </Button>
+                        <div key={template.id} className="inline-flex items-center gap-1 rounded-md border bg-background">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="rounded-r-none border-0"
+                            onClick={() => {
+                              setForm((current) => ({ ...current, content: template.content }));
+                              setShowTemplates(false);
+                            }}
+                          >
+                            {template.name}
+                          </Button>
+                          <button
+                            type="button"
+                            title="Excluir modelo"
+                            disabled={deleteTemplateMutation.isPending}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`Excluir o modelo "${template.name}"? Esta ação não poderá ser desfeita.`)) {
+                                deleteTemplateMutation.mutate({ id: Number(template.id) });
+                              }
+                            }}
+                            className="px-2 py-1 text-muted-foreground hover:text-red-600"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       ))
                     ) : (
                       <p className="text-xs text-muted-foreground">Nenhum modelo disponível para este tipo.</p>

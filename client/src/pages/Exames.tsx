@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
 import { SignatureCertillionButton } from "@/components/SignatureCertillionButton";
 import { toast } from "sonner";
-import { Plus, FlaskConical, Loader2, FileText, AlertTriangle, Clock } from "lucide-react";
+import { Plus, FlaskConical, Loader2, FileText, AlertTriangle, Clock, Trash2 } from "lucide-react";
 
 const EXAM_TEMPLATES: Record<string, { name: string; code?: string }[]> = {
   "Hemograma": [
@@ -62,10 +62,15 @@ export default function Exames() {
   const [showTemplates, setShowTemplates] = useState(false);
 
   const { data: patients } = trpc.patients.list.useQuery({ limit: 200 });
+  const examUtils = trpc.useUtils();
   const { data: templates } = trpc.examRequests.listTemplates.useQuery();
   const saveTemplateMutation = trpc.examRequests.createTemplate.useMutation({
-    onSuccess: () => toast.success("Modelo salvo com sucesso!"),
+    onSuccess: () => { toast.success("Modelo salvo com sucesso!"); void examUtils.examRequests.listTemplates.invalidate(); },
     onError: (err: any) => toast.error(err.message),
+  });
+  const deleteTemplateMutation = trpc.examRequests.deleteTemplate.useMutation({
+    onSuccess: () => { toast.success("Modelo excluído."); void examUtils.examRequests.listTemplates.invalidate(); },
+    onError: (err: any) => toast.error(err.message || "Não foi possível excluir o modelo."),
   });
   const { data: examRequests, refetch } = trpc.examRequests.getByPatient.useQuery(
     { patientId: filterPatientId ?? 0 },
@@ -227,10 +232,26 @@ export default function Exames() {
                   <p className="text-xs font-medium text-muted-foreground mb-2">Selecione um modelo:</p>
                   <div className="flex flex-wrap gap-2">
                     {templates?.map((t) => (
-                      <Button key={t.id} variant="secondary" size="sm" onClick={() => {
-                        setForm({ ...form, content: t.content, specialty: t.specialty || form.specialty });
-                        setShowTemplates(false);
-                      }}>{t.name}</Button>
+                      <div key={t.id} className="inline-flex items-center gap-1 rounded-md border bg-background">
+                        <Button variant="secondary" size="sm" className="rounded-r-none border-0" onClick={() => {
+                          setForm({ ...form, content: t.content, specialty: t.specialty || form.specialty });
+                          setShowTemplates(false);
+                        }}>{t.name}</Button>
+                        <button
+                          type="button"
+                          title="Excluir modelo"
+                          disabled={deleteTemplateMutation.isPending}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`Excluir o modelo "${t.name}"? Esta ação não poderá ser desfeita.`)) {
+                              deleteTemplateMutation.mutate({ id: Number(t.id) });
+                            }
+                          }}
+                          className="px-2 py-1 text-muted-foreground hover:text-red-600"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     ))}
                     {templates?.length === 0 && <p className="text-xs text-muted-foreground">Nenhum modelo salvo.</p>}
                   </div>

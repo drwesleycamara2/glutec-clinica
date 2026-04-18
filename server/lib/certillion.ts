@@ -88,7 +88,7 @@ export class CertillionClient {
    */
   async getClientToken(): Promise<{ accessToken: string; expiresIn: number }> {
     const resp = await axios.post(
-      `${this.baseUrl}/oauth/client_token`,
+      `${this.baseUrl}/api/oauth/client_token`,
       {
         grant_type: "client_credentials",
         client_id: this.config.clientId,
@@ -122,7 +122,7 @@ export class CertillionClient {
     const form = new FormData();
     form.append("file", fileBuffer, { filename: fileName, contentType: mimeType });
 
-    const resp = await axios.post(`${this.baseUrl}/oauth/document`, form, {
+    const resp = await axios.post(`${this.baseUrl}/api/oauth/document`, form, {
       headers: { ...form.getHeaders(), Authorization: `Bearer ${clientToken}` },
       timeout: 60000,
       maxContentLength: Infinity,
@@ -174,7 +174,7 @@ export class CertillionClient {
     });
 
     return {
-      authorizeUrl: `${this.baseUrl}/oauth/authorize?${params.toString()}`,
+      authorizeUrl: `${this.baseUrl}/api/oauth/authorize?${params.toString()}`,
       codeVerifier,
       codeChallenge,
       state: opts.state,
@@ -189,7 +189,7 @@ export class CertillionClient {
     codeVerifier: string,
   ): Promise<{ accessToken: string; expiresIn: number; authorizedIdentification?: string }> {
     const resp = await axios.post(
-      `${this.baseUrl}/oauth/token`,
+      `${this.baseUrl}/api/oauth/token`,
       {
         grant_type: "authorization_code",
         client_id: this.config.clientId,
@@ -239,7 +239,7 @@ export class CertillionClient {
       })),
     };
 
-    const resp = await axios.post(`${this.baseUrl}/oauth/signature`, payload, {
+    const resp = await axios.post(`${this.baseUrl}/api/oauth/signature`, payload, {
       headers: { Authorization: `Bearer ${accessToken}` },
       timeout: 60000,
       validateStatus: () => true,
@@ -273,7 +273,7 @@ export class CertillionClient {
    * Só funciona se o upload foi feito via /oauth/document.
    */
   async downloadDocument(clientToken: string, documentId: string): Promise<Buffer> {
-    const resp = await axios.get(`${this.baseUrl}/oauth/document/${encodeURIComponent(documentId)}`, {
+    const resp = await axios.get(`${this.baseUrl}/api/oauth/document/${encodeURIComponent(documentId)}`, {
       headers: { Authorization: `Bearer ${clientToken}` },
       responseType: "arraybuffer",
       timeout: 60000,
@@ -294,7 +294,7 @@ export class CertillionClient {
     cpfOrCnpj: string,
   ): Promise<Array<{ psc: string; subject?: string; validity?: string }>> {
     const resp = await axios.post(
-      `${this.baseUrl}/oauth/find-psc-accounts`,
+      `${this.baseUrl}/api/oauth/find-psc-accounts`,
       { identification: cpfOrCnpj.replace(/\D/g, "") },
       {
         headers: { Authorization: `Bearer ${clientToken}` },
