@@ -5,8 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AlertTriangle, CheckCircle2, ExternalLink, Key, Loader2, RefreshCcw, Save, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ExternalLink, Key, Loader2, RefreshCcw, Save, ShieldCheck, Fingerprint, Smartphone } from "lucide-react";
 import { toast } from "sonner";
+
+type CertillionPsc = "VIDAAS" | "BIRDID" | "CERTILLION_SIGNER" | "SERPRO" | "SAFEID" | "SOLUTI";
+const CERTILLION_PSCS: CertillionPsc[] = ["VIDAAS", "BIRDID", "CERTILLION_SIGNER", "SERPRO", "SAFEID", "SOLUTI"];
 
 function statusBadgeClass(configured: boolean) {
   return configured
@@ -18,6 +21,41 @@ export default function Assinaturas() {
   const [credForm, setCredForm] = useState({
     tokenAPI: "live_7d0a13cc11af0765b3100c9bdca360c862b57ae63bf9f5836d41cb67394dd790",
     cryptKey: "live_crypt_hShAdQ3il2jfdGWF7U1wybozsqGGouPC",
+  });
+
+  // ====== Certillion ======
+  const certConfigQuery = trpc.certillion.getConfig.useQuery();
+  const [certForm, setCertForm] = useState({
+    clientId: "",
+    clientSecret: "",
+    redirectUri: "",
+    baseUrl: "https://cloud.certillion.com",
+    defaultPsc: "VIDAAS" as CertillionPsc,
+    enabled: true,
+  });
+  const [certFormLoaded, setCertFormLoaded] = useState(false);
+  if (!certFormLoaded && certConfigQuery.data) {
+    const d = certConfigQuery.data;
+    setCertForm({
+      clientId: d.clientId || "",
+      clientSecret: "",
+      redirectUri: d.redirectUri || "",
+      baseUrl: d.baseUrl || "https://cloud.certillion.com",
+      defaultPsc: (d.defaultPsc as CertillionPsc) || "VIDAAS",
+      enabled: Boolean(d.enabled),
+    });
+    setCertFormLoaded(true);
+  }
+  const certSaveMutation = trpc.certillion.saveConfig.useMutation({
+    onSuccess: () => { toast.success("Certillion configurado com sucesso!"); certConfigQuery.refetch(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const certTestMutation = trpc.certillion.testConnection.useMutation({
+    onSuccess: (r: any) => {
+      if (r?.ok) toast.success("Conexão Certillion OK — client_token obtido.");
+      else toast.error(r?.error || "Falha ao conectar no Certillion.");
+    },
+    onError: (e) => toast.error(e.message),
   });
 
   const statusQuery = trpc.signatures.getIntegrationStatus.useQuery();
@@ -232,6 +270,152 @@ export default function Assinaturas() {
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* ============ CERTILLION (VIDaaS / BirdID / CERTILLION_SIGNER) ============ */}
+      <Card className="card-premium border-[#C9A55B]/25">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+            <Fingerprint className="h-4 w-4 text-[#C9A55B]" />
+            Certillion — Assinatura ICP-Brasil (A3)
+            {certConfigQuery.data?.configured && (
+              <Badge className={statusBadgeClass(true)}>
+                {certConfigQuery.data.enabled ? "Ativo" : "Salvo (desativado)"}
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Agregador que intermedia <strong>VIDaaS</strong>, <strong>BirdID</strong>, <strong>CERTILLION_SIGNER</strong>, SERPRO, SAFEID e SOLUTI.
+            Com as credenciais abaixo o sistema fica apto a assinar prontuários, prescrições, atestados e pedidos de exames via certificado digital A3.
+          </p>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="cert-clientid">Client ID</Label>
+              <Input
+                id="cert-clientid"
+                placeholder="ex: 46201011000130"
+                value={certForm.clientId}
+                onChange={(e) => setCertForm((f) => ({ ...f, clientId: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cert-secret">
+                Client Secret {certConfigQuery.data?.clientSecretMasked && (
+                  <span className="text-[10px] text-muted-foreground">(atual: {certConfigQuery.data.clientSecretMasked})</span>
+                )}
+              </Label>
+              <Input
+                id="cert-secret"
+                type="password"
+                placeholder="deixe em branco para manter o atual"
+                value={certForm.clientSecret}
+                onChange={(e) => setCertForm((f) => ({ ...f, clientSecret: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5 md:col-span-2">
+              <Label htmlFor="cert-redirect">Redirect URI (Callback)</Label>
+              <Input
+                id="cert-redirect"
+                placeholder="https://sistema.drwesleycamara.com.br/api/certillion/callback"
+                value={certForm.redirectUri}
+                onChange={(e) => setCertForm((f) => ({ ...f, redirectUri: e.target.value }))}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Esta URL precisa estar exatamente igual à cadastrada no portal de credenciais do Certillion.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cert-baseurl">Base URL</Label>
+              <Input
+                id="cert-baseurl"
+                placeholder="https://cloud.certillion.com"
+                value={certForm.baseUrl}
+                onChange={(e) => setCertForm((f) => ({ ...f, baseUrl: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cert-psc">PSC Padrão</Label>
+              <select
+                id="cert-psc"
+                className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm"
+                value={certForm.defaultPsc}
+                onChange={(e) => setCertForm((f) => ({ ...f, defaultPsc: e.target.value as CertillionPsc }))}
+              >
+                {CERTILLION_PSCS.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={certForm.enabled}
+              onChange={(e) => setCertForm((f) => ({ ...f, enabled: e.target.checked }))}
+            />
+            Ativar assinatura via Certillion
+          </label>
+
+          <div className="flex flex-wrap gap-3">
+            <Button
+              variant="premium"
+              size="sm"
+              disabled={certSaveMutation.isPending || !certForm.clientId}
+              onClick={() => certSaveMutation.mutate({
+                clientId: certForm.clientId.trim(),
+                clientSecret: certForm.clientSecret.trim() || undefined,
+                redirectUri: certForm.redirectUri.trim() || undefined,
+                baseUrl: certForm.baseUrl.trim() || undefined,
+                defaultPsc: certForm.defaultPsc,
+                enabled: certForm.enabled,
+              })}
+            >
+              {certSaveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Salvar Certillion
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={certTestMutation.isPending || !certConfigQuery.data?.configured}
+              onClick={() => certTestMutation.mutate()}
+            >
+              {certTestMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+              Testar conexão
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <a href="https://cloud.certillion.com" target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="h-4 w-4" />
+                Portal Certillion
+              </a>
+            </Button>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border border-border/70 bg-background/60 px-4 py-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Smartphone className="h-3.5 w-3.5 text-[#C9A55B]" />
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">VIDaaS</p>
+              </div>
+              <p className="text-xs text-muted-foreground">Certificado Valid no celular. Autentica via app ou QR.</p>
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-background/60 px-4 py-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Smartphone className="h-3.5 w-3.5 text-[#C9A55B]" />
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">BirdID</p>
+              </div>
+              <p className="text-xs text-muted-foreground">Certificado Certisign em nuvem. Autentica no app Bird ID.</p>
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-background/60 px-4 py-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Fingerprint className="h-3.5 w-3.5 text-[#C9A55B]" />
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">Certillion Signer</p>
+              </div>
+              <p className="text-xs text-muted-foreground">App nativo Certillion para A1/A3 locais.</p>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

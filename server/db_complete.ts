@@ -3409,6 +3409,142 @@ export async function applyDocumentSignature(data: {
   return { success: true };
 }
 
+// ─── CERTILLION (agregador VIDAAS / BirdID / CERTILLION_SIGNER) ───────────────
+
+export async function getCertillionConfig() {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = unwrapRows<any>(
+    await db.execute(sql`
+      SELECT certillionClientId, certillionClientSecret, certillionRedirectUri,
+             certillionBaseUrl, certillionDefaultPsc, certillionEnabled
+      FROM clinic_settings LIMIT 1
+    `),
+  );
+  const s = rows[0] || {};
+  const clientId = s.certillionClientId || process.env.CERTILLION_CLIENT_ID || "";
+  const clientSecret = s.certillionClientSecret
+    ? decryptSensitiveValueSafe(s.certillionClientSecret)
+    : process.env.CERTILLION_CLIENT_SECRET || "";
+  const redirectUri =
+    s.certillionRedirectUri || process.env.CERTILLION_REDIRECT_URI || "";
+  const baseUrl =
+    s.certillionBaseUrl || process.env.CERTILLION_BASE_URL || "https://cloud.certillion.com";
+  const defaultPsc = s.certillionDefaultPsc || "VIDAAS";
+  const enabled = Boolean(s.certillionEnabled) || Boolean(clientId && clientSecret);
+
+  if (!clientId || !clientSecret) return null;
+  return { clientId, clientSecret, redirectUri, baseUrl, defaultPsc, enabled };
+}
+
+function decryptSensitiveValueSafe(v: string): string {
+  try {
+    // lazy import to avoid top-level await
+    const { decryptSensitiveValue } = require("./lib/secure-storage") as typeof import("./lib/secure-storage");
+    return decryptSensitiveValue(v);
+  } catch {
+    return v;
+  }
+}
+
+export async function saveCertillionConfig(data: {
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  baseUrl?: string;
+  defaultPsc?: string;
+  enabled?: boolean;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const { encryptSensitiveValue } = await import("./lib/secure-storage");
+  const encryptedSecret = encryptSensitiveValue(data.clientSecret);
+
+  const rows = unwrapRows<any>(await db.execute(sql`SELECT id FROM clinic_settings LIMIT 1`));
+  if (rows[0]?.id) {
+    await db.execute(sql`
+      UPDATE clinic_settings SET
+        certillionClientId = ${data.clientId},
+        certillionClientSecret = ${encryptedSecret},
+        certillionRedirectUri = ${data.redirectUri},
+        certillionBaseUrl = ${data.baseUrl || "https://cloud.certillion.com"},
+        certillionDefaultPsc = ${data.defaultPsc || "VIDAAS"},
+        certillionEnabled = ${data.enabled === false ? 0 : 1}
+      WHERE id = ${rows[0].id}
+    `);
+  } else {
+    await db.execute(sql`
+      INSERT INTO clinic_settings
+        (certillionClientId, certillionClientSecret, certillionRedirectUri,
+         certillionBaseUrl, certillionDefaultPsc, certillionEnabled)
+      VALUES
+        (${data.clientId}, ${encryptedSecret}, ${data.redirectUri},
+         ${data.baseUrl || "https://cloud.certillion.com"},
+         ${data.defaultPsc || "VIDAAS"},
+         ${data.enabled === false ? 0 : 1})
+    `);
+  }
+  return { success: true };
+}
+
+export async function createCertillionSession(data: {
+  userId: number;
+  psc: string;
+  documentType: string;
+  documentId: number;
+  documentAlias: string;
+  documentHash: string;
+  codeVerifier: string;
+  stateNonce: string;
+  signerCpf: string;
+  expiresInSeconds: number;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const expiresAt = new Date(Date.now() + data.expiresInSeconds * 1000)
+    .toISOString()
+    .slice(0, 19)
+    .replace("T", " ");
+  const result: any = await db.execute(sql`
+    INSERT INTO signature_sessions
+      (userId, provider, psc, documentType, documentId, documentAlias, documentHash,
+       codeVerifier, stateNonce, status, signerCpf, expiresAt)
+    VALUES
+      (${data.userId}, ${"certillion"}, ${data.psc}, ${data.documentType},
+       ${data.documentId}, ${data.documentAlias}, ${data.documentHash},
+       ${data.codeVerifier}, ${data.stateNonce}, ${"pendente"},
+       ${data.signerCpf.replace(/\D/g, "")}, ${expiresAt})
+  `);
+  return result?.insertId ?? result?.[0]?.insertId;
+}
+
+export async function getSignatureSessionByState(stateNonce: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = unwrapRows<any>(await db.execute(sql`
+    SELECT * FROM signature_sessions WHERE stateNonce = ${stateNonce} LIMIT 1
+  `));
+  return rows[0] ?? null;
+}
+
+export async function updateCertillionSession(
+  sessionId: number,
+  data: { accessToken?: string; clientToken?: string; authorizeCode?: string; status?: string; signatureCms?: string; errorMessage?: string },
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.execute(sql`
+    UPDATE signature_sessions SET
+      status = ${data.status ?? sql`status`},
+      accessToken = ${data.accessToken ?? sql`accessToken`},
+      clientToken = ${data.clientToken ?? sql`clientToken`},
+      authorizeCode = ${data.authorizeCode ?? sql`authorizeCode`},
+      signatureCms = ${data.signatureCms ?? sql`signatureCms`},
+      errorMessage = ${data.errorMessage ?? sql`errorMessage`}
+    WHERE id = ${sessionId}
+  `);
+}
+
 // ─── CERTIFICADO A1 PF POR USUÁRIO ────────────────────────────────────────────
 
 export async function saveUserA1Certificate(

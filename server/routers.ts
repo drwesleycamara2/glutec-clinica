@@ -1416,6 +1416,173 @@ export const appRouter = router({
     }),
   }),
 
+  // ─── Certillion (agregador VIDAAS / BirdID / CERTILLION_SIGNER) ───────────
+  certillion: router({
+    getConfig: protectedProcedure.query(async () => {
+      const cfg = await dbComplete.getCertillionConfig();
+      if (!cfg) return { configured: false as const };
+      return {
+        configured: true as const,
+        clientId: cfg.clientId,
+        // nunca devolve o secret em claro
+        clientSecretMasked: cfg.clientSecret
+          ? "•••••••••••••" + cfg.clientSecret.slice(-4)
+          : "",
+        redirectUri: cfg.redirectUri,
+        baseUrl: cfg.baseUrl,
+        defaultPsc: cfg.defaultPsc,
+        enabled: cfg.enabled,
+      };
+    }),
+
+    saveConfig: protectedProcedure
+      .input(z.object({
+        clientId: z.string().min(3),
+        clientSecret: z.string().min(3).optional(),
+        redirectUri: z.string().url().optional(),
+        baseUrl: z.string().url().optional(),
+        defaultPsc: z.enum([
+          "VIDAAS", "BIRDID", "CERTILLION_SIGNER", "SERPRO", "SAFEID", "SOLUTI",
+        ]).optional(),
+        enabled: z.boolean().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const appUrl = process.env.APP_URL || "https://sistema.drwesleycamara.com.br";
+        // Se o usuário não enviou um novo secret, preserva o atual
+        let finalSecret = input.clientSecret;
+        if (!finalSecret) {
+          const existing = await dbComplete.getCertillionConfig();
+          if (!existing?.clientSecret) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Client Secret é obrigatório no primeiro cadastro.",
+            });
+          }
+          finalSecret = existing.clientSecret;
+        }
+        await dbComplete.saveCertillionConfig({
+          ...input,
+          clientSecret: finalSecret,
+          redirectUri: input.redirectUri || `${appUrl}/api/certillion/callback`,
+        });
+        return { success: true };
+      }),
+
+    testConnection: protectedProcedure.mutation(async () => {
+      const cfg = await dbComplete.getCertillionConfig();
+      if (!cfg) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Certillion não configurado." });
+      const { createCertillionClient } = await import("./lib/certillion");
+      const client = createCertillionClient({
+        clientId: cfg.clientId,
+        clientSecret: cfg.clientSecret,
+        redirectUri: cfg.redirectUri,
+        baseUrl: cfg.baseUrl,
+      });
+      const token = await client.getClientToken();
+      return { success: true, expiresIn: token.expiresIn };
+    }),
+
+    findPscAccounts: protectedProcedure
+      .input(z.object({ cpfOrCnpj: z.string().min(11) }))
+      .mutation(async ({ input }) => {
+        const cfg = await dbComplete.getCertillionConfig();
+        if (!cfg) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Certillion não configurado." });
+        const { createCertillionClient } = await import("./lib/certillion");
+        const client = createCertillionClient({
+          clientId: cfg.clientId,
+          clientSecret: cfg.clientSecret,
+          redirectUri: cfg.redirectUri,
+          baseUrl: cfg.baseUrl,
+        });
+        const { accessToken } = await client.getClientToken();
+        return client.findPscAccounts(accessToken, input.cpfOrCnpj);
+      }),
+
+    initiate: protectedProcedure
+      .input(z.object({
+        documentType: z.enum(["evolucao", "prescricao", "exame", "atestado", "outro"]),
+        documentId: z.number().int().positive(),
+        documentAlias: z.string().min(1).max(120),
+        /** SHA-256 do conteúdo em base64 */
+        documentHashBase64: z.string().min(20),
+        psc: z.enum([
+          "VIDAAS", "BIRDID", "CERTILLION_SIGNER", "SERPRO", "SAFEID", "SOLUTI",
+        ]).optional(),
+        signerCpf: z.string().min(11).max(14),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const cfg = await dbComplete.getCertillionConfig();
+        if (!cfg) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Certillion não configurado. Vá em Configurações → Assinaturas." });
+
+        const { createCertillionClient } = await import("./lib/certillion");
+        const appUrl = process.env.APP_URL || "https://sistema.drwesleycamara.com.br";
+        const redirectUri = cfg.redirectUri || `${appUrl}/api/certillion/callback`;
+
+        const client = createCertillionClient({
+          clientId: cfg.clientId,
+          clientSecret: cfg.clientSecret,
+          redirectUri,
+          baseUrl: cfg.baseUrl,
+        });
+
+        const psc = input.psc || (cfg.defaultPsc as any) || "VIDAAS";
+        const stateNonce = require("crypto").randomBytes(24).toString("hex");
+
+        const { authorizeUrl, codeVerifier } = client.buildAuthorizeUrl({
+          psc,
+          alias: input.documentAlias,
+          cpf: input.signerCpf.replace(/\D/g, ""),
+          state: stateNonce,
+          scope: "signature_session",
+          lifetimeSeconds: 600,
+        });
+
+        const sessionId = await dbComplete.createCertillionSession({
+          userId: ctx.user.id,
+          psc,
+          documentType: input.documentType,
+          documentId: input.documentId,
+          documentAlias: input.documentAlias,
+          documentHash: input.documentHashBase64,
+          codeVerifier,
+          stateNonce,
+          signerCpf: input.signerCpf,
+          expiresInSeconds: 600,
+        });
+
+        // QR code para A3 push flow
+        const QRCode = await import("qrcode");
+        const qrDataUrl = await QRCode.toDataURL(authorizeUrl, {
+          width: 256,
+          margin: 2,
+          color: { dark: "#1a1a1a", light: "#ffffff" },
+        });
+
+        return {
+          sessionId,
+          authorizeUrl,
+          qrDataUrl,
+          psc,
+          expiresIn: 600,
+          message: `Abra o app ${psc} e confirme a assinatura ou escaneie o QR code.`,
+        };
+      }),
+
+    getSessionStatus: protectedProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        const s = await dbComplete.getSignatureSession(input.sessionId);
+        if (!s || s.userId !== ctx.user.id) return null;
+        return {
+          id: s.id,
+          status: s.status,
+          psc: s.psc,
+          errorMessage: s.errorMessage,
+          expiresAt: s.expiresAt,
+        };
+      }),
+  }),
+
   templates: router({
     list: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listTemplatesNormalized();

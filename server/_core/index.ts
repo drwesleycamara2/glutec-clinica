@@ -280,6 +280,118 @@ async function startServer() {
     }
   });
 
+  // ─── Certillion OAuth2 Callback ──────────────────────────────────────────
+  // Retorno do PSC (VIDAAS, BirdID, etc.) após autorização do usuário.
+  // URL: /api/certillion/callback?code=...&state=<nonce>
+  app.get("/api/certillion/callback", async (req, res) => {
+    const { code, state, error, error_description } = req.query as Record<string, string>;
+    if (error) {
+      const msg = error_description || error;
+      return res.send(`<html><body><script>
+        window.opener?.postMessage({ type: 'CERTILLION_ERROR', error: '${String(msg).replace(/'/g, "\\'")}' }, '*');
+        setTimeout(() => window.close(), 3000);
+      </script><p>Erro: ${msg}</p></body></html>`);
+    }
+    if (!code || !state) {
+      return res.send(`<html><body><p>Parâmetros inválidos. Feche esta janela.</p></body></html>`);
+    }
+
+    try {
+      const dbComplete = await import("../db_complete");
+      const { createCertillionClient } = await import("../lib/certillion");
+
+      const session = await dbComplete.getSignatureSessionByState(state);
+      if (!session) throw new Error("Sessão Certillion não encontrada para este state.");
+      if (new Date(session.expiresAt) < new Date()) {
+        await dbComplete.updateCertillionSession(session.id, { status: "expirado" });
+        throw new Error("Sessão expirada. Inicie novamente a assinatura.");
+      }
+
+      const cfg = await dbComplete.getCertillionConfig();
+      if (!cfg) throw new Error("Certillion não configurado no sistema.");
+
+      const appUrl = process.env.APP_URL || "https://sistema.drwesleycamara.com.br";
+      const redirectUri = cfg.redirectUri || `${appUrl}/api/certillion/callback`;
+
+      const client = createCertillionClient({
+        clientId: cfg.clientId,
+        clientSecret: cfg.clientSecret,
+        redirectUri,
+        baseUrl: cfg.baseUrl,
+      });
+
+      const tok = await client.exchangeCodeForToken(code, session.codeVerifier);
+      const sigs = await client.signHashes(tok.accessToken, [
+        { hash: session.documentHash, alias: session.documentAlias },
+      ]);
+      const cms = sigs[0]?.signatureCms || "";
+      if (!cms) throw new Error("Certillion não retornou assinatura CMS.");
+
+      const validationCode = Buffer.from(session.documentHash.slice(0, 48))
+        .toString("hex")
+        .slice(0, 24)
+        .toUpperCase();
+
+      await dbComplete.updateCertillionSession(session.id, {
+        status: "assinado",
+        accessToken: tok.accessToken,
+        authorizeCode: code,
+        signatureCms: cms,
+      });
+
+      // nome do usuário
+      let signedByName = "Médico";
+      try {
+        const { getDb } = await import("../db");
+        const { sql } = await import("drizzle-orm");
+        const dbConn = await getDb();
+        if (dbConn) {
+          const r: any = await dbConn.execute(
+            sql`select name, email from users where id = ${session.userId} limit 1`,
+          );
+          const arr = Array.isArray(r) ? (Array.isArray(r[0]) ? r[0] : r) : [];
+          signedByName = arr[0]?.name || arr[0]?.email || "Médico";
+        }
+      } catch {}
+
+      await dbComplete.applyDocumentSignature({
+        documentType: session.documentType,
+        documentId: session.documentId,
+        sessionId: session.id,
+        provider: `certillion:${session.psc || "VIDAAS"}`,
+        signedByName,
+        signatureCms: cms,
+        validationCode,
+      });
+
+      return res.send(`<html><head><meta charset="utf-8"></head><body><script>
+        window.opener?.postMessage({ type: 'CERTILLION_DONE', sessionId: ${session.id}, validationCode: '${validationCode}' }, '*');
+        setTimeout(() => window.close(), 1500);
+      </script>
+      <div style="font-family:sans-serif;text-align:center;padding:40px">
+        <h2 style="color:#2d7a2d">✓ Documento assinado via Certillion</h2>
+        <p>PSC: <strong>${session.psc || "-"}</strong></p>
+        <p>Código de validação: <strong>${validationCode}</strong></p>
+        <p>Esta janela fechará automaticamente.</p>
+      </div></body></html>`);
+    } catch (err: any) {
+      const msg = err?.message || "Erro ao processar assinatura Certillion.";
+      try {
+        const dbComplete = await import("../db_complete");
+        const s = await dbComplete.getSignatureSessionByState(state);
+        if (s) await dbComplete.updateCertillionSession(s.id, { status: "erro", errorMessage: msg });
+      } catch {}
+      return res.send(`<html><head><meta charset="utf-8"></head><body><script>
+        window.opener?.postMessage({ type: 'CERTILLION_ERROR', error: '${msg.replace(/'/g, "\\'")}' }, '*');
+        setTimeout(() => window.close(), 3000);
+      </script>
+      <div style="font-family:sans-serif;text-align:center;padding:40px">
+        <h2 style="color:#c00">Erro na assinatura (Certillion)</h2>
+        <p>${msg}</p>
+      </div></body></html>`);
+    }
+  });
+
   app.post("/api/upload", async (req, res) => {
     const user = await authenticateRequest(req);
     if (!user) {
