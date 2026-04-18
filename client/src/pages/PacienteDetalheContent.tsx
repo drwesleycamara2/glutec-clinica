@@ -1,11 +1,13 @@
-﻿import { useAuth } from "@/_core/hooks/useAuth";
+﻿import { useState } from "react";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Activity, ArrowLeft, FileText, Link2, Loader2, MessageCircle, User } from "lucide-react";
+import { Activity, ArrowLeft, FileText, Link2, Loader2, MessageCircle, Pencil, User } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation, useParams } from "wouter";
+import { PatientEditDialog } from "@/components/PatientEditDialog";
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
@@ -24,7 +26,8 @@ export default function PacienteDetalheContent() {
   const patientId = parseInt(params.id ?? "0", 10);
   const [, setLocation] = useLocation();
   const { user } = useAuth();
-  const { data: patient, isLoading } = trpc.patients.getById.useQuery(
+  const [editOpen, setEditOpen] = useState(false);
+  const { data: patient, isLoading, refetch: refetchPatient } = trpc.patients.getById.useQuery(
     { id: patientId },
     { enabled: Number.isFinite(patientId) && patientId > 0 },
   );
@@ -74,11 +77,21 @@ export default function PacienteDetalheContent() {
           <h1 className="text-2xl font-semibold">{patient.fullName}</h1>
           <p className="mt-1 text-sm text-muted-foreground">Cadastro do paciente</p>
         </div>
+        <Button variant="outline" onClick={() => setEditOpen(true)}>
+          <Pencil className="mr-2 h-4 w-4" />
+          Editar cadastro
+        </Button>
         <Button onClick={() => setLocation(`/prontuarios/${patient.id}`)}>
           <FileText className="mr-2 h-4 w-4" />
           Ver prontuário
         </Button>
       </div>
+
+      <PatientEditDialog
+        patientId={editOpen ? patient.id : null}
+        onClose={() => setEditOpen(false)}
+        onSaved={() => refetchPatient()}
+      />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card className="border shadow-sm">

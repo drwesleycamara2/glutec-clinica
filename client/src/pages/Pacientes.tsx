@@ -11,7 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Plus, Search, User, Phone, Calendar, ChevronRight, Loader2, MapPin, Mail } from "lucide-react";
+import { Plus, Search, User, Phone, Calendar, ChevronRight, Loader2, MapPin, Mail, Pencil } from "lucide-react";
+import { PatientEditDialog } from "@/components/PatientEditDialog";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "desconhecido"];
 const CIVIL_STATES = [
@@ -117,6 +118,7 @@ export default function Pacientes() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState(defaultForm);
   const [birthDateDisplay, setBirthDateDisplay] = useState("");
   const [loadingCep, setLoadingCep] = useState(false);
@@ -215,7 +217,17 @@ export default function Pacientes() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <p className="font-semibold text-sm truncate">{patient.fullName}</p>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground/30 shrink-0 group-hover:text-[#C9A55B] transition-colors" />
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          title="Editar cadastro"
+                          onClick={(e) => { e.stopPropagation(); setEditId(patient.id); }}
+                          className="rounded-md p-1 text-muted-foreground/60 hover:bg-[#C9A55B]/10 hover:text-[#C9A55B] transition-colors"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-[#C9A55B] transition-colors" />
+                      </div>
                     </div>
                     <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-muted-foreground">
                       {patient.birthDate && <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{calcAge(patient.birthDate)}</span>}
@@ -441,6 +453,12 @@ export default function Pacientes() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <PatientEditDialog
+        patientId={editId}
+        onClose={() => setEditId(null)}
+        onSaved={() => refetch()}
+      />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
+import { SignatureCertillionButton } from "@/components/SignatureCertillionButton";
 import { toast } from "sonner";
 import { Plus, FlaskConical, Loader2, FileText, AlertTriangle, Clock } from "lucide-react";
 
@@ -144,6 +145,15 @@ export default function Exames() {
                         documentId={req.id}
                         defaultPhone={req.patientPhone ?? ""}
                       />
+                      {(user as any)?.cloudSignatureCpf && (
+                        <SignatureCertillionButton
+                          documentType="exame"
+                          documentId={req.id}
+                          documentAlias={`Pedido de exames #${req.id}${req.patientName ? " — " + req.patientName : ""}`}
+                          documentContent={(req as any).content || JSON.stringify(exams)}
+                          signerCpf={(user as any).cloudSignatureCpf}
+                        />
+                      )}
                     </div>
                   </div>
                 </CardHeader>

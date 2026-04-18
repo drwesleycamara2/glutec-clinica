@@ -26,8 +26,9 @@ import {
   ArrowLeft, Plus, FileText, Activity, Stethoscope, ClipboardList, Loader2,
   Calendar, User, ShieldCheck, FileDown, UserCheck, Copy, Link2, Paperclip,
   FlaskConical, Package, Save, Upload, Trash2, Search, CheckCircle2, History, FolderOpen, ImageIcon,
-  ScrollText,
+  ScrollText, Pencil,
 } from "lucide-react";
+import { PatientEditDialog } from "@/components/PatientEditDialog";
 import { AllergyAlert } from "@/components/AllergyAlert";
 import { ExportProntuarioButton } from "@/components/ExportProntuario";
 import { EvolucaoClinicaWorkspace } from "@/components/EvolucaoClinicaWorkspace";
@@ -876,7 +877,8 @@ export default function ProntuarioDetalhe() {
     return validTabs.includes(hashTab) ? hashTab : "historico";
   });
 
-  const { data: patient, isLoading } = trpc.patients.getById.useQuery({ id: patientId });
+  const { data: patient, isLoading, refetch: refetchPatient } = trpc.patients.getById.useQuery({ id: patientId });
+  const [editPatientOpen, setEditPatientOpen] = useState(false);
 
   useEffect(() => {
     const syncTabFromHash = () => {
@@ -910,8 +912,18 @@ export default function ProntuarioDetalhe() {
             {patient.phone && ` | Tel: ${patient.phone}`}
           </p>
         </div>
+        <Button variant="outline" size="sm" onClick={() => setEditPatientOpen(true)} title="Editar cadastro do paciente">
+          <Pencil className="h-4 w-4 mr-1" />
+          Editar cadastro
+        </Button>
         <ExportProntuarioButton patientId={patientId} patientName={patient.fullName} />
       </div>
+
+      <PatientEditDialog
+        patientId={editPatientOpen ? patientId : null}
+        onClose={() => setEditPatientOpen(false)}
+        onSaved={() => refetchPatient()}
+      />
 
       {/* Allergy Alert */}
       {patient.allergies && <AllergyAlert allergies={patient.allergies} patientName={patient.fullName} variant="banner" />}

@@ -470,7 +470,52 @@ export async function getPatientById(id: number) {
     state: addressData.state ?? "",
     neighborhood: addressData.neighborhood ?? "",
     address: addressData.street ?? row.address ?? "",
+    addressNumber: addressData.number ?? "",
   };
+}
+
+export async function updatePatient(id: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  // Reconstrói o JSON do endereço preservando o que não veio no payload
+  const existing = await getPatientById(id);
+  if (!existing) throw new Error("Paciente não encontrado.");
+
+  const addressJson = JSON.stringify({
+    street: data.address ?? existing.address ?? "",
+    number: data.addressNumber ?? existing.addressNumber ?? "",
+    neighborhood: data.neighborhood ?? existing.neighborhood ?? "",
+    city: data.city ?? existing.city ?? "",
+    state: data.state ?? existing.state ?? "",
+    zip: data.zipCode ?? existing.zipCode ?? "",
+  });
+
+  await db.execute(sql`
+    UPDATE patients SET
+      fullName = ${data.fullName ?? existing.fullName},
+      cpf = ${data.cpf ?? existing.cpf ?? null},
+      birthDate = ${data.birthDate ?? existing.birthDate ?? null},
+      gender = ${data.gender ?? existing.gender ?? "nao_informado"},
+      phone = ${data.phone ?? existing.phone ?? null},
+      email = ${data.email ?? existing.email ?? null},
+      address = ${addressJson},
+      city = ${data.city ?? existing.city ?? null},
+      state = ${data.state ?? existing.state ?? null},
+      zipCode = ${data.zipCode ?? existing.zipCode ?? null},
+      rg = ${data.rg ?? existing.rg ?? null},
+      bloodType = ${data.bloodType ?? existing.bloodType ?? "desconhecido"},
+      allergies = ${data.allergies ?? existing.allergies ?? null},
+      chronicConditions = ${data.chronicConditions ?? existing.chronicConditions ?? null},
+      insuranceName = ${data.insuranceName ?? existing.insuranceName ?? null},
+      insuranceNumber = ${data.insuranceNumber ?? existing.insuranceNumber ?? null},
+      emergencyContactName = ${data.emergencyContactName ?? existing.emergencyContactName ?? null},
+      emergencyContactPhone = ${data.emergencyContactPhone ?? existing.emergencyContactPhone ?? null},
+      updatedAt = NOW()
+    WHERE id = ${id}
+  `);
+
+  return { id, fullName: data.fullName ?? existing.fullName };
 }
 
 // --- APPOINTMENTS ------------------------------------------------------------

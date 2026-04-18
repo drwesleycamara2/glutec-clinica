@@ -456,6 +456,35 @@ export const appRouter = router({
       .query(async ({ input }) => {
         return dbComplete.getPatientById(input.id);
       }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number().int().positive(),
+        fullName: z.string().optional(),
+        cpf: z.string().optional(),
+        birthDate: z.string().optional(),
+        gender: z.string().optional(),
+        phone: z.string().optional(),
+        email: z.string().optional(),
+        zipCode: z.string().optional(),
+        address: z.string().optional(),
+        addressNumber: z.string().optional(),
+        neighborhood: z.string().optional(),
+        city: z.string().optional(),
+        state: z.string().optional(),
+        rg: z.string().optional(),
+        bloodType: z.string().optional(),
+        allergies: z.string().optional(),
+        chronicConditions: z.string().optional(),
+        insuranceName: z.string().optional(),
+        insuranceNumber: z.string().optional(),
+        emergencyContactName: z.string().optional(),
+        emergencyContactPhone: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...rest } = input;
+        return dbComplete.updatePatient(id, rest);
+      }),
   }),
 
   // â”€â”€â”€ APPOINTMENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

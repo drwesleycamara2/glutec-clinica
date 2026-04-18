@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { exportPrescriptionPdf } from "@/components/PdfExporter";
 import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
+import { SignatureCertillionButton } from "@/components/SignatureCertillionButton";
 import { toast } from "sonner";
 import { CheckCircle, Clock, FileText, Loader2, Pill, Plus, Printer, Send, XCircle } from "lucide-react";
 
@@ -213,10 +214,21 @@ export default function Prescricoes() {
                         className="border-[#C9A55B]/25 text-[#8A6526] hover:bg-[#C9A55B]/5"
                         onClick={() => sendToSignMutation.mutate({ documentId: rx.id, documentType: "prescription" })}
                         disabled={sendToSignMutation.isPending}
+                        title="Enviar para assinatura D4Sign"
                       >
                         <Send className="mr-1 h-3 w-3" />
-                        Assinar
+                        D4Sign
                       </Button>
+                      {(user as any)?.cloudSignatureCpf && (
+                        <SignatureCertillionButton
+                          documentType="prescricao"
+                          documentId={rx.id}
+                          documentAlias={`Prescricao #${rx.id} — ${patient?.fullName ?? "Paciente"}`}
+                          documentContent={rx.content || ""}
+                          signerCpf={(user as any).cloudSignatureCpf}
+                          onSigned={() => { void refetchAll(); }}
+                        />
+                      )}
                     </div>
                   </div>
                 </CardHeader>

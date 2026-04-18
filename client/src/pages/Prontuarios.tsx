@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, FileText, User, ChevronRight, Loader2 } from "lucide-react";
+import { Search, FileText, User, ChevronRight, Loader2, Pencil } from "lucide-react";
+import { PatientEditDialog } from "@/components/PatientEditDialog";
 
 export default function Prontuarios() {
   const [, setLocation] = useLocation();
   const [query, setQuery] = useState("");
-  const { data: patients, isLoading } = trpc.patients.list.useQuery({ query: query || undefined, limit: 50 });
+  const [editId, setEditId] = useState<number | null>(null);
+  const { data: patients, isLoading, refetch } = trpc.patients.list.useQuery({ query: query || undefined, limit: 50 });
 
   return (
     <div className="space-y-5">
@@ -71,12 +73,26 @@ export default function Prontuarios() {
                     )}
                   </div>
                 </div>
+                <button
+                  type="button"
+                  title="Editar cadastro do paciente"
+                  onClick={(e) => { e.stopPropagation(); setEditId(patient.id); }}
+                  className="rounded-md p-1.5 text-muted-foreground/70 hover:bg-[#C9A55B]/10 hover:text-[#C9A55B] transition-colors"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
                 <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      <PatientEditDialog
+        patientId={editId}
+        onClose={() => setEditId(null)}
+        onSaved={() => refetch()}
+      />
     </div>
   );
 }
