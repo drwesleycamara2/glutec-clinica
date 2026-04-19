@@ -21,6 +21,55 @@ function unwrapRows<T = any>(result: any): T[] {
   return [];
 }
 
+function isReceptionDeskRole(role?: string | null) {
+  const normalized = String(role || "").toLowerCase();
+  return normalized === "recepcionista" || normalized === "secretaria";
+}
+
+function redactClinicalFieldsForViewer<T extends Record<string, any>>(record: T, viewerRole?: string | null): T {
+  if (!isReceptionDeskRole(viewerRole)) {
+    return record;
+  }
+
+  return {
+    ...record,
+    icdCode: null,
+    icdDescription: null,
+    clinicalNotes: null,
+    audioTranscription: null,
+    audioUrl: null,
+    audioKey: null,
+    attachmentsRaw: null,
+  };
+}
+
+async function getClinicalEvolutionByIdInternal(
+  id: number
+): Promise<(ClinicalEvolution & Record<string, unknown>) | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select({
+      evolution: clinicalEvolutions,
+      doctorName: users.name,
+      doctorEmail: users.email,
+      doctorRole: users.role,
+    })
+    .from(clinicalEvolutions)
+    .leftJoin(users, eq(clinicalEvolutions.doctorId, users.id))
+    .where(eq(clinicalEvolutions.id, id))
+    .limit(1);
+
+  if (!result[0]) return null;
+  return {
+    ...result[0].evolution,
+    doctorName: result[0].doctorName,
+    doctorEmail: result[0].doctorEmail,
+    doctorRole: result[0].doctorRole,
+  } as ClinicalEvolution & Record<string, unknown>;
+}
+
 // ─── Clinical Evolution Operations ───────────────────────────────────────────
 
 export async function createClinicalEvolution(
@@ -43,34 +92,17 @@ export async function createClinicalEvolution(
 }
 
 export async function getClinicalEvolutionById(
-  id: number
+  id: number,
+  viewerRole?: string | null
 ): Promise<ClinicalEvolution | null> {
-  const db = await getDb();
-  if (!db) return null;
-  
-  const result = await db
-    .select({
-      evolution: clinicalEvolutions,
-      doctorName: users.name,
-      doctorEmail: users.email,
-      doctorRole: users.role,
-    })
-    .from(clinicalEvolutions)
-    .leftJoin(users, eq(clinicalEvolutions.doctorId, users.id))
-    .where(eq(clinicalEvolutions.id, id))
-    .limit(1);
-  
-  if (!result[0]) return null;
-  return {
-    ...result[0].evolution,
-    doctorName: result[0].doctorName,
-    doctorEmail: result[0].doctorEmail,
-    doctorRole: result[0].doctorRole,
-  } as ClinicalEvolution & Record<string, unknown>;
+  const evolution = await getClinicalEvolutionByIdInternal(id);
+  if (!evolution) return null;
+  return redactClinicalFieldsForViewer(evolution, viewerRole) as ClinicalEvolution & Record<string, unknown>;
 }
 
 export async function getClinicalEvolutionsByPatient(
-  patientId: number
+  patientId: number,
+  viewerRole?: string | null
 ): Promise<ClinicalEvolution[]> {
   const db = await getDb();
   if (!db) return [];
@@ -99,7 +131,7 @@ export async function getClinicalEvolutionsByPatient(
   // Verde / OneDoctor, ou criados antes da tabela clinical_evolutions). Eles
   // representam evoluções e devem aparecer aqui, não na lista de anamneses.
   const legacy = await getLegacyEvolutionsFromMedicalRecords(patientId);
-  return [...current, ...legacy].sort((a: any, b: any) => {
+  return [...current, ...legacy].map((record) => redactClinicalFieldsForViewer(record, viewerRole)).sort((a: any, b: any) => {
     const da = new Date(a.startedAt ?? a.createdAt ?? 0).getTime();
     const db2 = new Date(b.startedAt ?? b.createdAt ?? 0).getTime();
     return db2 - da;
@@ -177,6 +209,7 @@ export async function getLegacyEvolutionsFromMedicalRecords(
       icdCode: r.icdCode ?? "",
       icdDescription: r.icdDescription ?? "",
       clinicalNotes: clinicalNotes || "(sem conteúdo registrado)",
+      secretaryNotes: null,
       audioTranscription: null,
       audioUrl: null,
       audioKey: null,
@@ -224,6 +257,48 @@ export async function updateClinicalEvolution(
     .update(clinicalEvolutions)
     .set(data)
     .where(eq(clinicalEvolutions.id, id));
+}
+
+export async function updateSecretaryNotes(
+  params: {
+    id?: number;
+    patientId: number;
+    secretaryNotes: string;
+    userId: number;
+  }
+): Promise<(ClinicalEvolution & Record<string, unknown>) | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  if (params.id) {
+    await db
+      .update(clinicalEvolutions)
+      .set({
+        secretaryNotes: params.secretaryNotes,
+        updatedBy: params.userId,
+      })
+      .where(eq(clinicalEvolutions.id, params.id));
+
+    return getClinicalEvolutionByIdInternal(params.id);
+  }
+
+  const created = await createClinicalEvolution({
+    patientId: params.patientId,
+    doctorId: params.userId,
+    icdCode: "",
+    icdDescription: "",
+    clinicalNotes: "",
+    secretaryNotes: params.secretaryNotes,
+    assistantName: "Ninguém",
+    status: "rascunho",
+    createdBy: params.userId,
+  });
+
+  if (!created?.id) {
+    return null;
+  }
+
+  return getClinicalEvolutionByIdInternal(created.id);
 }
 
 export async function deleteClinicalEvolution(id: number): Promise<void> {
@@ -396,6 +471,7 @@ export function buildEvolutionSnapshot(ev: any): Record<string, any> {
     icdCode: ev?.icdCode ?? null,
     icdDescription: ev?.icdDescription ?? null,
     clinicalNotes: ev?.clinicalNotes ?? null,
+    secretaryNotes: ev?.secretaryNotes ?? null,
     audioTranscription: ev?.audioTranscription ?? null,
     assistantName: ev?.assistantName ?? null,
     assistantUserId: ev?.assistantUserId ?? null,

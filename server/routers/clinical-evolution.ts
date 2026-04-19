@@ -14,6 +14,7 @@ export const clinicalEvolutionRouter = router({
         icdCode: z.string().min(1),
         icdDescription: z.string().min(1),
         clinicalNotes: z.string(),
+        secretaryNotes: z.string().optional(),
         assistantName: z.string().min(1),
         assistantUserId: z.number().optional().nullable(),
         audioTranscription: z.string().optional(),
@@ -30,6 +31,12 @@ export const clinicalEvolutionRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
+      if (ctx.user.role === "recepcionista") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "A recepcionista deve usar o campo exclusivo de observações da secretaria.",
+        });
+      }
 
       try {
         const evolution = await db.createClinicalEvolution({
@@ -41,6 +48,7 @@ export const clinicalEvolutionRouter = router({
           icdCode: input.icdCode,
           icdDescription: input.icdDescription,
           clinicalNotes: input.clinicalNotes,
+          secretaryNotes: input.secretaryNotes,
           audioTranscription: input.audioTranscription,
           audioUrl: input.audioUrl,
           audioKey: input.audioKey,
@@ -74,15 +82,15 @@ export const clinicalEvolutionRouter = router({
   // Get clinical evolution by ID
   getById: protectedProcedure
     .input(z.object({ id: z.number() }))
-    .query(async ({ input }) => {
-      return db.getClinicalEvolutionById(input.id);
+    .query(async ({ ctx, input }) => {
+      return db.getClinicalEvolutionById(input.id, ctx.user?.role);
     }),
 
   // Get clinical evolutions by patient
   getByPatient: protectedProcedure
     .input(z.object({ patientId: z.number() }))
-    .query(async ({ input }) => {
-      return db.getClinicalEvolutionsByPatient(input.patientId);
+    .query(async ({ ctx, input }) => {
+      return db.getClinicalEvolutionsByPatient(input.patientId, ctx.user?.role);
     }),
 
   // Update clinical evolution
@@ -94,6 +102,7 @@ export const clinicalEvolutionRouter = router({
         icdCode: z.string().optional(),
         icdDescription: z.string().optional(),
         clinicalNotes: z.string().optional(),
+        secretaryNotes: z.string().optional(),
         assistantName: z.string().min(1).optional(),
         assistantUserId: z.number().optional().nullable(),
         audioTranscription: z.string().optional(),
@@ -110,6 +119,12 @@ export const clinicalEvolutionRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
+      if (ctx.user.role === "recepcionista") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "A recepcionista deve usar o campo exclusivo de observações da secretaria.",
+        });
+      }
 
       try {
         const evolution = await db.getClinicalEvolutionById(input.id);
@@ -152,6 +167,7 @@ export const clinicalEvolutionRouter = router({
           icdCode: input.icdCode,
           icdDescription: input.icdDescription,
           clinicalNotes: input.clinicalNotes,
+          secretaryNotes: input.secretaryNotes,
           assistantName: input.assistantName?.trim(),
           assistantUserId: input.assistantUserId === undefined ? undefined : (input.assistantUserId ?? null),
           audioTranscription: input.audioTranscription,
@@ -192,6 +208,87 @@ export const clinicalEvolutionRouter = router({
         console.error("Error updating clinical evolution:", error);
         throw error;
       }
+    }),
+
+  updateSecretaryNotes: protectedProcedure
+    .input(
+      z.object({
+        id: z.number().optional(),
+        patientId: z.number(),
+        secretaryNotes: z.string(),
+        editJustification: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
+
+      const allowedRoles = new Set(["admin", "medico", "enfermeiro", "recepcionista"]);
+      if (!allowedRoles.has(String(ctx.user.role || ""))) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Você não tem permissão para alterar observações da secretaria.",
+        });
+      }
+
+      const previous = input.id ? await db.getClinicalEvolutionById(input.id) : null;
+      if (input.id && !previous) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Registro clínico não encontrado.",
+        });
+      }
+
+      const previousStatus = String((previous as any)?.status || "rascunho");
+      const isFinalizedOrSigned = previousStatus === "finalizado" || previousStatus === "assinado";
+      const justification = (input.editJustification || "").trim();
+
+      if (isFinalizedOrSigned && justification.length < 10) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Esta consulta já foi finalizada. Informe uma justificativa (mín. 10 caracteres) para editar a observação da secretaria.",
+        });
+      }
+
+      const previousSnapshot = previous ? db.buildEvolutionSnapshot(previous as any) : null;
+      const updated = await db.updateSecretaryNotes({
+        id: input.id,
+        patientId: input.patientId,
+        secretaryNotes: input.secretaryNotes,
+        userId: ctx.user.id,
+      });
+
+      if (!updated) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Não foi possível salvar as observações da secretaria.",
+        });
+      }
+
+      const hasChanged = !previous || String((previous as any)?.secretaryNotes || "") !== String((updated as any)?.secretaryNotes || "");
+      if (hasChanged) {
+        const newSnapshot = db.buildEvolutionSnapshot(updated as any);
+        const changedFields = db.diffSnapshots(previousSnapshot || {}, newSnapshot);
+        await db.createClinicalEvolutionEditLog({
+          clinicalEvolutionId: updated.id,
+          editedByUserId: ctx.user.id,
+          editedByUserName: ctx.user.name || ctx.user.email || `Usuário ${ctx.user.id}`,
+          editedByUserRole: ctx.user.role ?? null,
+          previousStatus,
+          newStatus: String((updated as any)?.status ?? previousStatus),
+          justification: justification || "Atualização das observações da secretaria.",
+          changedFields: changedFields.length ? changedFields : ["secretaryNotes"],
+          previousSnapshot,
+          newSnapshot,
+          ipAddress: ctx.req?.ip ?? null,
+          userAgent: (ctx.req?.headers?.["user-agent"] as string) ?? null,
+        });
+      }
+
+      return {
+        success: true,
+        id: updated.id,
+        requiredJustification: isFinalizedOrSigned,
+      };
     }),
 
   // Lista histórico de edições auditáveis de uma evolução

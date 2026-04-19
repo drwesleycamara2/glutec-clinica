@@ -32,6 +32,7 @@ import { PatientEditDialog } from "@/components/PatientEditDialog";
 import { AllergyAlert } from "@/components/AllergyAlert";
 import { ExportProntuarioButton } from "@/components/ExportProntuario";
 import { EvolucaoClinicaWorkspace } from "@/components/EvolucaoClinicaWorkspace";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 function buildHistorySummary(record: any) {
   return [
@@ -105,6 +106,8 @@ function groupDocumentsByType(documents: any[]) {
 }
 
 function HistoricoTab({ patientId }: { patientId: number }) {
+  const { user } = useAuth();
+  const isReceptionist = user?.role === "recepcionista" || user?.role === "secretaria";
   const { data: evolutions, isLoading } = trpc.clinicalEvolution.getByPatient.useQuery({ patientId });
 
   if (isLoading) {
@@ -146,9 +149,9 @@ function HistoricoTab({ patientId }: { patientId: number }) {
                 <div className="flex items-center gap-2">
                   <Activity className="h-4 w-4 text-[#C9A55B]" />
                   <span className="text-sm font-semibold text-foreground">
-                    Evolução #{displayId}
+                    {isReceptionist ? `Registro #${displayId}` : `Evolução #${displayId}`}
                   </span>
-                  {attendanceLabel && (
+                  {attendanceLabel && !isReceptionist && (
                     <Badge variant="outline" className="text-[10px]">{attendanceLabel}</Badge>
                   )}
                   {isLegacy && (
@@ -156,27 +159,43 @@ function HistoricoTab({ patientId }: { patientId: number }) {
                       {ev.legacySourceLabel || "Importado"}
                     </Badge>
                   )}
+                  {ev.status && <Badge variant="outline" className="text-[10px]">{ev.status}</Badge>}
                 </div>
                 <span className="text-xs text-muted-foreground">{date}</span>
               </div>
 
-              {ev.clinicalNotes && (
-                <div className="mb-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Notas clínicas</p>
-                  <p className="text-sm whitespace-pre-wrap">{ev.clinicalNotes}</p>
-                </div>
-              )}
-              {ev.audioTranscription && (
-                <div className="mb-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Transcrição de áudio</p>
-                  <p className="text-sm whitespace-pre-wrap text-muted-foreground">{ev.audioTranscription}</p>
-                </div>
-              )}
-              {ev.icdCode && (
+              {isReceptionist ? (
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">CID-10</p>
-                  <Badge variant="outline" className="text-xs">{ev.icdCode}{ev.icdDescription ? ` — ${ev.icdDescription}` : ""}</Badge>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Observações da secretaria</p>
+                  <p className="text-sm whitespace-pre-wrap">{ev.secretaryNotes?.trim() || "Sem observações da secretaria neste registro."}</p>
                 </div>
+              ) : (
+                <>
+                  {ev.clinicalNotes && (
+                    <div className="mb-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Notas clínicas</p>
+                      <p className="text-sm whitespace-pre-wrap">{ev.clinicalNotes}</p>
+                    </div>
+                  )}
+                  {ev.secretaryNotes && (
+                    <div className="mb-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Observações da secretaria</p>
+                      <p className="text-sm whitespace-pre-wrap">{ev.secretaryNotes}</p>
+                    </div>
+                  )}
+                  {ev.audioTranscription && (
+                    <div className="mb-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Transcrição de áudio</p>
+                      <p className="text-sm whitespace-pre-wrap text-muted-foreground">{ev.audioTranscription}</p>
+                    </div>
+                  )}
+                  {ev.icdCode && (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">CID-10</p>
+                      <Badge variant="outline" className="text-xs">{ev.icdCode}{ev.icdDescription ? ` — ${ev.icdDescription}` : ""}</Badge>
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -878,7 +897,15 @@ export default function ProntuarioDetalhe() {
   const params = useParams<{ id: string }>();
   const patientId = parseInt(params.id ?? "0");
   const [, setLocation] = useLocation();
-  const validTabs = ["historico", "anamnese", "evolucao", "atestados", "contratos", "prescricoes", "orcamentos", "imagens", "anexos", "exames", "procedimentos"];
+  const { user } = useAuth();
+  const isReceptionist = user?.role === "recepcionista" || user?.role === "secretaria";
+  const validTabs = useMemo(
+    () =>
+      isReceptionist
+        ? ["historico", "evolucao"]
+        : ["historico", "anamnese", "evolucao", "atestados", "contratos", "prescricoes", "orcamentos", "imagens", "anexos", "exames", "procedimentos"],
+    [isReceptionist],
+  );
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window === "undefined") return "historico";
     const hashTab = window.location.hash.replace("#", "");
@@ -899,7 +926,7 @@ export default function ProntuarioDetalhe() {
     window.addEventListener("hashchange", syncTabFromHash);
     syncTabFromHash();
     return () => window.removeEventListener("hashchange", syncTabFromHash);
-  }, []);
+  }, [validTabs]);
 
   if (isLoading) return <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-[#C9A55B]" /></div>;
   if (!patient) return <div className="text-center py-16 text-muted-foreground">Paciente não encontrado.</div>;
@@ -924,7 +951,7 @@ export default function ProntuarioDetalhe() {
           <Pencil className="h-4 w-4 mr-1" />
           Editar cadastro
         </Button>
-        <ExportProntuarioButton patientId={patientId} patientName={patient.fullName} />
+        {!isReceptionist && <ExportProntuarioButton patientId={patientId} patientName={patient.fullName} />}
       </div>
 
       <PatientEditDialog
@@ -957,53 +984,62 @@ export default function ProntuarioDetalhe() {
           <TabsTrigger value="historico" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
             <History className="h-3.5 w-3.5" />Histórico
           </TabsTrigger>
-          <TabsTrigger value="anamnese" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-            <ClipboardList className="h-3.5 w-3.5" />Anamnese
-          </TabsTrigger>
           <TabsTrigger value="evolucao" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
             <Activity className="h-3.5 w-3.5" />Evolução
           </TabsTrigger>
-          <TabsTrigger value="atestados" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-            <FileText className="h-3.5 w-3.5" />Atestados / Docs
-          </TabsTrigger>
-          <TabsTrigger value="contratos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-            <ScrollText className="h-3.5 w-3.5" />Contratos / Termos
-          </TabsTrigger>
-          <TabsTrigger value="prescricoes" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-            <Stethoscope className="h-3.5 w-3.5" />Prescrições
-          </TabsTrigger>
-          <TabsTrigger value="orcamentos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-            <FileText className="h-3.5 w-3.5" />Orçamento
-          </TabsTrigger>
-          <TabsTrigger value="imagens" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-            <ImageIcon className="h-3.5 w-3.5" />Imagens
-          </TabsTrigger>
-          <TabsTrigger value="anexos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-            <Paperclip className="h-3.5 w-3.5" />Anexos
-          </TabsTrigger>
-          <TabsTrigger value="exames" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-            <FlaskConical className="h-3.5 w-3.5" />Exames
-          </TabsTrigger>
-          <TabsTrigger value="procedimentos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-            <Package className="h-3.5 w-3.5" />Procedimentos
-          </TabsTrigger>
+          {!isReceptionist && (
+            <>
+              <TabsTrigger value="anamnese" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <ClipboardList className="h-3.5 w-3.5" />Anamnese
+              </TabsTrigger>
+              <TabsTrigger value="atestados" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <FileText className="h-3.5 w-3.5" />Atestados / Docs
+              </TabsTrigger>
+              <TabsTrigger value="contratos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <ScrollText className="h-3.5 w-3.5" />Contratos / Termos
+              </TabsTrigger>
+              <TabsTrigger value="prescricoes" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <Stethoscope className="h-3.5 w-3.5" />Prescrições
+              </TabsTrigger>
+              <TabsTrigger value="orcamentos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <FileText className="h-3.5 w-3.5" />Orçamento
+              </TabsTrigger>
+              <TabsTrigger value="imagens" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <ImageIcon className="h-3.5 w-3.5" />Imagens
+              </TabsTrigger>
+              <TabsTrigger value="anexos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <Paperclip className="h-3.5 w-3.5" />Anexos
+              </TabsTrigger>
+              <TabsTrigger value="exames" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <FlaskConical className="h-3.5 w-3.5" />Exames
+              </TabsTrigger>
+              <TabsTrigger value="procedimentos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <Package className="h-3.5 w-3.5" />Procedimentos
+              </TabsTrigger>
+            </>
+          )}
         </TabsList>
 
         <TabsContent value="historico" className="mt-4"><HistoricoTab patientId={patientId} /></TabsContent>
-        <TabsContent value="anamnese" className="mt-4"><AnamneseTab patientId={patientId} /></TabsContent>
         <TabsContent value="evolucao" className="mt-4"><EvolucaoClinicaWorkspace patientId={patientId} patientName={patient.fullName} /></TabsContent>
-        <TabsContent value="atestados" className="mt-4"><AtestadosTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
-        <TabsContent value="contratos" className="mt-4"><ContratosTab patientId={patientId} /></TabsContent>
-        <TabsContent value="prescricoes" className="mt-4"><PrescricoesTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
-        <TabsContent value="orcamentos" className="mt-4"><OrcamentoTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
-        <TabsContent value="imagens" className="mt-4"><ImagensTab patientId={patientId} /></TabsContent>
-        <TabsContent value="anexos" className="mt-4"><AnexosTab patientId={patientId} /></TabsContent>
-        <TabsContent value="exames" className="mt-4"><ExamesTab patientId={patientId} /></TabsContent>
-        <TabsContent value="procedimentos" className="mt-4"><ProcedimentosTab patientId={patientId} /></TabsContent>
+        {!isReceptionist && (
+          <>
+            <TabsContent value="anamnese" className="mt-4"><AnamneseTab patientId={patientId} /></TabsContent>
+            <TabsContent value="atestados" className="mt-4"><AtestadosTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
+            <TabsContent value="contratos" className="mt-4"><ContratosTab patientId={patientId} /></TabsContent>
+            <TabsContent value="prescricoes" className="mt-4"><PrescricoesTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
+            <TabsContent value="orcamentos" className="mt-4"><OrcamentoTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
+            <TabsContent value="imagens" className="mt-4"><ImagensTab patientId={patientId} /></TabsContent>
+            <TabsContent value="anexos" className="mt-4"><AnexosTab patientId={patientId} /></TabsContent>
+            <TabsContent value="exames" className="mt-4"><ExamesTab patientId={patientId} /></TabsContent>
+            <TabsContent value="procedimentos" className="mt-4"><ProcedimentosTab patientId={patientId} /></TabsContent>
+          </>
+        )}
       </Tabs>
     </div>
   );
 }
+
 
 
 
