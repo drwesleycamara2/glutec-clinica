@@ -1,6 +1,6 @@
-import { eq, and } from "drizzle-orm";
-import { 
-  clinicalEvolutions, 
+import { eq, and, sql } from "drizzle-orm";
+import {
+  clinicalEvolutions,
   signatureAuditLog,
   InsertClinicalEvolution,
   InsertSignatureAuditLog,
@@ -9,6 +9,14 @@ import {
 } from "../drizzle/schema-clinical-evolution";
 import { users } from "../drizzle/schema";
 import { getDb } from "./db";
+
+// Helper: unwrap rows from mysql2/drizzle raw execute
+function unwrapRows<T = any>(result: any): T[] {
+  if (!result) return [];
+  if (Array.isArray(result) && Array.isArray(result[0])) return result[0] as T[];
+  if (Array.isArray(result)) return result as T[];
+  return [];
+}
 
 // ─── Clinical Evolution Operations ───────────────────────────────────────────
 
@@ -63,7 +71,7 @@ export async function getClinicalEvolutionsByPatient(
 ): Promise<ClinicalEvolution[]> {
   const db = await getDb();
   if (!db) return [];
-  
+
   const rows = await db
     .select({
       evolution: clinicalEvolutions,
@@ -76,12 +84,130 @@ export async function getClinicalEvolutionsByPatient(
     .where(eq(clinicalEvolutions.patientId, patientId))
     .orderBy(clinicalEvolutions.createdAt);
 
-  return rows.map((row) => ({
+  const current = rows.map((row) => ({
     ...row.evolution,
     doctorName: row.doctorName,
     doctorEmail: row.doctorEmail,
     doctorRole: row.doctorRole,
+    isLegacy: false as const,
   })) as (ClinicalEvolution & Record<string, unknown>)[];
+
+  // Mescla atendimentos legados (medical_records importados de Prontuário
+  // Verde / OneDoctor, ou criados antes da tabela clinical_evolutions). Eles
+  // representam evoluções e devem aparecer aqui, não na lista de anamneses.
+  const legacy = await getLegacyEvolutionsFromMedicalRecords(patientId);
+  return [...current, ...legacy].sort((a: any, b: any) => {
+    const da = new Date(a.startedAt ?? a.createdAt ?? 0).getTime();
+    const db2 = new Date(b.startedAt ?? b.createdAt ?? 0).getTime();
+    return db2 - da;
+  });
+}
+
+// Retorna registros antigos de `medical_records` mapeados no formato de
+// ClinicalEvolution, para exibição unificada na lista de evoluções.
+export async function getLegacyEvolutionsFromMedicalRecords(
+  patientId: number
+): Promise<any[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select
+      mr.id,
+      mr.patientId,
+      mr.doctorId,
+      mr.appointmentId,
+      mr.date,
+      mr.chiefComplaint,
+      mr.anamnesis,
+      mr.physicalExam,
+      mr.diagnosis,
+      mr.icdCode,
+      mr.icdDescription,
+      mr.plan,
+      mr.evolution,
+      mr.notes,
+      mr.attachments,
+      mr.status,
+      mr.sourceSystem,
+      mr.sourceId,
+      mr.createdAt,
+      mr.updatedAt,
+      u.name  as doctorName,
+      u.email as doctorEmail,
+      u.role  as doctorRole
+    from medical_records mr
+    left join users u on u.id = mr.doctorId
+    where mr.patientId = ${patientId}
+    order by mr.date desc, mr.id desc
+  `));
+
+  return rows.map((r: any) => {
+    // Monta um texto único de evolução a partir dos campos clássicos
+    const parts: string[] = [];
+    if (r.chiefComplaint) parts.push(`**Queixa principal**\n${r.chiefComplaint}`);
+    if (r.anamnesis)      parts.push(`**Anamnese / História**\n${r.anamnesis}`);
+    if (r.physicalExam)   parts.push(`**Exame físico**\n${r.physicalExam}`);
+    if (r.diagnosis)      parts.push(`**Diagnóstico / Hipótese**\n${r.diagnosis}`);
+    if (r.plan)           parts.push(`**Plano / Conduta**\n${r.plan}`);
+    if (r.evolution)      parts.push(`**Evolução**\n${r.evolution}`);
+    if (r.notes)          parts.push(`**Observações**\n${r.notes}`);
+    const clinicalNotes = parts.join("\n\n").trim();
+
+    const sourceLabel = r.sourceSystem === "prontuario_verde"
+      ? "Prontuário Verde (importado)"
+      : r.sourceSystem === "onedoctor"
+        ? "OneDoctor (importado)"
+        : "Registro legado";
+
+    const startedAt = r.date ? new Date(r.date) : (r.createdAt ? new Date(r.createdAt) : null);
+
+    return {
+      // Shape compatível com ClinicalEvolution
+      id: -Number(r.id), // id negativo sinaliza origem legada no cliente
+      legacyRecordId: Number(r.id),
+      patientId: r.patientId,
+      doctorId: r.doctorId,
+      assistantUserId: null,
+      medicalRecordId: Number(r.id),
+      appointmentId: r.appointmentId,
+      icdCode: r.icdCode ?? "",
+      icdDescription: r.icdDescription ?? "",
+      clinicalNotes: clinicalNotes || "(sem conteúdo registrado)",
+      audioTranscription: null,
+      audioUrl: null,
+      audioKey: null,
+      attendanceType: null,
+      status: r.status ?? "finalizado",
+      startedAt,
+      endedAt: null,
+      finalizedAt: startedAt,
+      isRetroactive: 1,
+      retroactiveJustification: null,
+      assistantName: "",
+      d4signDocumentKey: null,
+      d4signStatus: null,
+      signedAt: null,
+      signedByDoctorId: null,
+      signedByDoctorName: null,
+      signedPdfUrl: null,
+      signatureHash: null,
+      signatureProvider: null,
+      signatureCertificateLabel: null,
+      signatureValidationCode: null,
+      createdAt: r.createdAt ? new Date(r.createdAt) : null,
+      updatedAt: r.updatedAt ? new Date(r.updatedAt) : null,
+      createdBy: null,
+      updatedBy: null,
+      doctorName: r.doctorName,
+      doctorEmail: r.doctorEmail,
+      doctorRole: r.doctorRole,
+      isLegacy: true,
+      legacySource: r.sourceSystem ?? null,
+      legacySourceLabel: sourceLabel,
+      attachmentsRaw: r.attachments ?? null,
+    };
+  });
 }
 
 export async function updateClinicalEvolution(

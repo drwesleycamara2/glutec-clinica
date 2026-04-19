@@ -129,24 +129,32 @@ function HistoricoTab({ patientId }: { patientId: number }) {
   return (
     <div className="space-y-3">
       {evolutions.map((ev: any) => {
-        const date = ev.createdAt
-          ? new Date(ev.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
+        const baseDate = ev.startedAt || ev.createdAt;
+        const date = baseDate
+          ? new Date(baseDate).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
           : "—";
         const attendanceLabel =
           ev.attendanceType === "online" ? "Online" :
           ev.attendanceType === "presencial" ? "Presencial" : null;
+        const isLegacy = ev.isLegacy === true;
+        const displayId = isLegacy ? (ev.legacyRecordId ?? Math.abs(ev.id)) : ev.id;
 
         return (
-          <Card key={ev.id} className="border-border/50">
+          <Card key={`${isLegacy ? "legacy" : "ev"}-${ev.id}`} className="border-border/50">
             <CardContent className="p-4">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                 <div className="flex items-center gap-2">
                   <Activity className="h-4 w-4 text-[#C9A55B]" />
                   <span className="text-sm font-semibold text-foreground">
-                    Evolução #{ev.id}
+                    Evolução #{displayId}
                   </span>
                   {attendanceLabel && (
                     <Badge variant="outline" className="text-[10px]">{attendanceLabel}</Badge>
+                  )}
+                  {isLegacy && (
+                    <Badge variant="secondary" className="text-[10px]">
+                      {ev.legacySourceLabel || "Importado"}
+                    </Badge>
                   )}
                 </div>
                 <span className="text-xs text-muted-foreground">{date}</span>

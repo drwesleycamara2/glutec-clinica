@@ -1452,6 +1452,15 @@ export async function getAnamnesisShareLinkByToken(token: string) {
   };
 }
 
+/**
+ * Retorna APENAS anamneses reais (questionários preenchidos pelo paciente ou
+ * pela clínica) a partir de `anamnesis_share_links`.
+ *
+ * Fichas de atendimento importadas do Prontuário Verde / OneDoctor que
+ * possuem o campo `anamnesis` preenchido SÃO evoluções, não anamneses, e
+ * aparecem em `getClinicalEvolutionsByPatient` (que mescla legacy). Portanto
+ * não são mais retornadas aqui (antes eram, o que misturava as duas coisas).
+ */
 export async function listPatientAnamneses(patientId: number, viewerRole?: string | null) {
   const db = await getDb();
   if (!db) return [];
@@ -1468,7 +1477,7 @@ export async function listPatientAnamneses(patientId: number, viewerRole?: strin
     order by coalesce(l.anamnesisDate, l.submittedAt, l.createdAt) desc, l.id desc
   `));
 
-  const directAnamneses = rows.map((row) => {
+  return rows.map((row) => {
     let questions: Array<Record<string, any>> = [];
     let answers: Record<string, string> | null = null;
     try {
@@ -1487,50 +1496,8 @@ export async function listPatientAnamneses(patientId: number, viewerRole?: strin
       questions: allowAnswers ? questions : [],
       answers: allowAnswers ? answers : null,
       visibilityRestricted: !allowAnswers,
-      sourceLabel: row.source === "share" ? "Paciente" : "Cl?nica",
+      sourceLabel: row.source === "share" ? "Paciente" : "Clínica",
     };
-  });
-
-  const legacyRows = unwrapRows<any>(await db.execute(sql`
-    select
-      mr.id,
-      mr.date,
-      mr.createdAt,
-      mr.anamnesis,
-      mr.chiefComplaint,
-      mr.sourceSystem,
-      mr.notes,
-      u.name as doctorName
-    from medical_records mr
-    left join users u on u.id = mr.doctorId
-    where mr.patientId = ${patientId}
-      and coalesce(trim(mr.anamnesis), '') <> ''
-    order by coalesce(mr.date, mr.createdAt) desc, mr.id desc
-  `));
-
-  const legacyAnamneses = legacyRows.map((row) => {
-    const title = `Anamnese importada de ${row.sourceSystem === "onedoctor" ? "OneDoctor" : row.sourceSystem === "prontuario_verde" ? "Prontu?rio Verde" : "legado"}`;
-    const answerText = String(row.anamnesis ?? "").trim();
-    return {
-      id: `legacy-${row.id}`,
-      title,
-      templateName: title,
-      anamnesisDate: row.date ?? row.createdAt,
-      submittedAt: row.date ?? row.createdAt,
-      source: "legacy",
-      sourceLabel: row.sourceSystem === "onedoctor" ? "OneDoctor" : row.sourceSystem === "prontuario_verde" ? "Prontu?rio Verde" : "Legado",
-      respondentName: row.doctorName ?? null,
-      questions: allowAnswers ? [{ text: "Anamnese importada do legado", type: "text", options: [] }] : [],
-      answers: allowAnswers ? { "Anamnese importada do legado": answerText } : null,
-      visibilityRestricted: !allowAnswers,
-      summary: answerText || row.chiefComplaint || "",
-    };
-  });
-
-  return [...directAnamneses, ...legacyAnamneses].sort((a: any, b: any) => {
-    const dateA = new Date(a.anamnesisDate ?? a.submittedAt ?? a.createdAt ?? 0).getTime();
-    const dateB = new Date(b.anamnesisDate ?? b.submittedAt ?? b.createdAt ?? 0).getTime();
-    return dateB - dateA;
   });
 }
 
@@ -1538,6 +1505,9 @@ export async function patientHasAnyAnamnesis(patientId: number) {
   const db = await getDb();
   if (!db) return false;
 
+  // Apenas questionários reais (anamnesis_share_links). Os registros antigos
+  // de `medical_records.anamnesis` eram, em sua maior parte, evoluções
+  // importadas e agora são expostos como evolução clínica legada.
   const submittedRows = unwrapRows<any>(await db.execute(sql`
     select count(*) as count
     from anamnesis_share_links
@@ -1545,14 +1515,7 @@ export async function patientHasAnyAnamnesis(patientId: number) {
       and coalesce(submittedAnswers, '') <> ''
   `));
 
-  const legacyRows = unwrapRows<any>(await db.execute(sql`
-    select count(*) as count
-    from medical_records
-    where patientId = ${patientId}
-      and coalesce(trim(anamnesis), '') <> ''
-  `));
-
-  return Number(submittedRows[0]?.count ?? 0) > 0 || Number(legacyRows[0]?.count ?? 0) > 0;
+  return Number(submittedRows[0]?.count ?? 0) > 0;
 }
 
 export async function sendPatientAnamnesisRequestViaWhatsApp(

@@ -790,18 +790,30 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
           ) : (
             (evolutionQuery.data ?? [])
               .slice()
-              .sort((left: any, right: any) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
-              .map((record: any) => (
-                <div key={record.id} className="rounded-2xl border border-border/60 p-4">
+              .sort((left: any, right: any) => {
+                const l = new Date(left.startedAt ?? left.createdAt ?? 0).getTime();
+                const r = new Date(right.startedAt ?? right.createdAt ?? 0).getTime();
+                return r - l;
+              })
+              .map((record: any) => {
+                const isLegacy = record.isLegacy === true;
+                const displayId = isLegacy ? (record.legacyRecordId ?? Math.abs(record.id)) : record.id;
+                return (
+                <div key={`${isLegacy ? "legacy" : "ev"}-${record.id}`} className="rounded-2xl border border-border/60 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="outline">{record.icdCode || "Sem CID"}</Badge>
                         <Badge variant="outline">{record.status}</Badge>
                         {record.signatureProvider && <Badge variant="outline">{record.signatureProvider}</Badge>}
+                        {isLegacy && (
+                          <Badge variant="secondary">
+                            {record.legacySourceLabel || "Importado"}
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-sm font-medium">
-                        {record.startedAt ? new Date(record.startedAt).toLocaleString("pt-BR") : new Date(record.createdAt).toLocaleString("pt-BR")}
+                        #{displayId} — {record.startedAt ? new Date(record.startedAt).toLocaleString("pt-BR") : (record.createdAt ? new Date(record.createdAt).toLocaleString("pt-BR") : "—")}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Atendido por {record.doctorName || professionalName} • Acompanhamento: {record.assistantName || "Ninguém"}
@@ -809,20 +821,22 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
                       <p className="text-xs text-muted-foreground">{stripHtml(record.clinicalNotes || "").slice(0, 220) || "Sem resumo clínico."}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <Button size="sm" variant="outline" onClick={() => handleSelectEvolution(record)}>
-                        Continuar
-                      </Button>
+                      {!isLegacy && (
+                        <Button size="sm" variant="outline" onClick={() => handleSelectEvolution(record)}>
+                          Continuar
+                        </Button>
+                      )}
                       <Button size="sm" variant="outline" onClick={() => { setSelectedEvolution(record); setExportDialogOpen(true); }}>
                         <FileDown className="mr-1.5 h-3.5 w-3.5" />
                         Exportar
                       </Button>
-                      {record.status !== "assinado" && (
+                      {!isLegacy && record.status !== "assinado" && (
                         <Button size="sm" onClick={() => handleOpenSignature(record)}>
                           <PenTool className="mr-1.5 h-3.5 w-3.5" />
                           Assinar
                         </Button>
                       )}
-                      {record.status === "assinado" && (
+                      {!isLegacy && record.status === "assinado" && (
                         <Badge className="bg-emerald-100 text-emerald-700">
                           <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
                           Assinado
@@ -831,7 +845,8 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
                     </div>
                   </div>
                 </div>
-              ))
+                );
+              })
           )}
         </CardContent>
       </Card>
