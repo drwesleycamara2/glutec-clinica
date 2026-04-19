@@ -1880,7 +1880,7 @@ export const appRouter = router({
         durationMinutes: z.number(),
         type: z.string(),
         notes: z.string().optional(),
-        retroactiveJustification: z.string().min(10, "Justificativa deve ter no mÃ­nimo 10 caracteres"),
+        retroactiveJustification: z.string().min(10, "Justificativa deve ter no mínimo 10 caracteres"),
         originalAppointmentDate: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {

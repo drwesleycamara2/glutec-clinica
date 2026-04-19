@@ -264,11 +264,11 @@ export default function EnvioMidiasPaciente() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>DescriÃ§Ã£o</Label>
+                    <Label>Descrição</Label>
                     <Input
                       value={description}
                       onChange={(event) => setDescription(event.target.value)}
-                      placeholder="Ex.: antes do procedimento, 30 dias, regiÃ£o abdominal"
+                      placeholder="Ex.: antes do procedimento, 30 dias, região abdominal"
                     />
                   </div>
                 </div>
@@ -277,9 +277,9 @@ export default function EnvioMidiasPaciente() {
                   <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-[#C9A55B]/25 bg-background">
                     <Upload className="h-7 w-7 text-[#C9A55B]" />
                   </div>
-                  <p className="mt-4 text-base font-semibold text-foreground">Selecione fotos e vÃ­deos</p>
+                  <p className="mt-4 text-base font-semibold text-foreground">Selecione fotos e vídeos</p>
                   <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    Imagens enviadas por esta página sÃ£o otimizadas antes do upload. VÃ­deos sÃ£o aceitos quando o link permitir.
+                    Imagens enviadas por esta página são otimizadas antes do upload. Vídeos são aceitos quando o link permitir.
                   </p>
 
                   <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
@@ -290,7 +290,7 @@ export default function EnvioMidiasPaciente() {
                     {meta.allowVideos ? (
                       <Badge className="border-[#C9A55B]/20 bg-[#C9A55B]/10 text-[#8A6526]">
                         <Video className="mr-1 h-3.5 w-3.5" />
-                        VÃ­deos
+                        Vídeos
                       </Badge>
                     ) : null}
                   </div>
@@ -319,7 +319,7 @@ export default function EnvioMidiasPaciente() {
                 {items.length > 0 ? (
                   <Card className="border-border/70">
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-sm font-semibold">Arquivos enviados nesta sessÃ£o</CardTitle>
+                      <CardTitle className="text-sm font-semibold">Arquivos enviados nesta sessão</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
                       {items.map((item) => (

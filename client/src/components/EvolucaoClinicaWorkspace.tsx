@@ -728,7 +728,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
                           {isLegacy && <Badge variant="secondary">{record.legacySourceLabel || "Importado"}</Badge>}
                         </div>
                         <p className="text-sm font-medium">
-                          {record.startedAt ? new Date(record.startedAt).toLocaleString("pt-BR") : (record.createdAt ? new Date(record.createdAt).toLocaleString("pt-BR") : "â€”")}
+                          {record.startedAt ? new Date(record.startedAt).toLocaleString("pt-BR") : (record.createdAt ? new Date(record.createdAt).toLocaleString("pt-BR") : "—")}
                         </p>
                         <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                           {record.secretaryNotes?.trim() || "Sem observações da secretaria neste registro."}
@@ -763,7 +763,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Tipo de atendimento â€” seleção obrigatória */}
+          {/* Tipo de atendimento - seleção obrigatória */}
           <div className="space-y-2">
             <Label className="text-sm font-semibold">
               Tipo de atendimento <span className="text-red-500">*</span>
@@ -778,7 +778,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
                     : "border-border/50 text-muted-foreground hover:border-[#C9A55B]/50"
                 }`}
               >
-                ðŸ¥ Presencial
+                Presencial
               </button>
               <button
                 type="button"
@@ -789,7 +789,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
                     : "border-border/50 text-muted-foreground hover:border-[#C9A55B]/50"
                 }`}
               >
-                ðŸ’» Online / Teleconsulta
+                Online / Teleconsulta
               </button>
             </div>
             {!form.attendanceType && (
@@ -1035,10 +1035,10 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
                         )}
                       </div>
                       <p className="text-sm font-medium">
-                        #{displayId} â€” {record.startedAt ? new Date(record.startedAt).toLocaleString("pt-BR") : (record.createdAt ? new Date(record.createdAt).toLocaleString("pt-BR") : "â€”")}
+                        #{displayId} — {record.startedAt ? new Date(record.startedAt).toLocaleString("pt-BR") : (record.createdAt ? new Date(record.createdAt).toLocaleString("pt-BR") : "—")}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Atendido por {record.doctorName || professionalName} â€¢ Acompanhamento: {record.assistantName || "Ninguém"}
+                        Atendido por {record.doctorName || professionalName} • Acompanhamento: {record.assistantName || "Ninguém"}
                       </p>
                       <p className="text-xs text-muted-foreground">{stripHtml(record.clinicalNotes || "").slice(0, 220) || "Sem resumo clínico."}</p>
                       {record.secretaryNotes ? <p className="text-xs text-amber-700 whitespace-pre-wrap">Secretaria: {record.secretaryNotes}</p> : null}
@@ -1251,7 +1251,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
           </DialogHeader>
           <div className="space-y-3 max-h-[60vh] overflow-y-auto">
             {editHistoryQuery.isLoading ? (
-              <p className="text-sm text-muted-foreground">Carregando históricoâ€¦</p>
+              <p className="text-sm text-muted-foreground">Carregando histórico...</p>
             ) : !editHistoryQuery.data || editHistoryQuery.data.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 Nenhuma edição registrada após a finalização desta consulta.
@@ -1269,7 +1269,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground mb-2">
-                    Status: {log.previousStatus || "â€”"} â†’ {log.newStatus || "â€”"}
+                    Status: {log.previousStatus || "—"} → {log.newStatus || "—"}
                   </div>
                   <p className="text-sm whitespace-pre-wrap mb-2">
                     <span className="font-semibold">Justificativa:</span> {log.justification}
