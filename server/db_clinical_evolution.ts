@@ -2,10 +2,13 @@ import { eq, and, sql } from "drizzle-orm";
 import {
   clinicalEvolutions,
   signatureAuditLog,
+  clinicalEvolutionEditLog,
   InsertClinicalEvolution,
   InsertSignatureAuditLog,
+  InsertClinicalEvolutionEditLog,
   ClinicalEvolution,
-  SignatureAuditLog
+  SignatureAuditLog,
+  ClinicalEvolutionEditLog
 } from "../drizzle/schema-clinical-evolution";
 import { users } from "../drizzle/schema";
 import { getDb } from "./db";
@@ -370,7 +373,7 @@ export async function getPendingSignatures(
 ): Promise<ClinicalEvolution[]> {
   const db = await getDb();
   if (!db) return [];
-  
+
   return db
     .select()
     .from(clinicalEvolutions)
@@ -381,4 +384,74 @@ export async function getPendingSignatures(
       )
     )
     .orderBy(clinicalEvolutions.createdAt);
+}
+
+// ─── Edit Audit Log Operations ───────────────────────────────────────────────
+
+// Snapshot só dos campos editáveis — evita vazar IDs internos desnecessários.
+export function buildEvolutionSnapshot(ev: any): Record<string, any> {
+  return {
+    status: ev?.status ?? null,
+    attendanceType: ev?.attendanceType ?? null,
+    icdCode: ev?.icdCode ?? null,
+    icdDescription: ev?.icdDescription ?? null,
+    clinicalNotes: ev?.clinicalNotes ?? null,
+    audioTranscription: ev?.audioTranscription ?? null,
+    assistantName: ev?.assistantName ?? null,
+    assistantUserId: ev?.assistantUserId ?? null,
+    startedAt: ev?.startedAt ? new Date(ev.startedAt).toISOString() : null,
+    endedAt: ev?.endedAt ? new Date(ev.endedAt).toISOString() : null,
+    finalizedAt: ev?.finalizedAt ? new Date(ev.finalizedAt).toISOString() : null,
+    isRetroactive: ev?.isRetroactive ?? null,
+    retroactiveJustification: ev?.retroactiveJustification ?? null,
+  };
+}
+
+export function diffSnapshots(
+  prev: Record<string, any>,
+  next: Record<string, any>
+): string[] {
+  const changed: string[] = [];
+  const keysArray = Array.from(new Set([...Object.keys(prev || {}), ...Object.keys(next || {})]));
+  for (const key of keysArray) {
+    const a = prev?.[key];
+    const b = next?.[key];
+    const eq =
+      a === b ||
+      (a == null && b == null) ||
+      (typeof a === "string" && typeof b === "string" && a === b);
+    if (!eq) changed.push(key);
+  }
+  return changed;
+}
+
+export async function createClinicalEvolutionEditLog(
+  data: InsertClinicalEvolutionEditLog
+): Promise<ClinicalEvolutionEditLog | null> {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+
+  const result = await db.insert(clinicalEvolutionEditLog).values(data);
+  const id = (result as any)?.[0]?.insertId ?? (result as any)?.[0] ?? (result as any)?.insertId;
+  if (!id) return null;
+
+  const rows = await db
+    .select()
+    .from(clinicalEvolutionEditLog)
+    .where(eq(clinicalEvolutionEditLog.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getClinicalEvolutionEditLogs(
+  evolutionId: number
+): Promise<ClinicalEvolutionEditLog[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select()
+    .from(clinicalEvolutionEditLog)
+    .where(eq(clinicalEvolutionEditLog.clinicalEvolutionId, evolutionId))
+    .orderBy(clinicalEvolutionEditLog.editedAt);
 }

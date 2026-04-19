@@ -103,6 +103,9 @@ export const clinicalEvolutionRouter = router({
         finalizedAt: z.string().optional(),
         isRetroactive: z.boolean().optional(),
         retroactiveJustification: z.string().optional(),
+        // Justificativa obrigatória quando a evolução já está finalizada/assinada.
+        // Registrada no clinical_evolution_edit_log junto com snapshot antes/depois.
+        editJustification: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -126,13 +129,22 @@ export const clinicalEvolutionRouter = router({
           });
         }
 
-        // Cannot update if already signed
-        if (evolution.status === "assinado") {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Cannot update a signed clinical evolution",
-          });
+        const previousStatus = String(evolution.status || "rascunho");
+        const isFinalizedOrSigned = previousStatus === "finalizado" || previousStatus === "assinado";
+        const justification = (input.editJustification || "").trim();
+
+        // Regra de auditoria: ao editar uma evolução finalizada ou assinada,
+        // a justificativa é obrigatória (mín. 10 caracteres).
+        if (isFinalizedOrSigned) {
+          if (!justification || justification.length < 10) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Esta consulta já foi finalizada. Informe uma justificativa (mín. 10 caracteres) para registrar a edição no log de auditoria.",
+            });
+          }
         }
+
+        const previousSnapshot = db.buildEvolutionSnapshot(evolution as any);
 
         await db.updateClinicalEvolution(input.id, {
           doctorId: ctx.user.id,
@@ -152,11 +164,41 @@ export const clinicalEvolutionRouter = router({
           updatedBy: ctx.user.id,
         });
 
-        return { success: true };
+        // Registra no log de auditoria toda edição que trouxer justificativa
+        // (obrigatória em finalizado/assinado; opcional mas aceita em rascunho).
+        if (justification) {
+          const updated = await db.getClinicalEvolutionById(input.id);
+          const newSnapshot = db.buildEvolutionSnapshot(updated as any);
+          const changedFields = db.diffSnapshots(previousSnapshot, newSnapshot);
+
+          await db.createClinicalEvolutionEditLog({
+            clinicalEvolutionId: input.id,
+            editedByUserId: ctx.user.id,
+            editedByUserName: ctx.user.name || ctx.user.email || `Usuário ${ctx.user.id}`,
+            editedByUserRole: ctx.user.role ?? null,
+            previousStatus,
+            newStatus: String((updated as any)?.status ?? input.status ?? previousStatus),
+            justification,
+            changedFields: changedFields.length ? changedFields : null,
+            previousSnapshot,
+            newSnapshot,
+            ipAddress: ctx.req?.ip ?? null,
+            userAgent: (ctx.req?.headers?.["user-agent"] as string) ?? null,
+          });
+        }
+
+        return { success: true, requiredJustification: isFinalizedOrSigned };
       } catch (error) {
         console.error("Error updating clinical evolution:", error);
         throw error;
       }
+    }),
+
+  // Lista histórico de edições auditáveis de uma evolução
+  getEditHistory: protectedProcedure
+    .input(z.object({ evolutionId: z.number() }))
+    .query(async ({ input }) => {
+      return db.getClinicalEvolutionEditLogs(input.evolutionId);
     }),
 
   listAssistants: protectedProcedure.query(async () => {

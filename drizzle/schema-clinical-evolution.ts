@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 // ─── Clinical Evolutions / Evoluções Clínicas ────────────────────────────────
 
@@ -81,3 +81,26 @@ export const signatureAuditLog = mysqlTable("signature_audit_log", {
 
 export type SignatureAuditLog = typeof signatureAuditLog.$inferSelect;
 export type InsertSignatureAuditLog = typeof signatureAuditLog.$inferInsert;
+
+// ─── Edit Audit Log ────────────────────────────────────────────────────────
+// Qualquer alteração em uma evolução finalizada/assinada é registrada aqui
+// com justificativa obrigatória, snapshot anterior e posterior.
+export const clinicalEvolutionEditLog = mysqlTable("clinical_evolution_edit_log", {
+  id: int("id").autoincrement().primaryKey(),
+  clinicalEvolutionId: int("clinicalEvolutionId").notNull(),
+  editedByUserId: int("editedByUserId").notNull(),
+  editedByUserName: varchar("editedByUserName", { length: 256 }).notNull(),
+  editedByUserRole: varchar("editedByUserRole", { length: 64 }),
+  previousStatus: varchar("previousStatus", { length: 32 }),
+  newStatus: varchar("newStatus", { length: 32 }),
+  justification: text("justification").notNull(),
+  changedFields: json("changedFields"),
+  previousSnapshot: json("previousSnapshot"),
+  newSnapshot: json("newSnapshot"),
+  ipAddress: varchar("ipAddress", { length: 45 }),
+  userAgent: text("userAgent"),
+  editedAt: timestamp("editedAt").defaultNow().notNull(),
+});
+
+export type ClinicalEvolutionEditLog = typeof clinicalEvolutionEditLog.$inferSelect;
+export type InsertClinicalEvolutionEditLog = typeof clinicalEvolutionEditLog.$inferInsert;

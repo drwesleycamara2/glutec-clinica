@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   Clock3,
   FileDown,
+  History,
   Loader2,
   PenTool,
   PlayCircle,
@@ -151,6 +152,13 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
   const [includeAuditReport, setIncludeAuditReport] = useState(true);
   const [startedSessionAt, setStartedSessionAt] = useState("");
   const [elapsed, setElapsed] = useState("00:00:00");
+  // Auditoria de edição pós-finalização
+  const [editingLockedStatus, setEditingLockedStatus] = useState<null | "finalizado" | "assinado">(null);
+  const [justificationDialogOpen, setJustificationDialogOpen] = useState(false);
+  const [pendingSaveAction, setPendingSaveAction] = useState<null | "rascunho" | "finalizado">(null);
+  const [editJustificationText, setEditJustificationText] = useState("");
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [historyForEvolutionId, setHistoryForEvolutionId] = useState<number | null>(null);
 
   const evolutionQuery = trpc.clinicalEvolution.getByPatient.useQuery({ patientId });
   const assistantsQuery = trpc.clinicalEvolution.listAssistants.useQuery();
@@ -182,6 +190,10 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
   const auditQuery = trpc.clinicalEvolution.getSignatureAuditLog.useQuery(
     { evolutionId: selectedEvolution?.id ?? 0 },
     { enabled: exportDialogOpen && Boolean(selectedEvolution?.id) },
+  );
+  const editHistoryQuery = trpc.clinicalEvolution.getEditHistory.useQuery(
+    { evolutionId: historyForEvolutionId ?? 0 },
+    { enabled: historyDialogOpen && Boolean(historyForEvolutionId && historyForEvolutionId > 0) },
   );
 
   useEffect(() => {
@@ -320,11 +332,22 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
     toast.success("Atendimento iniciado.");
   };
 
-  const handleSave = async () => {
+  const handleSave = async (opts?: { justification?: string }) => {
     try {
       const payload = buildPayload("rascunho");
       if (form.id) {
-        await updateMutation.mutateAsync({ id: form.id, ...payload });
+        // Se editando evolução finalizada/assinada, exige justificativa
+        if (editingLockedStatus && !opts?.justification) {
+          setPendingSaveAction("rascunho");
+          setEditJustificationText("");
+          setJustificationDialogOpen(true);
+          return;
+        }
+        await updateMutation.mutateAsync({
+          id: form.id,
+          ...payload,
+          editJustification: opts?.justification,
+        });
       } else {
         const result = await createMutation.mutateAsync({
           patientId,
@@ -360,14 +383,26 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
     return () => window.removeEventListener(CLINICAL_DRAFT_AUTOSAVE_EVENT, handleAutosave as EventListener);
   }, [draftStorageKey, form, patientId, patientName, startedSessionAt]);
 
-  const handleFinalize = async () => {
-    const confirmed = window.confirm("Finalizar a consulta agora? Depois disso ela ficará registrada como concluída.");
-    if (!confirmed) return;
+  const handleFinalize = async (opts?: { justification?: string }) => {
+    if (!opts?.justification) {
+      const confirmed = window.confirm("Finalizar a consulta agora? Depois disso ela ficará registrada como concluída.");
+      if (!confirmed) return;
+    }
 
     try {
       const payload = buildPayload("finalizado");
       if (form.id) {
-        await updateMutation.mutateAsync({ id: form.id, ...payload });
+        if (editingLockedStatus && !opts?.justification) {
+          setPendingSaveAction("finalizado");
+          setEditJustificationText("");
+          setJustificationDialogOpen(true);
+          return;
+        }
+        await updateMutation.mutateAsync({
+          id: form.id,
+          ...payload,
+          editJustification: opts?.justification,
+        });
       } else {
         const result = await createMutation.mutateAsync({
           patientId,
@@ -381,10 +416,27 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
       setSelectedEvolution(null);
       setStartedSessionAt("");
       setForm(emptyForm());
+      setEditingLockedStatus(null);
       toast.success("Consulta finalizada.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível finalizar a consulta.");
     }
+  };
+
+  const confirmJustificationAndSubmit = async () => {
+    const justification = editJustificationText.trim();
+    if (justification.length < 10) {
+      toast.error("A justificativa precisa ter no mínimo 10 caracteres.");
+      return;
+    }
+    setJustificationDialogOpen(false);
+    if (pendingSaveAction === "finalizado") {
+      await handleFinalize({ justification });
+    } else {
+      await handleSave({ justification });
+    }
+    setPendingSaveAction(null);
+    setEditJustificationText("");
   };
 
   const handleApplyTemplate = (templateId: string) => {
@@ -433,7 +485,15 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
       isRetroactive: Boolean(record.isRetroactive),
       retroactiveJustification: record.retroactiveJustification || "",
     });
-    toast.info("Atendimento carregado para edição.");
+    // Se a evolução já estava finalizada/assinada, qualquer salvar daqui pra
+    // frente vai exigir justificativa (auditada em clinical_evolution_edit_log).
+    const locked = record.status === "finalizado" || record.status === "assinado";
+    setEditingLockedStatus(locked ? record.status : null);
+    if (locked) {
+      toast.warning("Esta consulta já foi finalizada. Toda edição exige justificativa e será registrada em auditoria.");
+    } else {
+      toast.info("Atendimento carregado para edição.");
+    }
   };
 
   const handleOpenSignature = (record: any) => {
@@ -761,7 +821,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
 
           {/* Botões de Salvar / Finalizar no fim da ficha */}
           <div className="flex flex-wrap items-center justify-end gap-2 pt-4 border-t border-border/40">
-            <Button type="button" onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>
+            <Button type="button" onClick={() => handleSave()} disabled={createMutation.isPending || updateMutation.isPending}>
               {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               <Save className="mr-2 h-4 w-4" />
               Salvar
@@ -769,7 +829,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
             <Button
               type="button"
               variant="outline"
-              onClick={handleFinalize}
+              onClick={() => handleFinalize()}
               disabled={createMutation.isPending || updateMutation.isPending}
               className="border-emerald-600/30 text-emerald-700"
             >
@@ -824,6 +884,19 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
                       {!isLegacy && (
                         <Button size="sm" variant="outline" onClick={() => handleSelectEvolution(record)}>
                           Continuar
+                        </Button>
+                      )}
+                      {!isLegacy && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setHistoryForEvolutionId(record.id);
+                            setHistoryDialogOpen(true);
+                          }}
+                        >
+                          <History className="mr-1.5 h-3.5 w-3.5" />
+                          Histórico
                         </Button>
                       )}
                       <Button size="sm" variant="outline" onClick={() => { setSelectedEvolution(record); setExportDialogOpen(true); }}>
@@ -949,6 +1022,107 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
             </Button>
             <Button onClick={handleExport}>
               Exportar agora
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de justificativa para edição de consulta finalizada/assinada */}
+      <Dialog
+        open={justificationDialogOpen}
+        onOpenChange={(open) => {
+          setJustificationDialogOpen(open);
+          if (!open) {
+            setPendingSaveAction(null);
+            setEditJustificationText("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Justificar edição de consulta finalizada</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Esta consulta já está {editingLockedStatus === "assinado" ? "assinada" : "finalizada"}.
+              Para fins de auditoria, descreva o motivo da edição. Tudo será registrado (quem,
+              quando, o que mudou e a justificativa) e ficará disponível para consulta posterior.
+            </p>
+            <Textarea
+              value={editJustificationText}
+              onChange={(e) => setEditJustificationText(e.target.value)}
+              placeholder="Ex.: Correção de CID erroneamente informado; acréscimo de informação relatada pelo paciente após a consulta..."
+              rows={5}
+              className="resize-none"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Mínimo de 10 caracteres. A versão anterior e a nova serão gravadas no log de auditoria.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setJustificationDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmJustificationAndSubmit}
+              disabled={editJustificationText.trim().length < 10 || updateMutation.isPending}
+            >
+              {updateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Confirmar e {pendingSaveAction === "finalizado" ? "finalizar" : "salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de histórico de edições auditáveis */}
+      <Dialog
+        open={historyDialogOpen}
+        onOpenChange={(open) => {
+          setHistoryDialogOpen(open);
+          if (!open) setHistoryForEvolutionId(null);
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Histórico de edições auditáveis</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+            {editHistoryQuery.isLoading ? (
+              <p className="text-sm text-muted-foreground">Carregando histórico…</p>
+            ) : !editHistoryQuery.data || editHistoryQuery.data.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Nenhuma edição registrada após a finalização desta consulta.
+              </p>
+            ) : (
+              editHistoryQuery.data.map((log: any) => (
+                <div key={log.id} className="rounded-xl border border-border/60 p-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                    <span className="font-medium">
+                      {log.editedByUserName}
+                      {log.editedByUserRole ? ` (${log.editedByUserRole})` : ""}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(log.editedAt).toLocaleString("pt-BR")}
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mb-2">
+                    Status: {log.previousStatus || "—"} → {log.newStatus || "—"}
+                  </div>
+                  <p className="text-sm whitespace-pre-wrap mb-2">
+                    <span className="font-semibold">Justificativa:</span> {log.justification}
+                  </p>
+                  {Array.isArray(log.changedFields) && log.changedFields.length > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      Campos alterados: {log.changedFields.join(", ")}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHistoryDialogOpen(false)}>
+              Fechar
             </Button>
           </DialogFooter>
         </DialogContent>
