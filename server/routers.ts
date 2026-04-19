@@ -420,9 +420,15 @@ export const appRouter = router({
   // â”€â”€â”€ PATIENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   patients: router({
     list: protectedProcedure
-      .input(z.object({ query: z.string().optional(), limit: z.number().optional() }))
+      .input(
+        z.object({
+          query: z.string().optional(),
+          limit: z.number().optional(),
+          sort: z.enum(["name_asc", "name_desc", "created_desc", "created_asc"]).optional(),
+        }),
+      )
       .query(async ({ ctx, input }) => {
-        return dbComplete.listPatients(input.query, input.limit);
+        return dbComplete.listPatients(input.query, input.limit, input.sort);
       }),
 
     create: protectedProcedure

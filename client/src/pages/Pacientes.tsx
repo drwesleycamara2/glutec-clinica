@@ -117,6 +117,7 @@ export default function Pacientes() {
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [sort, setSort] = useState<"name_asc" | "name_desc" | "created_desc" | "created_asc">("name_asc");
   const [showCreate, setShowCreate] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState(defaultForm);
@@ -132,6 +133,7 @@ export default function Pacientes() {
   const { data: patients, isLoading, refetch } = trpc.patients.list.useQuery({
     query: debouncedSearch || undefined,
     limit: 5000,
+    sort,
   });
 
   const createMutation = trpc.patients.create.useMutation({
@@ -187,9 +189,24 @@ export default function Pacientes() {
         </Button>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Buscar por nome, CPF ou telefone..." className="pl-10 h-11" value={search} onChange={(e) => handleSearch(e.target.value)} />
+      <div className="flex flex-col gap-3 md:flex-row">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Buscar por nome, CPF ou telefone..." className="pl-10 h-11" value={search} onChange={(e) => handleSearch(e.target.value)} />
+        </div>
+        <div className="w-full md:w-[280px]">
+          <Select value={sort} onValueChange={(value) => setSort(value as typeof sort)}>
+            <SelectTrigger className="h-11">
+              <SelectValue placeholder="Ordenar pacientes" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name_asc">Nome: A-Z</SelectItem>
+              <SelectItem value="name_desc">Nome: Z-A</SelectItem>
+              <SelectItem value="created_desc">Cadastro: mais recentes</SelectItem>
+              <SelectItem value="created_asc">Cadastro: mais antigos</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {isLoading ? (

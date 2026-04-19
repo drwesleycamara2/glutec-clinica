@@ -339,27 +339,39 @@ function normalizeTemplateRow(row: any) {
 }
 
 // --- PATIENTS ----------------------------------------------------------------
-export async function listPatients(query?: string, limit: number = 5000) {
+export async function listPatients(
+  query?: string,
+  limit: number = 5000,
+  sort: "name_asc" | "name_desc" | "created_desc" | "created_asc" = "name_asc",
+) {
   const db = await getDb();
   if (!db) return [];
 
   const normalizedQuery = query?.trim();
-  const rows = unwrapRows<any>(normalizedQuery
-    ? await db.execute(sql`
-        select *
-        from patients
+  const orderByClause =
+    sort === "name_desc"
+      ? sql`fullName desc`
+      : sort === "created_desc"
+      ? sql`createdAt desc, id desc`
+      : sort === "created_asc"
+      ? sql`createdAt asc, id asc`
+      : sql`fullName asc`;
+
+  const whereClause = normalizedQuery
+    ? sql`
         where fullName like ${`%${normalizedQuery}%`}
            or cpf like ${`%${normalizedQuery}%`}
            or phone like ${`%${normalizedQuery}%`}
-        order by fullName asc
-        limit ${limit}
-      `)
-    : await db.execute(sql`
-        select *
-        from patients
-        order by fullName asc
-        limit ${limit}
-      `));
+      `
+    : sql``;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from patients
+    ${whereClause}
+    order by ${orderByClause}
+    limit ${limit}
+  `));
 
   return rows.map((row: any) => {
     let addressData: Record<string, string> = {};
