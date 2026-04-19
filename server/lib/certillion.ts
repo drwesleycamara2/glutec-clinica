@@ -75,6 +75,26 @@ export function documentHash(content: Buffer): string {
 
 const DEFAULT_BASE = "https://cloud.certillion.com";
 
+function extractApiError(data: any, status: number) {
+  if (typeof data === "string" && data.trim()) return data.trim();
+  return (
+    data?.error_description ||
+    data?.error ||
+    data?.message ||
+    data?.detail ||
+    `HTTP ${status}`
+  );
+}
+
+function buildFormBody(values: Record<string, string | number | undefined | null>) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined || value === null || value === "") continue;
+    params.set(key, String(value));
+  }
+  return params;
+}
+
 export class CertillionClient {
   private baseUrl: string;
 
@@ -82,23 +102,37 @@ export class CertillionClient {
     this.baseUrl = (config.baseUrl || DEFAULT_BASE).replace(/\/$/, "");
   }
 
+  private oauthUrl(path: string) {
+    return `${this.baseUrl}/css/restful/application/oauth/${path.replace(/^\/+/, "")}`;
+  }
+
   /**
    * Etapa 1: token da aplicação (client_credentials).
    * Usado para chamadas que não exigem usuário (upload/download/find-psc-accounts).
    */
   async getClientToken(): Promise<{ accessToken: string; expiresIn: number }> {
+    const body = buildFormBody({
+      client_id: this.config.clientId,
+      client_secret: this.config.clientSecret,
+      grant_type: "client_credentials",
+      lifetime: 300,
+    });
+
     const resp = await axios.post(
-      `${this.baseUrl}/api/oauth/client_token`,
+      this.oauthUrl("client_token"),
+      body.toString(),
       {
-        grant_type: "client_credentials",
-        client_id: this.config.clientId,
-        client_secret: this.config.clientSecret,
+        timeout: 15000,
+        validateStatus: () => true,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+        },
       },
-      { timeout: 15000, validateStatus: () => true },
     );
 
     if (resp.status >= 400) {
-      const msg = resp.data?.error_description || resp.data?.error || `HTTP ${resp.status}`;
+      const msg = extractApiError(resp.data, resp.status);
       throw new Error(`Certillion /client_token: ${msg}`);
     }
 
@@ -122,7 +156,7 @@ export class CertillionClient {
     const form = new FormData();
     form.append("file", fileBuffer, { filename: fileName, contentType: mimeType });
 
-    const resp = await axios.post(`${this.baseUrl}/api/oauth/document`, form, {
+    const resp = await axios.post(this.oauthUrl("document"), form, {
       headers: { ...form.getHeaders(), Authorization: `Bearer ${clientToken}` },
       timeout: 60000,
       maxContentLength: Infinity,
@@ -131,7 +165,7 @@ export class CertillionClient {
     });
 
     if (resp.status >= 400) {
-      const msg = resp.data?.error_description || resp.data?.error || `HTTP ${resp.status}`;
+      const msg = extractApiError(resp.data, resp.status);
       throw new Error(`Certillion /document upload: ${msg}`);
     }
 
@@ -161,7 +195,7 @@ export class CertillionClient {
 
     const params = new URLSearchParams({
       response_type: "code",
-      client_id: this.config.clientId,
+      manager_id: this.config.clientId,
       redirect_uri: this.config.redirectUri,
       scope: opts.scope || "signature_session",
       code_challenge: codeChallenge,
@@ -174,7 +208,7 @@ export class CertillionClient {
     });
 
     return {
-      authorizeUrl: `${this.baseUrl}/api/oauth/authorize?${params.toString()}`,
+      authorizeUrl: `${this.oauthUrl("authorize")}?${params.toString()}`,
       codeVerifier,
       codeChallenge,
       state: opts.state,
@@ -187,22 +221,35 @@ export class CertillionClient {
   async exchangeCodeForToken(
     code: string,
     codeVerifier: string,
+    psc?: CertillionPsc,
   ): Promise<{ accessToken: string; expiresIn: number; authorizedIdentification?: string }> {
+    const body = buildFormBody({
+      client_id: this.config.clientId,
+      client_secret: this.config.clientSecret,
+      manager_id: this.config.clientId,
+      manager_secret: this.config.clientSecret,
+      code,
+      code_verifier: codeVerifier,
+      grant_type: "authorization_code",
+      redirect_uri: this.config.redirectUri,
+      psc: psc || undefined,
+    });
+
     const resp = await axios.post(
-      `${this.baseUrl}/api/oauth/token`,
+      this.oauthUrl("token"),
+      body.toString(),
       {
-        grant_type: "authorization_code",
-        client_id: this.config.clientId,
-        client_secret: this.config.clientSecret,
-        code,
-        code_verifier: codeVerifier,
-        redirect_uri: this.config.redirectUri,
+        timeout: 15000,
+        validateStatus: () => true,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+        },
       },
-      { timeout: 15000, validateStatus: () => true },
     );
 
     if (resp.status >= 400) {
-      const msg = resp.data?.error_description || resp.data?.error || `HTTP ${resp.status}`;
+      const msg = extractApiError(resp.data, resp.status);
       throw new Error(`Certillion /token: ${msg}`);
     }
 
@@ -239,18 +286,14 @@ export class CertillionClient {
       })),
     };
 
-    const resp = await axios.post(`${this.baseUrl}/api/oauth/signature`, payload, {
+    const resp = await axios.post(this.oauthUrl("signature"), payload, {
       headers: { Authorization: `Bearer ${accessToken}` },
       timeout: 60000,
       validateStatus: () => true,
     });
 
     if (resp.status >= 400) {
-      const msg =
-        resp.data?.error_description ||
-        resp.data?.error ||
-        resp.data?.message ||
-        `HTTP ${resp.status}`;
+      const msg = extractApiError(resp.data, resp.status);
       throw new Error(`Certillion /signature: ${msg}`);
     }
 
@@ -273,7 +316,7 @@ export class CertillionClient {
    * Só funciona se o upload foi feito via /oauth/document.
    */
   async downloadDocument(clientToken: string, documentId: string): Promise<Buffer> {
-    const resp = await axios.get(`${this.baseUrl}/api/oauth/document/${encodeURIComponent(documentId)}`, {
+    const resp = await axios.get(`${this.oauthUrl(`document/${encodeURIComponent(documentId)}`)}`, {
       headers: { Authorization: `Bearer ${clientToken}` },
       responseType: "arraybuffer",
       timeout: 60000,
@@ -293,18 +336,29 @@ export class CertillionClient {
     clientToken: string,
     cpfOrCnpj: string,
   ): Promise<Array<{ psc: string; subject?: string; validity?: string }>> {
+    const digits = cpfOrCnpj.replace(/\D/g, "");
+    const documentType = digits.length > 11 ? "CNPJ" : "CPF";
     const resp = await axios.post(
-      `${this.baseUrl}/api/oauth/find-psc-accounts`,
-      { identification: cpfOrCnpj.replace(/\D/g, "") },
+      this.oauthUrl("user-discovery"),
       {
-        headers: { Authorization: `Bearer ${clientToken}` },
+        client_id: this.config.clientId,
+        client_secret: this.config.clientSecret,
+        user_cpf_cnpj: documentType,
+        val_cpf_cnpj: digits,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${clientToken}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
         timeout: 15000,
         validateStatus: () => true,
       },
     );
 
     if (resp.status >= 400) {
-      const msg = resp.data?.error_description || resp.data?.error || `HTTP ${resp.status}`;
+      const msg = extractApiError(resp.data, resp.status);
       throw new Error(`Certillion /find-psc-accounts: ${msg}`);
     }
 

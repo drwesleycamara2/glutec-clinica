@@ -320,7 +320,11 @@ async function startServer() {
         baseUrl: cfg.baseUrl,
       });
 
-      const tok = await client.exchangeCodeForToken(code, session.codeVerifier);
+      const tok = await client.exchangeCodeForToken(
+        code,
+        session.codeVerifier,
+        session.psc as any,
+      );
       const sigs = await client.signHashes(tok.accessToken, [
         { hash: session.documentHash, alias: session.documentAlias },
       ]);
