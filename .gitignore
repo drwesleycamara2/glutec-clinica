@@ -111,3 +111,12 @@ temp/
 __pycache__/
 HANDOFF_CLAUDE_CODE_2026-04-10.docx.zip
 tmp_tuss_202601.zip
+
+# Runtime uploads/imports and temporary migration artifacts
+public/uploads/
+public/imports/
+tmp-imports/
+tmp_*.cjs
+.codex-backups/
+.env.backup-*
+*.bak-*
