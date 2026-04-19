@@ -120,3 +120,6 @@ tmp_*.cjs
 .codex-backups/
 .env.backup-*
 *.bak-*
+
+# Local placeholder left by OneDrive during Codex work; not used by the app
+server/lib/patient-normalization.ts

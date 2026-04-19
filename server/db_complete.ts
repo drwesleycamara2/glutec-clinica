@@ -10,6 +10,14 @@ import {
   fetchMunicipalParameters,
   testNationalApiConnection,
 } from "./lib/nfse-nacional";
+import {
+  normalizeEmailValue,
+  normalizePatientAddressFields,
+  normalizePtBrTitleCase,
+  normalizeStateCode,
+  nullableOrNull,
+  parseStoredPatientAddress,
+} from "./lib/patient-normalization-safe";
 import { encryptSensitiveValue, maskStoredValue } from "./lib/secure-storage";
 import { createWhatsAppService } from "./whatsapp";
 
@@ -374,23 +382,25 @@ export async function listPatients(
   `));
 
   return rows.map((row: any) => {
-    let addressData: Record<string, string> = {};
-    if (typeof row.address === "string" && row.address.trim().startsWith("{")) {
-      try {
-        addressData = JSON.parse(row.address);
-      } catch {
-        addressData = {};
-      }
-    }
+    const addressData = normalizePatientAddressFields(
+      parseStoredPatientAddress(row.address),
+    );
+    const fullName = normalizePtBrTitleCase(row.fullName ?? "");
+    const email = normalizeEmailValue(row.email ?? "");
+    const city = normalizePtBrTitleCase(row.city ?? addressData.city ?? "");
+    const state = normalizeStateCode(row.state ?? addressData.state ?? "");
+    const zipCode = String(row.zipCode ?? addressData.zip ?? "").trim();
 
     return {
       ...row,
-      name: row.fullName ?? "",
-      zipCode: addressData.zip ?? "",
-      city: addressData.city ?? "",
-      state: addressData.state ?? "",
+      fullName,
+      name: fullName,
+      email,
+      zipCode,
+      city,
+      state,
       neighborhood: addressData.neighborhood ?? "",
-      address: addressData.street ?? row.address ?? "",
+      address: addressData.street ?? "",
     };
   });
 }
@@ -399,14 +409,26 @@ export async function createPatient(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
+  const normalizedAddress = normalizePatientAddressFields({
+    street: data.address,
+    number: data.addressNumber,
+    neighborhood: data.neighborhood,
+    city: data.city,
+    state: data.state,
+    zip: data.zipCode,
+  });
+  const normalizedFullName = normalizePtBrTitleCase(data.fullName);
+  const normalizedEmail = normalizeEmailValue(data.email);
+  const normalizedEmergencyContactName = normalizePtBrTitleCase(data.emergencyContactName);
+
   // Store full address (including neighborhood) as JSON in the `address` column
   const addressJson = JSON.stringify({
-    street: data.address || "",
-    number: data.addressNumber || "",
-    neighborhood: data.neighborhood || "",
-    city: data.city || "",
-    state: data.state || "",
-    zip: data.zipCode || "",
+    street: normalizedAddress.street,
+    number: normalizedAddress.number,
+    neighborhood: normalizedAddress.neighborhood,
+    city: normalizedAddress.city,
+    state: normalizedAddress.state,
+    zip: normalizedAddress.zip,
   });
 
   const result = await db.execute(sql`
@@ -419,23 +441,23 @@ export async function createPatient(data: any, userId: number) {
       emergencyContactName, emergencyContactPhone,
       active, createdBy
     ) VALUES (
-      ${data.fullName},
+      ${normalizedFullName},
       ${data.cpf || null},
       ${data.birthDate || null},
       ${data.gender || "nao_informado"},
       ${data.phone || null},
-      ${data.email || null},
+      ${nullableOrNull(normalizedEmail)},
       ${addressJson},
-      ${data.city || null},
-      ${data.state || null},
-      ${data.zipCode || null},
+      ${nullableOrNull(normalizedAddress.city)},
+      ${nullableOrNull(normalizedAddress.state)},
+      ${nullableOrNull(normalizedAddress.zip)},
       ${data.rg || null},
       ${data.bloodType || "desconhecido"},
       ${data.allergies || null},
       ${data.chronicConditions || null},
       ${data.insuranceName || null},
       ${data.insuranceNumber || null},
-      ${data.emergencyContactName || null},
+      ${nullableOrNull(normalizedEmergencyContactName)},
       ${data.emergencyContactPhone || null},
       true,
       ${userId}
@@ -443,12 +465,9 @@ export async function createPatient(data: any, userId: number) {
   `);
 
   const insertId = (result as any)?.[0]?.insertId ?? (result as any)?.insertId;
-  if (!insertId) return { id: null, fullName: data.fullName };
+  if (!insertId) return { id: null, fullName: normalizedFullName };
 
-  const rows = unwrapRows<any>(await db.execute(sql`
-    SELECT * FROM patients WHERE id = ${insertId} LIMIT 1
-  `));
-  return rows[0] ?? { id: insertId, fullName: data.fullName };
+  return (await getPatientById(Number(insertId))) ?? { id: insertId, fullName: normalizedFullName };
 }
 
 export async function getPatientById(id: number) {
@@ -465,24 +484,26 @@ export async function getPatientById(id: number) {
   const row = rows[0];
   if (!row) return null;
 
-  let addressData: Record<string, string> = {};
-  if (typeof row.address === "string" && row.address.trim().startsWith("{")) {
-    try {
-      addressData = JSON.parse(row.address);
-    } catch {
-      addressData = {};
-    }
-  }
+  const addressData = normalizePatientAddressFields(parseStoredPatientAddress(row.address));
+  const fullName = normalizePtBrTitleCase(row.fullName ?? "");
+  const email = normalizeEmailValue(row.email ?? "");
+  const city = normalizePtBrTitleCase(row.city ?? addressData.city ?? "");
+  const state = normalizeStateCode(row.state ?? addressData.state ?? "");
+  const zipCode = String(row.zipCode ?? addressData.zip ?? "").trim();
+  const emergencyContactName = normalizePtBrTitleCase(row.emergencyContactName ?? "");
 
   return {
     ...row,
-    name: row.fullName ?? "",
-    zipCode: row.zipCode ?? addressData.zip ?? "",
-    city: row.city ?? addressData.city ?? "",
-    state: row.state ?? addressData.state ?? "",
+    fullName,
+    name: fullName,
+    email,
+    zipCode,
+    city,
+    state,
     neighborhood: addressData.neighborhood ?? "",
-    address: addressData.street ?? row.address ?? "",
+    address: addressData.street ?? "",
     addressNumber: addressData.number ?? "",
+    emergencyContactName,
     // Compat: schema legado tinha healthInsurance/healthInsuranceNumber
     insuranceName: row.insuranceName ?? row.healthInsurance ?? null,
     insuranceNumber: row.insuranceNumber ?? row.healthInsuranceNumber ?? null,
@@ -497,7 +518,7 @@ export async function updatePatient(id: number, data: any) {
   const existing = await getPatientById(id);
   if (!existing) throw new Error("Paciente não encontrado.");
 
-  const addressJson = JSON.stringify({
+  const normalizedAddress = normalizePatientAddressFields({
     street: data.address ?? existing.address ?? "",
     number: data.addressNumber ?? existing.addressNumber ?? "",
     neighborhood: data.neighborhood ?? existing.neighborhood ?? "",
@@ -505,32 +526,46 @@ export async function updatePatient(id: number, data: any) {
     state: data.state ?? existing.state ?? "",
     zip: data.zipCode ?? existing.zipCode ?? "",
   });
+  const normalizedFullName = normalizePtBrTitleCase(data.fullName ?? existing.fullName ?? "");
+  const normalizedEmail = normalizeEmailValue(data.email ?? existing.email ?? "");
+  const normalizedEmergencyContactName = normalizePtBrTitleCase(
+    data.emergencyContactName ?? existing.emergencyContactName ?? "",
+  );
+
+  const addressJson = JSON.stringify({
+    street: normalizedAddress.street,
+    number: normalizedAddress.number,
+    neighborhood: normalizedAddress.neighborhood,
+    city: normalizedAddress.city,
+    state: normalizedAddress.state,
+    zip: normalizedAddress.zip,
+  });
 
   await db.execute(sql`
     UPDATE patients SET
-      fullName = ${data.fullName ?? existing.fullName},
+      fullName = ${normalizedFullName},
       cpf = ${data.cpf ?? existing.cpf ?? null},
       birthDate = ${data.birthDate ?? existing.birthDate ?? null},
       gender = ${data.gender ?? existing.gender ?? "nao_informado"},
       phone = ${data.phone ?? existing.phone ?? null},
-      email = ${data.email ?? existing.email ?? null},
+      email = ${nullableOrNull(normalizedEmail)},
       address = ${addressJson},
-      city = ${data.city ?? existing.city ?? null},
-      state = ${data.state ?? existing.state ?? null},
-      zipCode = ${data.zipCode ?? existing.zipCode ?? null},
+      city = ${nullableOrNull(normalizedAddress.city)},
+      state = ${nullableOrNull(normalizedAddress.state)},
+      zipCode = ${nullableOrNull(normalizedAddress.zip)},
       rg = ${data.rg ?? existing.rg ?? null},
       bloodType = ${data.bloodType ?? existing.bloodType ?? "desconhecido"},
       allergies = ${data.allergies ?? existing.allergies ?? null},
       chronicConditions = ${data.chronicConditions ?? existing.chronicConditions ?? null},
       insuranceName = ${data.insuranceName ?? existing.insuranceName ?? null},
       insuranceNumber = ${data.insuranceNumber ?? existing.insuranceNumber ?? null},
-      emergencyContactName = ${data.emergencyContactName ?? existing.emergencyContactName ?? null},
+      emergencyContactName = ${nullableOrNull(normalizedEmergencyContactName)},
       emergencyContactPhone = ${data.emergencyContactPhone ?? existing.emergencyContactPhone ?? null},
       updatedAt = NOW()
     WHERE id = ${id}
   `);
 
-  return { id, fullName: data.fullName ?? existing.fullName };
+  return { id, fullName: normalizedFullName };
 }
 
 // --- APPOINTMENTS ------------------------------------------------------------

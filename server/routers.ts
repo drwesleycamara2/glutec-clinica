@@ -441,6 +441,7 @@ export const appRouter = router({
         email: z.string().optional(),
         zipCode: z.string(),
         address: z.string(),
+        addressNumber: z.string().optional(),
         neighborhood: z.string(),
         city: z.string(),
         state: z.string(),
