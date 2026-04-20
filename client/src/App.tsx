@@ -6,7 +6,7 @@ import React, { useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Dashboard from "./pages/Dashboard.premium";
-import Usuarios from "./pages/Usuarios.premium";
+import Usuarios from "./pages/UsuariosEquipe";
 import Agenda from "./pages/Agenda";
 import Pacientes from "./pages/Pacientes";
 import Prontuarios from "./pages/Prontuarios";
@@ -33,11 +33,11 @@ import Chat from "./pages/Chat";
 import Perfil from "./pages/Perfil";
 import DashboardLayout from "./components/DashboardLayoutPremium";
 import Login from "./pages/Login";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
-import AceitarConvite from "./pages/AceitarConvite";
-import VerificarDoisFatores from "./pages/VerificarDoisFatores";
-import Configurar2FA from "./pages/Configurar2FA";
+import ForgotPassword from "./pages/ForgotPasswordSafe";
+import ResetPassword from "./pages/ResetPasswordSafe";
+import AceitarConvite from "./pages/AceitarConviteSafe";
+import VerificarDoisFatores from "./pages/VerificarDoisFatoresSafe";
+import Configurar2FA from "./pages/Configurar2FASafe";
 import TrocarSenha from "./pages/TrocarSenha";
 import EnvioMidiasPaciente from "./pages/EnvioMidiasPaciente";
 import AnamnesePublica from "./pages/AnamnesePublica";
@@ -77,7 +77,7 @@ function AdminOnly({ component: Component }: { component: React.ComponentType })
 function AdminOrGerente({ component: Component }: { component: React.ComponentType }) {
   const { user } = useAuth();
   const role = (user as any)?.role;
-  if (role !== "admin" && role !== "gerente") return <AccessDenied />;
+  if (role !== "admin" && role !== "gerente" && !canAccessModule(user, "financeiro")) return <AccessDenied />;
   return <Component />;
 }
 

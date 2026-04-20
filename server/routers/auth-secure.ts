@@ -16,7 +16,7 @@ import {
 import { createSessionToken, generateSecureToken } from "../_core/auth";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getSessionCookieOptions } from "../_core/cookies";
-import { sendEmail, inviteEmailTemplate, testSmtpConnection } from "../_core/mailer";
+import { sendEmail, inviteEmailTemplate, testSmtpConnection } from "../_core/mailerSafePtbr";
 
 const SUPER_ADMIN_EMAIL = "contato@drwesleycamara.com.br";
 

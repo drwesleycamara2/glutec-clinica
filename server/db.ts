@@ -247,7 +247,32 @@ export async function getAudioTranscriptionsByRecord(medicalRecordId: number) {
 export async function getAllUsers() {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(users);
+  const result = await db
+    .select({
+      id: users.id,
+      openId: users.openId,
+      name: users.name,
+      email: users.email,
+      loginMethod: users.loginMethod,
+      specialty: users.specialty,
+      profession: users.profession,
+      crm: users.crm,
+      professionalLicenseType: users.professionalLicenseType,
+      professionalLicenseState: users.professionalLicenseState,
+      phone: users.phone,
+      role: users.role,
+      status: users.status,
+      permissions: users.permissions,
+      mustChangePassword: users.mustChangePassword,
+      twoFactorEnabled: users.twoFactorEnabled,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+      lastSignedIn: users.lastSignedIn,
+    })
+    .from(users)
+    .orderBy(desc(users.createdAt));
+
+  return result.map((row) => normalizeUserRow(row as any));
 }
 
 export async function updateUserStatus(userId: number, status: 'active' | 'inactive' | 'pending_password_change') {
@@ -271,8 +296,9 @@ export async function deleteUser(userId: number) {
 export async function inviteUser(data: {
   email: string;
   name: string;
-  role: "user" | "admin" | "medico" | "recepcionista" | "enfermeiro";
+  role: "user" | "admin" | "medico" | "recepcionista" | "enfermeiro" | "gerente";
   permissions: string;
+  profession?: string | null;
 }) {
   const db = await getDb();
   if (!db) return;
@@ -284,6 +310,7 @@ export async function inviteUser(data: {
     email: data.email,
     name: data.name,
     role: data.role,
+    profession: data.profession ?? null,
     permissions: data.permissions,
     status: 'inactive',
     openId: `invited_${data.email}`, // Temporary openId
@@ -291,6 +318,7 @@ export async function inviteUser(data: {
     set: {
       name: data.name,
       role: data.role,
+      profession: data.profession ?? null,
       permissions: data.permissions,
       status: 'inactive'
     }
@@ -435,8 +463,9 @@ export async function markInvitationUsed(invitationId: number) {
 export async function createUserFromInvite(data: {
   email: string;
   name: string;
-  role: "user" | "admin" | "medico" | "recepcionista" | "enfermeiro";
+  role: "user" | "admin" | "medico" | "recepcionista" | "enfermeiro" | "gerente";
   passwordHash: string;
+  profession?: string | null;
 }) {
   const db = await getDb();
   if (!db) return null;
@@ -448,6 +477,7 @@ export async function createUserFromInvite(data: {
       .set({
         name: data.name,
         role: data.role,
+        profession: data.profession ?? existing.profession ?? null,
         status: "active",
         password: data.passwordHash,
         mustChangePassword: 0,
@@ -464,6 +494,7 @@ export async function createUserFromInvite(data: {
     email: data.email,
     loginMethod: "local",
     role: data.role,
+    profession: data.profession ?? null,
     status: "active",
     permissions: "[]",
     password: data.passwordHash,

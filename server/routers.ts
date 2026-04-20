@@ -287,7 +287,16 @@ export const appRouter = router({
         email: z.string().email(),
         name: z.string(),
         role: z.enum(['user', 'admin', 'medico', 'recepcionista', 'enfermeiro', 'gerente']),
-        permissions: z.string(),
+        permissions: z.array(z.string()),
+        jobTitles: z.array(z.enum([
+          'medico',
+          'gerente',
+          'massoterapeuta',
+          'tecnico_enfermagem',
+          'enfermeiro',
+          'secretaria',
+          'apoio',
+        ])).min(1),
       }))
       .mutation(async ({ ctx, input }) => {
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
@@ -295,14 +304,25 @@ export const appRouter = router({
         const normalizedEmail = input.email.toLowerCase().trim();
         const existingUser = await db.getUserByEmail(normalizedEmail);
         if (existingUser && existingUser.status === 'active' && ((existingUser as any).passwordHash || (existingUser as any).password)) {
-          throw new TRPCError({ code: 'CONFLICT', message: 'Ja existe um usuario ativo com este e-mail.' });
+          throw new TRPCError({ code: 'CONFLICT', message: 'Já existe um usuário ativo com este e-mail.' });
         }
 
         await db.inviteUser({
           email: normalizedEmail,
           name: input.name,
           role: input.role,
-          permissions: input.permissions,
+          permissions: JSON.stringify(input.permissions),
+          profession: input.jobTitles
+            .map((jobTitle) => ({
+              medico: 'Médica(o)',
+              gerente: 'Gerente',
+              massoterapeuta: 'Massoterapeuta',
+              tecnico_enfermagem: 'Técnica(o) de enfermagem',
+              enfermeiro: 'Enfermeira(o)',
+              secretaria: 'Secretária(o)',
+              apoio: 'Apoio',
+            }[jobTitle] || jobTitle))
+            .join(', '),
         });
 
         const token = generateSecureToken(32);
@@ -321,6 +341,7 @@ export const appRouter = router({
           name: input.name,
           inviterName: ctx.user.name || 'Administrador',
           role: input.role,
+          jobTitles: input.jobTitles,
           acceptUrl,
           expiresIn: '48 horas',
         });
@@ -330,7 +351,7 @@ export const appRouter = router({
           success: true,
           emailSent: emailResult.success,
           manualLink: emailResult.success ? null : acceptUrl,
-          warning: emailResult.success ? null : `E-mail nao enviado: ${emailResult.error}`,
+          warning: emailResult.success ? null : `E-mail não enviado: ${emailResult.error}`,
         };
       }),
 

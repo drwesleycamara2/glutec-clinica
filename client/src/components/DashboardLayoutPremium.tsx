@@ -249,7 +249,7 @@ function DashboardLayoutPremiumContent({
         ...section,
         items: section.items.filter(item => {
           if (item.adminOnly && user?.role !== "admin") return false;
-          if (item.adminOrGerente && user?.role !== "admin" && user?.role !== "gerente") return false;
+          if (item.adminOrGerente && user?.role !== "admin" && user?.role !== "gerente" && !canAccessModule(user, item.moduleId)) return false;
           return canAccessModule(user, item.moduleId);
         }),
       })),

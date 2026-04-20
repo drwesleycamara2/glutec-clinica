@@ -3,7 +3,7 @@ import { randomBytes } from "crypto";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getSessionCookieOptions } from "./cookies";
 import * as db from "../db";
-import { passwordResetEmailTemplate, sendEmail } from "./mailer";
+import { passwordResetEmailTemplate, sendEmail } from "./mailerSafePtbr";
 import {
   authenticateRequest,
   createSessionToken,
@@ -197,7 +197,7 @@ export function registerAuthRoutes(app: Express) {
 
     const { email, password } = req.body ?? {};
     if (!email || !password) {
-      return res.status(400).json({ error: "E-mail e senha sao obrigatorios." });
+      return res.status(400).json({ error: "E-mail e senha são obrigatórios." });
     }
 
     const user = await db.getUserByEmail(String(email).toLowerCase().trim());
@@ -249,21 +249,21 @@ export function registerAuthRoutes(app: Express) {
   app.post("/api/auth/login/2fa", async (req, res) => {
     const { tempToken, code } = req.body ?? {};
     if (!tempToken || !code) {
-      return res.status(400).json({ error: "Token e codigo sao obrigatorios." });
+      return res.status(400).json({ error: "Token e código são obrigatórios." });
     }
 
     const payload = await verifyTempTwoFactorToken(tempToken);
     if (!payload) {
-      return res.status(401).json({ error: "Token invalido ou expirado. Faca login novamente." });
+      return res.status(401).json({ error: "Token inválido ou expirado. Faça login novamente." });
     }
 
     const user = await db.getUserById(payload.userId);
     if (!user || !user.twoFactorSecret) {
-      return res.status(401).json({ error: "Usuario nao encontrado." });
+      return res.status(401).json({ error: "Usuário não encontrado." });
     }
 
     if (!verifyTotpCode(code, user.twoFactorSecret)) {
-      return res.status(401).json({ error: "Codigo invalido. Verifique o app autenticador." });
+      return res.status(401).json({ error: "Código inválido. Verifique o aplicativo autenticador." });
     }
 
     await db.updateUserLastSignedIn(user.id);
@@ -283,17 +283,17 @@ export function registerAuthRoutes(app: Express) {
   app.post("/api/auth/login/backup", async (req, res) => {
     const { tempToken, backupCode } = req.body ?? {};
     if (!tempToken || !backupCode) {
-      return res.status(400).json({ error: "Token e codigo de backup sao obrigatorios." });
+      return res.status(400).json({ error: "Token e código de backup são obrigatórios." });
     }
 
     const payload = await verifyTempTwoFactorToken(tempToken);
     if (!payload) {
-      return res.status(401).json({ error: "Token invalido ou expirado." });
+      return res.status(401).json({ error: "Token inválido ou expirado." });
     }
 
     const user = await db.getUserById(payload.userId);
     if (!user || !user.twoFactorBackupCodes) {
-      return res.status(401).json({ error: "Usuario nao encontrado." });
+      return res.status(401).json({ error: "Usuário não encontrado." });
     }
 
     const { valid, remainingCodesJson } = await verifyAndConsumeBackupCode(
@@ -302,7 +302,7 @@ export function registerAuthRoutes(app: Express) {
     );
 
     if (!valid) {
-      return res.status(401).json({ error: "Codigo de backup invalido." });
+      return res.status(401).json({ error: "Código de backup inválido." });
     }
 
     await db.updateUser2FABackupCodes(user.id, remainingCodesJson);
@@ -328,40 +328,42 @@ export function registerAuthRoutes(app: Express) {
     const { token, password, confirmPassword } = req.body ?? {};
 
     if (!token || !password || !confirmPassword) {
-      return res.status(400).json({ error: "Token, senha e confirmacao sao obrigatorios." });
+      return res.status(400).json({ error: "Token, senha e confirmação são obrigatórios." });
     }
 
     if (password !== confirmPassword) {
-      return res.status(400).json({ error: "As senhas nao coincidem." });
+      return res.status(400).json({ error: "As senhas não coincidem." });
     }
 
     if (!isStrongPassword(password)) {
       return res.status(400).json({
-        error: "A senha deve ter pelo menos 8 caracteres, letra maiuscula, numero e caractere especial.",
+        error: "A senha deve ter pelo menos 8 caracteres, letra maiúscula, número e caractere especial.",
       });
     }
 
     const invitation = await db.getInvitationByToken(token);
     if (!invitation) {
-      return res.status(404).json({ error: "Convite nao encontrado ou invalido." });
+      return res.status(404).json({ error: "Convite não encontrado ou inválido." });
     }
     if (invitation.usedAt) {
-      return res.status(409).json({ error: "Este convite ja foi utilizado." });
+      return res.status(409).json({ error: "Este convite já foi utilizado." });
     }
     if (new Date() > invitation.expiresAt) {
       return res.status(410).json({ error: "Este convite expirou. Solicite um novo convite." });
     }
 
+    const invitedUser = await db.getUserByEmail(invitation.email);
     const passwordHash = await hashPassword(password);
     const user = await db.createUserFromInvite({
       email: invitation.email,
       name: invitation.name ?? invitation.email,
       role: invitation.role,
       passwordHash,
+      profession: invitedUser?.profession ?? null,
     });
 
     if (!user) {
-      return res.status(500).json({ error: "Erro ao criar conta. Tente novamente." });
+      return res.status(500).json({ error: "Erro ao criar a conta. Tente novamente." });
     }
 
     await db.markInvitationUsed(invitation.id);
@@ -381,21 +383,21 @@ export function registerAuthRoutes(app: Express) {
   app.post("/api/auth/change-password", async (req, res) => {
     const user = await authenticateRequest(req);
     if (!user) {
-      return res.status(401).json({ error: "Sessao invalida. Faca login novamente." });
+      return res.status(401).json({ error: "Sessão inválida. Faça login novamente." });
     }
 
     const { currentPassword, newPassword, confirmPassword } = req.body ?? {};
     if (!newPassword || !confirmPassword) {
-      return res.status(400).json({ error: "Nova senha e confirmacao sao obrigatorias." });
+      return res.status(400).json({ error: "Nova senha e confirmação são obrigatórias." });
     }
 
     if (newPassword !== confirmPassword) {
-      return res.status(400).json({ error: "As senhas nao coincidem." });
+      return res.status(400).json({ error: "As senhas não coincidem." });
     }
 
     if (!isStrongPassword(newPassword)) {
       return res.status(400).json({
-        error: "A senha deve ter pelo menos 8 caracteres, letra maiuscula, numero e caractere especial.",
+        error: "A senha deve ter pelo menos 8 caracteres, letra maiúscula, número e caractere especial.",
       });
     }
 
@@ -443,14 +445,21 @@ export function registerAuthRoutes(app: Express) {
   app.get("/api/auth/invite/:token", async (req, res) => {
     const invitation = await db.getInvitationByToken(req.params.token);
 
-    if (!invitation) return res.status(404).json({ error: "Convite nao encontrado." });
-    if (invitation.usedAt) return res.status(409).json({ error: "Convite ja utilizado." });
+    if (!invitation) return res.status(404).json({ error: "Convite não encontrado." });
+    if (invitation.usedAt) return res.status(409).json({ error: "Convite já utilizado." });
     if (new Date() > invitation.expiresAt) return res.status(410).json({ error: "Convite expirado." });
+
+    const invitedUser = await db.getUserByEmail(invitation.email);
+    const jobTitles = String(invitedUser?.profession ?? "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
 
     return res.json({
       email: invitation.email,
       name: invitation.name,
       role: invitation.role,
+      jobTitles,
       expiresAt: invitation.expiresAt,
     });
   });
