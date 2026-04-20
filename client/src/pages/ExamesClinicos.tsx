@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useEffect } from "react";
 import { AllergyAlert } from "@/components/AllergyAlert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -94,6 +95,26 @@ export default function ExamesClinicos() {
 
   const groupedRequests = useMemo(() => examRequests ?? [], [examRequests]);
   const contentPreview = buildExamRequestContent(selectedExams, freeText);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const linkedPatientId = params.get("patientId");
+    const shouldCreate = params.get("create") === "1";
+
+    if (linkedPatientId && /^\d+$/.test(linkedPatientId)) {
+      setSelectedPatientId(Number(linkedPatientId));
+      if (shouldCreate && canCreate) {
+        setShowCreate(true);
+      }
+    }
+  }, [canCreate]);
+
+  useEffect(() => {
+    if (patient?.fullName || patient?.name) {
+      setSelectedPatientLabel(patient.fullName ?? patient.name ?? "");
+    }
+  }, [patient]);
 
   const addExam = (exam: { code: string; name: string; description?: string }) => {
     if (selectedExams.some((item) => item.code === exam.code)) return;

@@ -62,6 +62,7 @@ const DAY_STATUS_LABELS: Record<keyof typeof DAY_STATUS_COLORS, string> = {
 };
 
 const defaultAppointmentForm = {
+  appointmentId: "",
   patientId: "",
   doctorId: "",
   scheduledAt: "",
@@ -130,6 +131,12 @@ function doesRangeOverlap(startA: Date, endA: Date, startB: Date, endB: Date) {
   return startA < endB && endA > startB;
 }
 
+function toDateTimeInputValue(date: Date) {
+  const offset = date.getTimezoneOffset();
+  const local = new Date(date.getTime() - offset * 60 * 1000);
+  return local.toISOString().slice(0, 16);
+}
+
 export default function Agenda() {
   const [, setLocation] = useLocation();
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -148,6 +155,7 @@ export default function Agenda() {
 
   const { data: doctors } = trpc.admin.getDoctors.useQuery();
   const { data: patients } = trpc.patients.list.useQuery({ limit: 5000 });
+  const { data: clinicSettings } = trpc.clinic.get.useQuery();
   const { data: appointments, refetch: refetchAppointments } = trpc.appointments.getByDate.useQuery({
     from: broadRangeStart.toISOString(),
     to: broadRangeEnd.toISOString(),
@@ -161,6 +169,16 @@ export default function Agenda() {
     onSuccess: () => {
       toast.success("Agendamento salvo com sucesso.");
       setShowCreateDialog(false);
+      setAppointmentForm(defaultAppointmentForm);
+      refetchAppointments();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const updateAppointmentMutation = trpc.appointments.update.useMutation({
+    onSuccess: () => {
+      toast.success("Agendamento atualizado com sucesso.");
+      setShowCreateDialog(false);
+      setSelectedEvent(null);
       setAppointmentForm(defaultAppointmentForm);
       refetchAppointments();
     },
@@ -194,6 +212,14 @@ export default function Agenda() {
     },
     onError: (error) => toast.error(error.message),
   });
+
+  const structuralSectors = useMemo(() => {
+    const values = Array.isArray(clinicSettings?.structuralSectors) ? clinicSettings.structuralSectors : [];
+    return values.length > 0 ? values : ["Consultório", "Centro Cirúrgico"];
+  }, [clinicSettings]);
+
+  const isEditingAppointment = Boolean(appointmentForm.appointmentId);
+  const isSavingAppointment = createAppointmentMutation.isPending || updateAppointmentMutation.isPending;
 
   const filteredAppointments = useMemo(() => {
     return (appointments ?? [])
@@ -322,18 +348,18 @@ export default function Agenda() {
     setAppointmentForm({
       ...defaultAppointmentForm,
       doctorId: selectedDoctor === "all" ? "" : selectedDoctor,
-      scheduledAt: scheduledAt.toISOString().slice(0, 16),
+      scheduledAt: toDateTimeInputValue(scheduledAt),
     });
     setShowCreateDialog(true);
   };
 
   const handleCreateAppointment = () => {
     if (!appointmentForm.patientId || !appointmentForm.doctorId || !appointmentForm.scheduledAt || !appointmentForm.room.trim()) {
-      toast.error("Preencha paciente, profissional, data, horário e sala.");
+      toast.error("Preencha paciente, profissional, data, horário e local do atendimento.");
       return;
     }
 
-    createAppointmentMutation.mutate({
+    const payload = {
       patientId: Number(appointmentForm.patientId),
       doctorId: Number(appointmentForm.doctorId),
       scheduledAt: appointmentForm.scheduledAt,
@@ -341,7 +367,17 @@ export default function Agenda() {
       room: appointmentForm.room.trim(),
       type: appointmentForm.type,
       notes: appointmentForm.notes,
-    });
+    };
+
+    if (appointmentForm.appointmentId) {
+      updateAppointmentMutation.mutate({
+        appointmentId: Number(appointmentForm.appointmentId),
+        ...payload,
+      });
+      return;
+    }
+
+    createAppointmentMutation.mutate(payload);
   };
 
   const handleCreateBlock = () => {
@@ -370,6 +406,21 @@ export default function Agenda() {
 
   const openAppointmentDetails = (appointment: any) => {
     setSelectedEvent({ ...appointment, eventType: "appointment" });
+  };
+
+  const openEditAppointment = (appointment: any) => {
+    setAppointmentForm({
+      appointmentId: String(appointment.id),
+      patientId: String(appointment.patientId),
+      doctorId: String(appointment.doctorId),
+      scheduledAt: toDateTimeInputValue(new Date(appointment.scheduledAt)),
+      durationMinutes: String(appointment.duration ?? appointment.durationMinutes ?? 30),
+      type: appointment.type || "consulta",
+      notes: appointment.notes || "",
+      room: appointment.room || "",
+    });
+    setSelectedEvent(null);
+    setShowCreateDialog(true);
   };
 
   const openBlockDetails = (block: any) => {
@@ -448,7 +499,7 @@ export default function Agenda() {
             ))}
           </div>
 
-          <Button variant="outline" size="sm" className="border-gray-300">
+          <Button variant="outline" size="sm" className="border-gray-300" onClick={() => setLocation("/configuracoes")}>
             <Settings className="mr-2 h-4 w-4" />
             Opções
           </Button>
@@ -486,7 +537,7 @@ export default function Agenda() {
                     <th className="w-24 px-3 py-2 text-left">Horário</th>
                     <th className="px-3 py-2 text-left">Paciente</th>
                     <th className="w-28 px-3 py-2 text-left">Tipo</th>
-                    <th className="w-28 px-3 py-2 text-left">Sala</th>
+                    <th className="w-32 px-3 py-2 text-left">Local</th>
                     <th className="w-32 px-3 py-2 text-center">Situação</th>
                     <th className="w-24 px-3 py-2 text-center">Ações</th>
                   </tr>
@@ -572,7 +623,7 @@ export default function Agenda() {
                           <span className="text-xs capitalize text-gray-600">{appointment.type ?? "Consulta"}</span>
                         </td>
                         <td className="px-3 py-3">
-                          <span className="text-xs text-gray-600">{appointment.room || "Sem sala"}</span>
+                          <span className="text-xs text-gray-600">{appointment.room || "Não informado"}</span>
                         </td>
                         <td className="px-3 py-3 text-center">
                           <Badge className="border border-yellow-300 bg-yellow-100 text-yellow-700">
@@ -580,7 +631,9 @@ export default function Agenda() {
                           </Badge>
                         </td>
                         <td className="px-3 py-3 text-center">
-                          <button type="button" className="text-xs text-gray-600 hover:text-gray-900">Ver</button>
+                          <button type="button" className="text-xs text-gray-600 hover:text-gray-900" onClick={() => openAppointmentDetails(appointment)}>
+                            Ver detalhes
+                          </button>
                         </td>
                       </tr>
                     ));
@@ -1020,10 +1073,18 @@ export default function Agenda() {
         </div>
       </div>
 
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+      <Dialog
+        open={showCreateDialog}
+        onOpenChange={(open) => {
+          setShowCreateDialog(open);
+          if (!open) {
+            setAppointmentForm(defaultAppointmentForm);
+          }
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Novo agendamento</DialogTitle>
+            <DialogTitle>{isEditingAppointment ? "Alterar agendamento" : "Novo agendamento"}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -1087,13 +1148,19 @@ export default function Agenda() {
               </div>
 
               <div>
-                <Label className="text-sm font-semibold">Sala *</Label>
-                <Input
-                  placeholder="Ex.: Sala 1"
-                  value={appointmentForm.room}
-                  onChange={(event) => setAppointmentForm((current) => ({ ...current, room: event.target.value }))}
-                  className="mt-1 border-gray-300"
-                />
+                <Label className="text-sm font-semibold">Local do atendimento *</Label>
+                <Select value={appointmentForm.room || undefined} onValueChange={(value) => setAppointmentForm((current) => ({ ...current, room: value }))}>
+                  <SelectTrigger className="mt-1 border-gray-300">
+                    <SelectValue placeholder="Selecione onde o atendimento acontecerá" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {structuralSectors.map((sector) => (
+                      <SelectItem key={sector} value={sector}>
+                        {sector}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -1123,8 +1190,8 @@ export default function Agenda() {
             <Button variant="outline" onClick={() => setShowCreateDialog(false)} className="border-gray-300">
               Cancelar
             </Button>
-            <Button onClick={handleCreateAppointment} className="btn-gold-gradient" disabled={createAppointmentMutation.isPending}>
-              {createAppointmentMutation.isPending ? "Salvando..." : "Agendar"}
+            <Button onClick={handleCreateAppointment} className="btn-gold-gradient" disabled={isSavingAppointment}>
+              {isSavingAppointment ? "Salvando..." : isEditingAppointment ? "Salvar alterações" : "Agendar"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1164,13 +1231,20 @@ export default function Agenda() {
             </div>
 
             <div>
-              <Label className="text-sm font-semibold">Sala</Label>
-              <Input
-                value={blockForm.room}
-                onChange={(event) => setBlockForm((current) => ({ ...current, room: event.target.value }))}
-                placeholder="Deixe em branco para todas"
-                className="mt-1 border-gray-300"
-              />
+              <Label className="text-sm font-semibold">Local</Label>
+              <Select value={blockForm.room || "all"} onValueChange={(value) => setBlockForm((current) => ({ ...current, room: value === "all" ? "" : value }))}>
+                <SelectTrigger className="mt-1 border-gray-300">
+                  <SelectValue placeholder="Deixe em branco para todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os locais</SelectItem>
+                  {structuralSectors.map((sector) => (
+                    <SelectItem key={sector} value={sector}>
+                      {sector}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -1252,8 +1326,8 @@ export default function Agenda() {
                   </p>
                 </div>
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Sala</p>
-                  <p className="mt-2 text-sm font-semibold text-gray-900">{selectedEvent.room || "Sem sala"}</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Local</p>
+                  <p className="mt-2 text-sm font-semibold text-gray-900">{selectedEvent.room || "Não informado"}</p>
                 </div>
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Fim previsto</p>
@@ -1285,7 +1359,7 @@ export default function Agenda() {
                   <p className="mt-2 text-sm font-semibold text-gray-900">{selectedEvent.title}</p>
                 </div>
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Sala</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Local</p>
                   <p className="mt-2 text-sm font-semibold text-gray-900">{selectedEvent.room || "Todas"}</p>
                 </div>
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
@@ -1310,6 +1384,12 @@ export default function Agenda() {
           <DialogFooter className="flex-wrap gap-2">
             {selectedEvent?.eventType === "appointment" ? (
               <>
+                <Button
+                  variant="outline"
+                  onClick={() => openEditAppointment(selectedEvent)}
+                >
+                  Alterar
+                </Button>
                 <Button
                   variant="outline"
                   onClick={() => updateStatusMutation.mutate({ appointmentId: selectedEvent.id, status: "confirmada" })}

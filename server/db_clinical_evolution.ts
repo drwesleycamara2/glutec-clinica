@@ -26,6 +26,14 @@ function isReceptionDeskRole(role?: string | null) {
   return normalized === "recepcionista" || normalized === "secretaria";
 }
 
+function isSecretaryRecord(record: Record<string, any>) {
+  const secretaryNotes = String(record?.secretaryNotes || "").trim();
+  const clinicalNotes = String(record?.clinicalNotes || "").trim();
+  const icdCode = String(record?.icdCode || "").trim();
+  const audioTranscription = String(record?.audioTranscription || "").trim();
+  return Boolean(secretaryNotes) && !clinicalNotes && !icdCode && !audioTranscription;
+}
+
 function redactClinicalFieldsForViewer<T extends Record<string, any>>(record: T, viewerRole?: string | null): T {
   if (!isReceptionDeskRole(viewerRole)) {
     return record;
@@ -93,16 +101,26 @@ export async function createClinicalEvolution(
 
 export async function getClinicalEvolutionById(
   id: number,
-  viewerRole?: string | null
+  viewerRole?: string | null,
+  viewerUserId?: number | null
 ): Promise<ClinicalEvolution | null> {
   const evolution = await getClinicalEvolutionByIdInternal(id);
   if (!evolution) return null;
+  if (isReceptionDeskRole(viewerRole)) {
+    const ownsRecord = [evolution.createdBy, evolution.doctorId, evolution.updatedBy].some(
+      (value) => Number(value) === Number(viewerUserId),
+    );
+    if (!ownsRecord || !isSecretaryRecord(evolution)) {
+      return null;
+    }
+  }
   return redactClinicalFieldsForViewer(evolution, viewerRole) as ClinicalEvolution & Record<string, unknown>;
 }
 
 export async function getClinicalEvolutionsByPatient(
   patientId: number,
-  viewerRole?: string | null
+  viewerRole?: string | null,
+  viewerUserId?: number | null
 ): Promise<ClinicalEvolution[]> {
   const db = await getDb();
   if (!db) return [];
@@ -124,6 +142,7 @@ export async function getClinicalEvolutionsByPatient(
     doctorName: row.doctorName,
     doctorEmail: row.doctorEmail,
     doctorRole: row.doctorRole,
+    isSecretaryRecord: isSecretaryRecord(row.evolution),
     isLegacy: false as const,
   })) as (ClinicalEvolution & Record<string, unknown>)[];
 
@@ -131,7 +150,15 @@ export async function getClinicalEvolutionsByPatient(
   // Verde / OneDoctor, ou criados antes da tabela clinical_evolutions). Eles
   // representam evoluções e devem aparecer aqui, não na lista de anamneses.
   const legacy = await getLegacyEvolutionsFromMedicalRecords(patientId);
-  return [...current, ...legacy].map((record) => redactClinicalFieldsForViewer(record, viewerRole)).sort((a: any, b: any) => {
+  const visibleCurrent = isReceptionDeskRole(viewerRole)
+    ? current.filter(
+        (record) =>
+          record.isSecretaryRecord &&
+          [record.createdBy, record.doctorId, record.updatedBy].some((value) => Number(value) === Number(viewerUserId)),
+      )
+    : current;
+  const visibleLegacy = isReceptionDeskRole(viewerRole) ? [] : legacy;
+  return [...visibleCurrent, ...visibleLegacy].map((record) => redactClinicalFieldsForViewer(record, viewerRole)).sort((a: any, b: any) => {
     const da = new Date(a.startedAt ?? a.createdAt ?? 0).getTime();
     const db2 = new Date(b.startedAt ?? b.createdAt ?? 0).getTime();
     return db2 - da;
@@ -238,6 +265,7 @@ export async function getLegacyEvolutionsFromMedicalRecords(
       doctorName: r.doctorName,
       doctorEmail: r.doctorEmail,
       doctorRole: r.doctorRole,
+      isSecretaryRecord: false,
       isLegacy: true,
       legacySource: r.sourceSystem ?? null,
       legacySourceLabel: sourceLabel,

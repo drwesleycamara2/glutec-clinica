@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { useParams, useLocation } from "wouter";
+import type { ChangeEvent, ReactNode } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,7 +27,7 @@ import {
   ArrowLeft, Plus, FileText, Activity, Stethoscope, ClipboardList, Loader2,
   Calendar, User, ShieldCheck, FileDown, UserCheck, Copy, Link2, Paperclip,
   FlaskConical, Package, Save, Upload, Trash2, Search, CheckCircle2, History, FolderOpen, ImageIcon,
-  ScrollText, Pencil,
+  ScrollText, Pencil, ExternalLink, Receipt, Video, Layers3, ClipboardPlus,
 } from "lucide-react";
 import { PatientEditDialog } from "@/components/PatientEditDialog";
 import { AllergyAlert } from "@/components/AllergyAlert";
@@ -105,10 +106,64 @@ function groupDocumentsByType(documents: any[]) {
   }, {});
 }
 
+const DEFAULT_ATTACHMENT_FOLDERS = ["Documentos pessoais", "Resultados de exames"];
+
+const DOCUMENT_TYPE_OPTIONS = [
+  { value: "atestado", label: "Atestado" },
+  { value: "declaracao", label: "Declaração" },
+  { value: "rg", label: "Documento pessoal" },
+  { value: "cpf", label: "CPF / identificação" },
+  { value: "convenio", label: "Convênio / carteirinha" },
+  { value: "exame_pdf", label: "Resultado de exame" },
+  { value: "solicitacao_exames", label: "Solicitação de exames" },
+  { value: "laudo", label: "Laudo / relatório" },
+  { value: "contrato", label: "Contrato" },
+  { value: "termo", label: "Termo de consentimento" },
+  { value: "outro", label: "Outro documento" },
+] as const;
+
+function getAttachmentFolderLabel(document: any) {
+  if (document?.folderLabel) return repairMojibake(document.folderLabel);
+
+  const type = String(document?.type ?? "").toLowerCase();
+  if (["rg", "cpf", "convenio"].includes(type)) return "Documentos pessoais";
+  if (["exame_pdf", "exame_imagem", "solicitacao_exames", "laudo"].includes(type)) return "Resultados de exames";
+  if (["contrato", "termo"].includes(type)) return "Contratos e termos";
+  return "Outros anexos";
+}
+
+async function fileToBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result ?? "");
+      resolve(result.includes(",") ? result.split(",")[1] : result);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function isSecretaryOnlyEvolutionRecord(record: any) {
+  return Boolean(record?.isSecretaryRecord) || (
+    String(record?.secretaryNotes || "").trim().length > 0 &&
+    String(record?.clinicalNotes || "").trim().length === 0 &&
+    String(record?.icdCode || "").trim().length === 0 &&
+    String(record?.audioTranscription || "").trim().length === 0
+  );
+}
+
 function HistoricoTab({ patientId }: { patientId: number }) {
   const { user } = useAuth();
   const isReceptionist = user?.role === "recepcionista" || user?.role === "secretaria";
   const { data: evolutions, isLoading } = trpc.clinicalEvolution.getByPatient.useQuery({ patientId });
+  const visibleEvolutions = useMemo(
+    () =>
+      (evolutions ?? []).filter((record: any) =>
+        isReceptionist ? isSecretaryOnlyEvolutionRecord(record) : !isSecretaryOnlyEvolutionRecord(record),
+      ),
+    [evolutions, isReceptionist],
+  );
 
   if (isLoading) {
     return (
@@ -118,12 +173,16 @@ function HistoricoTab({ patientId }: { patientId: number }) {
     );
   }
 
-  if (!evolutions || evolutions.length === 0) {
+  if (visibleEvolutions.length === 0) {
     return (
       <Card className="border-border/50">
         <CardContent className="py-12 text-center">
           <History className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
-          <p className="text-sm text-muted-foreground">Nenhum atendimento registrado neste prontuário ainda.</p>
+          <p className="text-sm text-muted-foreground">
+            {isReceptionist
+              ? "Nenhum registro administrativo seu foi encontrado neste prontuário ainda."
+              : "Nenhum atendimento clínico registrado neste prontuário ainda."}
+          </p>
         </CardContent>
       </Card>
     );
@@ -131,7 +190,7 @@ function HistoricoTab({ patientId }: { patientId: number }) {
 
   return (
     <div className="space-y-3">
-      {evolutions.map((ev: any) => {
+      {visibleEvolutions.map((ev: any) => {
         const baseDate = ev.startedAt || ev.createdAt;
         const date = baseDate
           ? new Date(baseDate).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
@@ -166,8 +225,8 @@ function HistoricoTab({ patientId }: { patientId: number }) {
 
               {isReceptionist ? (
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Observações da secretaria</p>
-                  <p className="text-sm whitespace-pre-wrap">{ev.secretaryNotes?.trim() || "Sem observações da secretaria neste registro."}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Registro administrativo</p>
+                  <p className="text-sm whitespace-pre-wrap">{ev.secretaryNotes?.trim() || "Sem registro administrativo neste atendimento."}</p>
                 </div>
               ) : (
                 <>
@@ -175,12 +234,6 @@ function HistoricoTab({ patientId }: { patientId: number }) {
                     <div className="mb-2">
                       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Notas clínicas</p>
                       <p className="text-sm whitespace-pre-wrap">{ev.clinicalNotes}</p>
-                    </div>
-                  )}
-                  {ev.secretaryNotes && (
-                    <div className="mb-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Observações da secretaria</p>
-                      <p className="text-sm whitespace-pre-wrap">{ev.secretaryNotes}</p>
                     </div>
                   )}
                   {ev.audioTranscription && (
@@ -197,6 +250,63 @@ function HistoricoTab({ patientId }: { patientId: number }) {
                   )}
                 </>
               )}
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+function SecretariaTab({ patientId }: { patientId: number }) {
+  const { data: evolutions, isLoading } = trpc.clinicalEvolution.getByPatient.useQuery({ patientId });
+  const records = useMemo(
+    () => (evolutions ?? []).filter((record: any) => isSecretaryOnlyEvolutionRecord(record)),
+    [evolutions],
+  );
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-[#C9A55B]" />
+      </div>
+    );
+  }
+
+  if (records.length === 0) {
+    return (
+      <Card className="border-border/50">
+        <CardContent className="py-12 text-center">
+          <UserCheck className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+          <p className="text-sm text-muted-foreground">Nenhum registro administrativo da secretaria foi encontrado para este paciente.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {records.map((record: any) => {
+        const baseDate = record.startedAt || record.createdAt;
+        const date = baseDate
+          ? new Date(baseDate).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
+          : "—";
+
+        return (
+          <Card key={`secretaria-${record.id}`} className="border-border/50">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <UserCheck className="h-4 w-4 text-[#C9A55B]" />
+                  <span className="text-sm font-semibold text-foreground">Registro da secretaria</span>
+                  {record.status && <Badge variant="outline" className="text-[10px]">{record.status}</Badge>}
+                </div>
+                <span className="text-xs text-muted-foreground">{date}</span>
+              </div>
+
+              <p className="text-sm whitespace-pre-wrap text-foreground">
+                {record.secretaryNotes?.trim() || "Sem conteúdo registrado."}
+              </p>
             </CardContent>
           </Card>
         );
@@ -495,20 +605,246 @@ function AnamneseTab({ patientId }: { patientId: number }) {
   );
 }
 
-/* ─────────────────────────────────────────────────
-   AtestadosTab — placeholder (no dedicated backend yet)
-   ───────────────────────────────────────────────── */
-function AtestadosTab({ patientId: _pid, patientName: _pn }: { patientId: number; patientName: string }) {
+function TabHeader({
+  title,
+  description,
+  actions,
+}: {
+  title: string;
+  description: string;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-background/70 p-4 md:flex-row md:items-center md:justify-between">
+      <div className="space-y-1">
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        <p className="text-xs leading-5 text-muted-foreground">{description}</p>
+      </div>
+      {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+    </div>
+  );
+}
+
+function DocumentUploadPanel({
+  patientId,
+  defaultFolderLabel,
+  allowedTypes,
+  title = "Inserir arquivo",
+  description = "Envie arquivos PDF, imagens ou documentos para este prontuário.",
+}: {
+  patientId: number;
+  defaultFolderLabel?: string;
+  allowedTypes?: string[];
+  title?: string;
+  description?: string;
+}) {
+  const clinicQuery = trpc.clinic.get.useQuery();
+  const utils = trpc.useUtils();
+  const [descriptionValue, setDescriptionValue] = useState("");
+  const [inputKey, setInputKey] = useState(0);
+  const availableTypeOptions = DOCUMENT_TYPE_OPTIONS.filter((option) =>
+    !allowedTypes || allowedTypes.includes(option.value),
+  );
+  const [selectedType, setSelectedType] = useState(availableTypeOptions[0]?.value ?? "outro");
+  const [selectedFolder, setSelectedFolder] = useState(defaultFolderLabel ?? DEFAULT_ATTACHMENT_FOLDERS[0]);
+
+  const availableFolders = useMemo(() => {
+    const configured = Array.isArray(clinicQuery.data?.patientAttachmentFolders)
+      ? clinicQuery.data.patientAttachmentFolders
+      : DEFAULT_ATTACHMENT_FOLDERS;
+    const merged = [...DEFAULT_ATTACHMENT_FOLDERS, ...configured, defaultFolderLabel || ""]
+      .map((item) => repairMojibake(item).trim())
+      .filter(Boolean);
+    return Array.from(new Set(merged));
+  }, [clinicQuery.data?.patientAttachmentFolders, defaultFolderLabel]);
+
+  useEffect(() => {
+    if (!availableFolders.length) return;
+    if (!selectedFolder || !availableFolders.includes(selectedFolder)) {
+      setSelectedFolder(defaultFolderLabel && availableFolders.includes(defaultFolderLabel) ? defaultFolderLabel : availableFolders[0]);
+    }
+  }, [availableFolders, defaultFolderLabel, selectedFolder]);
+
+  const uploadMutation = trpc.medicalRecords.uploadDocument.useMutation({
+    onSuccess: async () => {
+      toast.success("Arquivo anexado com sucesso.");
+      setDescriptionValue("");
+      setInputKey((current) => current + 1);
+      await utils.medicalRecords.getDocuments.invalidate({ patientId });
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || "Não foi possível anexar o arquivo.");
+    },
+  });
+
+  const handleFilesSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    if (!files.length) return;
+
+    try {
+      for (const file of files) {
+        const base64 = await fileToBase64(file);
+        await uploadMutation.mutateAsync({
+          patientId,
+          type: selectedType,
+          folderLabel: selectedFolder || defaultFolderLabel,
+          description: descriptionValue || undefined,
+          name: file.name,
+          originalFileName: file.name,
+          base64,
+          mimeType: file.type || "application/octet-stream",
+        });
+      }
+    } finally {
+      event.currentTarget.value = "";
+    }
+  };
+
   return (
     <Card className="border-border/50">
-      <CardContent className="py-12 text-center">
-        <FileText className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
-        <p className="text-sm font-medium text-muted-foreground">Atestados e Documentos</p>
-        <p className="text-xs text-muted-foreground/70 mt-1">
-          Em breve será possível emitir atestados médicos diretamente pelo prontuário.
-        </p>
+      <CardContent className="space-y-4 p-4">
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-foreground">{title}</p>
+          <p className="text-xs leading-5 text-muted-foreground">{description}</p>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="space-y-2">
+            <Label>Pasta</Label>
+            <Select value={selectedFolder} onValueChange={setSelectedFolder}>
+              <SelectTrigger>
+                <SelectValue placeholder="Escolha a pasta" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableFolders.map((folder) => (
+                  <SelectItem key={folder} value={folder}>{folder}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Tipo do arquivo</Label>
+            <Select value={selectedType} onValueChange={setSelectedType}>
+              <SelectTrigger>
+                <SelectValue placeholder="Escolha o tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableTypeOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Descrição</Label>
+            <Input
+              value={descriptionValue}
+              onChange={(event) => setDescriptionValue(event.target.value)}
+              placeholder="Ex.: RG frente, laudo pós-operatório"
+            />
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-dashed border-[#C9A55B]/30 bg-[#C9A55B]/5 p-3">
+          <Label htmlFor={`upload-document-${patientId}-${inputKey}`} className="mb-2 block text-xs font-medium text-muted-foreground">
+            Selecione um ou mais arquivos
+          </Label>
+          <Input
+            key={inputKey}
+            id={`upload-document-${patientId}-${inputKey}`}
+            type="file"
+            multiple
+            onChange={handleFilesSelected}
+            disabled={uploadMutation.isPending}
+          />
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Após selecionar, o envio é feito automaticamente para a pasta escolhida.
+          </p>
+        </div>
       </CardContent>
     </Card>
+  );
+}
+
+function AtestadosTab({ patientId, patientName: _pn }: { patientId: number; patientName: string }) {
+  const [, navigate] = useLocation();
+  const { data: documents, isLoading } = trpc.medicalRecords.getDocuments.useQuery({ patientId });
+  const relevantDocuments = useMemo(
+    () => ((documents as any[]) || []).filter((doc) => ["atestado", "declaracao", "laudo"].includes(String(doc.type || "").toLowerCase())),
+    [documents],
+  );
+
+  return (
+    <div className="space-y-4">
+      <TabHeader
+        title="Atestados e documentos clínicos"
+        description="Consulte o histórico já salvo, faça upload de novos arquivos e abra o editor/modelos quando quiser montar um documento na hora."
+        actions={
+          <>
+            <Button size="sm" variant="outline" onClick={() => navigate(`/documentos?patientId=${patientId}&type=atestado&create=1`)}>
+              <Pencil className="mr-1.5 h-3.5 w-3.5" />
+              Fazer na hora
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => navigate("/templates")}>
+              <ClipboardPlus className="mr-1.5 h-3.5 w-3.5" />
+              Usar modelo
+            </Button>
+          </>
+        }
+      />
+
+      <DocumentUploadPanel
+        patientId={patientId}
+        defaultFolderLabel="Documentos clínicos"
+        allowedTypes={["atestado", "declaracao", "laudo", "outro"]}
+        title="Anexar atestado, laudo ou outro documento"
+        description="Use este envio para adicionar PDFs, scans ou arquivos clínicos já prontos ao prontuário."
+      />
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-[#C9A55B]" />
+        </div>
+      ) : relevantDocuments.length === 0 ? (
+        <Card className="border-border/50">
+          <CardContent className="py-12 text-center">
+            <FileText className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+            <p className="text-sm text-muted-foreground">Nenhum atestado ou documento clínico registrado para este paciente.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {relevantDocuments.map((doc: any) => (
+            <Card key={doc.id} className="border-border/50">
+              <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <FileText className="h-4 w-4 text-[#C9A55B]" />
+                    <span className="text-sm font-semibold">{doc.name || doc.fileName || "Documento clínico"}</span>
+                    <Badge variant="outline" className="text-[10px]">{repairMojibake(doc.type || "documento")}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {doc.createdAt ? new Date(doc.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "Sem data"}
+                  </p>
+                  {doc.description ? <p className="text-sm text-muted-foreground">{repairMojibake(doc.description)}</p> : null}
+                </div>
+
+                {doc.fileUrl ? (
+                  <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
+                    <Button size="sm" variant="outline">
+                      <FileDown className="mr-1.5 h-3.5 w-3.5" />
+                      Abrir arquivo
+                    </Button>
+                  </a>
+                ) : null}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -516,6 +852,7 @@ function AtestadosTab({ patientId: _pid, patientName: _pn }: { patientId: number
    PrescricoesTab — lists prescriptions for patient
    ───────────────────────────────────────────────── */
 function PrescricoesTab({ patientId, patientName: _pn }: { patientId: number; patientName: string }) {
+  const [, navigate] = useLocation();
   const { data: prescriptions, isLoading } = trpc.prescriptions.getByPatient.useQuery({ patientId });
 
   if (isLoading) {
@@ -526,20 +863,33 @@ function PrescricoesTab({ patientId, patientName: _pn }: { patientId: number; pa
     );
   }
 
-  if (!prescriptions || prescriptions.length === 0) {
-    return (
-      <Card className="border-border/50">
-        <CardContent className="py-12 text-center">
-          <Stethoscope className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
-          <p className="text-sm text-muted-foreground">Nenhuma prescrição registrada para este paciente.</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
-    <div className="space-y-3">
-      {prescriptions.map((rx: any) => (
+    <div className="space-y-4">
+      <TabHeader
+        title="Prescrições do paciente"
+        description="Veja o histórico completo e abra a central de prescrições já com este paciente selecionado para criar novas receitas ou carregar modelos."
+        actions={
+          <>
+            <Button size="sm" variant="outline" onClick={() => navigate(`/prescricoes?patientId=${patientId}&create=1`)}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Nova prescrição
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => navigate(`/prescricoes?patientId=${patientId}`)}>
+              <ClipboardPlus className="mr-1.5 h-3.5 w-3.5" />
+              Modelos e histórico
+            </Button>
+          </>
+        }
+      />
+
+      {!prescriptions || prescriptions.length === 0 ? (
+        <Card className="border-border/50">
+          <CardContent className="py-12 text-center">
+            <Stethoscope className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+            <p className="text-sm text-muted-foreground">Nenhuma prescrição registrada para este paciente.</p>
+          </CardContent>
+        </Card>
+      ) : prescriptions.map((rx: any) => (
         <Card key={rx.id} className="border-border/50">
           <CardContent className="p-4">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
@@ -569,24 +919,94 @@ function PrescricoesTab({ patientId, patientName: _pn }: { patientId: number; pa
    ───────────────────────────────────────────────── */
 function OrcamentoTab({ patientId, patientName: _pn }: { patientId: number; patientName: string }) {
   const [, navigate] = useLocation();
+  const { data: budgets, isLoading } = trpc.budgets.getByPatient.useQuery({ patientId });
 
   return (
-    <Card className="border-border/50">
-      <CardContent className="py-12 text-center">
-        <FileText className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
-        <p className="text-sm font-medium text-muted-foreground">Orçamentos do paciente</p>
-        <p className="text-xs text-muted-foreground/70 mt-1 mb-4">
-          Gerencie orçamentos na página dedicada.
-        </p>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => navigate(`/orcamentos?patientId=${patientId}&create=1`)}
-        >
-          <Plus className="h-3.5 w-3.5 mr-1.5" />Novo orçamento
-        </Button>
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <TabHeader
+        title="Orçamentos do paciente"
+        description="Acompanhe o histórico, receba do paciente na central financeira do orçamento e siga para recibo e NFS-e quando o pagamento for confirmado."
+        actions={
+          <>
+            <Button size="sm" variant="outline" onClick={() => navigate(`/orcamentos?patientId=${patientId}&create=1`)}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Criar orçamento
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => navigate(`/orcamentos?patientId=${patientId}`)}>
+              <Receipt className="mr-1.5 h-3.5 w-3.5" />
+              Recebimento, recibo e NFS-e
+            </Button>
+          </>
+        }
+      />
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-[#C9A55B]" />
+        </div>
+      ) : !budgets || budgets.length === 0 ? (
+        <Card className="border-border/50">
+          <CardContent className="py-12 text-center">
+            <FileText className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+            <p className="text-sm text-muted-foreground">Nenhum orçamento registrado para este paciente.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {budgets.map((budget: any) => (
+            <Card key={budget.id} className="border-border/50">
+              <CardContent className="space-y-3 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <FileText className="h-4 w-4 text-[#C9A55B]" />
+                    <span className="text-sm font-semibold">Orçamento #{budget.id}</span>
+                    <Badge variant="outline" className="text-[10px]">{repairMojibake(budget.status || "rascunho")}</Badge>
+                    {budget.latestNfse?.status ? (
+                      <Badge variant="secondary" className="text-[10px]">
+                        NFS-e: {repairMojibake(budget.latestNfse.status)}
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {budget.date ? new Date(`${budget.date}T12:00:00`).toLocaleDateString("pt-BR") : "Sem data"}
+                  </span>
+                </div>
+
+                <div className="grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
+                  <p><span className="font-medium text-foreground">Título:</span> {budget.title || "Plano personalizado"}</p>
+                  <p><span className="font-medium text-foreground">Valor:</span> {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(budget.totalInCents || 0) / 100)}</p>
+                </div>
+
+                {Array.isArray(budget.items) && budget.items.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {budget.items.slice(0, 5).map((item: any, index: number) => (
+                      <Badge key={`${budget.id}-${index}`} variant="outline">{item.procedureName || item.areaName || "Procedimento"}</Badge>
+                    ))}
+                  </div>
+                ) : null}
+
+                {budget.notes ? (
+                  <p className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+                    {repairMojibake(budget.notes)}
+                  </p>
+                ) : null}
+
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => navigate(`/orcamentos?patientId=${patientId}`)}>
+                    <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                    Abrir orçamento
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => navigate(`/orcamentos?patientId=${patientId}`)}>
+                    <Receipt className="mr-1.5 h-3.5 w-3.5" />
+                    Receber / emitir nota
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -594,7 +1014,10 @@ function OrcamentoTab({ patientId, patientName: _pn }: { patientId: number; pati
    ImagensTab — patient photos
    ───────────────────────────────────────────────── */
 function ImagensTab({ patientId }: { patientId: number }) {
+  const [, navigate] = useLocation();
   const { data: photos, isLoading } = trpc.photos.getByPatient.useQuery({ patientId });
+  const { data: folders = [] } = trpc.photoGallery.getFolders.useQuery({ patientId });
+  const { data: uploadLinks = [] } = trpc.photoGallery.listUploadLinks.useQuery({ patientId });
 
   if (isLoading) {
     return (
@@ -604,35 +1027,81 @@ function ImagensTab({ patientId }: { patientId: number }) {
     );
   }
 
-  if (!photos || photos.length === 0) {
-    return (
-      <Card className="border-border/50">
-        <CardContent className="py-12 text-center">
-          <ImageIcon className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
-          <p className="text-sm text-muted-foreground">Nenhuma imagem registrada para este paciente.</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-      {photos.map((photo: any) => (
-        <Card key={photo.id} className="border-border/50 overflow-hidden">
-          <div className="aspect-square bg-muted/30 flex items-center justify-center">
-            {photo.url ? (
-              <img src={photo.url} alt={photo.description || "Imagem"} className="w-full h-full object-cover" />
-            ) : (
-              <ImageIcon className="h-8 w-8 text-muted-foreground/30" />
-            )}
-          </div>
-          {photo.description && (
-            <CardContent className="p-2">
-              <p className="text-xs text-muted-foreground truncate">{photo.description}</p>
-            </CardContent>
-          )}
+    <div className="space-y-4">
+      <TabHeader
+        title="Imagens e vídeos do paciente"
+        description="Abra a galeria principal já filtrada para este paciente, envie novas mídias e organize tudo por data, categoria ou pasta clínica."
+        actions={
+          <>
+            <Button size="sm" variant="outline" onClick={() => navigate(`/fotos?patientId=${patientId}`)}>
+              <Upload className="mr-1.5 h-3.5 w-3.5" />
+              Anexar fotos e vídeos
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => navigate(`/fotos?patientId=${patientId}`)}>
+              <Layers3 className="mr-1.5 h-3.5 w-3.5" />
+              Organizar por datas e tipo
+            </Button>
+          </>
+        }
+      />
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <Card className="border-border/50">
+          <CardContent className="p-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Mídias registradas</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{photos?.length ?? 0}</p>
+          </CardContent>
         </Card>
-      ))}
+        <Card className="border-border/50">
+          <CardContent className="p-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Pastas clínicas</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{folders.length}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/50">
+          <CardContent className="p-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Links ativos para envio</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{uploadLinks.length}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {!photos || photos.length === 0 ? (
+        <Card className="border-border/50">
+          <CardContent className="py-12 text-center">
+            <ImageIcon className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+            <p className="text-sm text-muted-foreground">Nenhuma imagem registrada para este paciente.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+          {photos.slice(0, 8).map((photo: any) => (
+            <Card key={photo.id} className="border-border/50 overflow-hidden">
+              <div className="aspect-square bg-muted/30 flex items-center justify-center">
+                {(photo.photoUrl || photo.url) ? (
+                  photo.mediaType === "video" ? (
+                    <video src={photo.photoUrl || photo.url} className="w-full h-full object-cover" muted playsInline />
+                  ) : (
+                    <img src={photo.photoUrl || photo.url} alt={photo.description || "Imagem"} className="w-full h-full object-cover" />
+                  )
+                ) : (
+                  <ImageIcon className="h-8 w-8 text-muted-foreground/30" />
+                )}
+              </div>
+              <CardContent className="space-y-1 p-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Badge variant="outline" className="text-[10px]">
+                    {photo.mediaType === "video" ? <Video className="mr-1 h-3 w-3" /> : null}
+                    {repairMojibake(photo.category || "mídia")}
+                  </Badge>
+                </div>
+                {photo.description ? <p className="text-xs text-muted-foreground truncate">{repairMojibake(photo.description)}</p> : null}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -641,6 +1110,7 @@ function ImagensTab({ patientId }: { patientId: number }) {
    AnexosTab — patient attachments / documents
    ───────────────────────────────────────────────── */
 function AnexosTab({ patientId }: { patientId: number }) {
+  const { data: clinicSettings } = trpc.clinic.get.useQuery();
   const { data: documents, isLoading } = trpc.medicalRecords.getDocuments.useQuery({ patientId });
 
   if (isLoading) {
@@ -651,22 +1121,49 @@ function AnexosTab({ patientId }: { patientId: number }) {
     );
   }
 
-  if (!documents || documents.length === 0) {
-    return (
-      <Card className="border-border/50">
-        <CardContent className="py-12 text-center">
-          <Paperclip className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
-          <p className="text-sm text-muted-foreground">Nenhum anexo registrado para este paciente.</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const grouped = groupDocumentsByType(documents as any[]);
+  const documentsList = (documents as any[]) || [];
+  const configuredFolders = Array.isArray(clinicSettings?.patientAttachmentFolders) && clinicSettings.patientAttachmentFolders.length > 0
+    ? clinicSettings.patientAttachmentFolders
+    : DEFAULT_ATTACHMENT_FOLDERS;
+  const grouped = documentsList.reduce<Record<string, any[]>>((acc, document) => {
+    const key = getAttachmentFolderLabel(document);
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(document);
+    return acc;
+  }, {});
+  const visibleFolders = Array.from(new Set([...DEFAULT_ATTACHMENT_FOLDERS, ...configuredFolders, ...Object.keys(grouped)]));
 
   return (
     <div className="space-y-4">
-      {Object.entries(grouped).map(([category, docs]) => (
+      <TabHeader
+        title="Anexos gerais do paciente"
+        description="Organize documentos em pastas padrão da clínica. Você pode criar novas pastas em Configurações e elas aparecerão aqui para todos os pacientes."
+        actions={
+          <Button size="sm" variant="outline" onClick={() => (window.location.href = "/configuracoes")}>
+            <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
+            Configurar pastas
+          </Button>
+        }
+      />
+
+      <DocumentUploadPanel
+        patientId={patientId}
+        defaultFolderLabel={visibleFolders[0] || DEFAULT_ATTACHMENT_FOLDERS[0]}
+        allowedTypes={["rg", "cpf", "convenio", "exame_pdf", "laudo", "outro"]}
+        title="Enviar documentos para o prontuário"
+        description="Selecione a pasta correta e o tipo do documento. As pastas padrão ficam disponíveis para todos os pacientes."
+      />
+
+      {documentsList.length === 0 ? (
+        <Card className="border-border/50">
+          <CardContent className="py-12 text-center">
+            <Paperclip className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+            <p className="text-sm text-muted-foreground">Nenhum anexo registrado para este paciente.</p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {visibleFolders.map((category) => (
         <Card key={category} className="border-border/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
@@ -675,28 +1172,36 @@ function AnexosTab({ patientId }: { patientId: number }) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {(docs as any[]).map((doc: any) => (
-              <div key={doc.id} className="flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-muted/20 p-2.5">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{doc.name || doc.fileName || "Documento"}</p>
-                    {doc.createdAt && (
-                      <p className="text-[10px] text-muted-foreground">
-                        {new Date(doc.createdAt).toLocaleDateString("pt-BR")}
-                      </p>
-                    )}
+            {(grouped[category] || []).length === 0 ? (
+              <p className="text-xs italic text-muted-foreground">Nenhum arquivo nesta pasta ainda.</p>
+            ) : (
+              (grouped[category] || []).map((doc: any) => (
+                <div key={doc.id} className="flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-muted/20 p-2.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{doc.name || doc.fileName || "Documento"}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {doc.createdAt && (
+                          <p className="text-[10px] text-muted-foreground">
+                            {new Date(doc.createdAt).toLocaleDateString("pt-BR")}
+                          </p>
+                        )}
+                        <Badge variant="outline" className="text-[10px]">{repairMojibake(doc.type || "anexo")}</Badge>
+                      </div>
+                      {doc.description ? <p className="text-xs text-muted-foreground truncate">{repairMojibake(doc.description)}</p> : null}
+                    </div>
                   </div>
+                  {doc.fileUrl ? (
+                    <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
+                        <FileDown className="h-3.5 w-3.5" />
+                      </Button>
+                    </a>
+                  ) : null}
                 </div>
-                {doc.url && (
-                  <a href={doc.url} target="_blank" rel="noopener noreferrer">
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
-                      <FileDown className="h-3.5 w-3.5" />
-                    </Button>
-                  </a>
-                )}
-              </div>
-            ))}
+              ))
+            )}
           </CardContent>
         </Card>
       ))}
@@ -709,6 +1214,7 @@ function AnexosTab({ patientId }: { patientId: number }) {
    (inclui os importados do Prontuario Verde via sourceSystem)
    ───────────────────────────────────────────────── */
 function ContratosTab({ patientId }: { patientId: number }) {
+  const [, navigate] = useLocation();
   const { data: documents, isLoading } = trpc.medicalRecords.getDocuments.useQuery({ patientId });
 
   if (isLoading) {
@@ -722,19 +1228,6 @@ function ContratosTab({ patientId }: { patientId: number }) {
   const contratosTermos = ((documents as any[]) || []).filter((d) =>
     d.type === "contrato" || d.type === "termo"
   );
-
-  if (contratosTermos.length === 0) {
-    return (
-      <Card className="border-border/50">
-        <CardContent className="py-12 text-center">
-          <ScrollText className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
-          <p className="text-sm text-muted-foreground">
-            Nenhum contrato ou termo registrado para este paciente.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
 
   const contratos = contratosTermos.filter((d) => d.type === "contrato");
   const termos = contratosTermos.filter((d) => d.type === "termo");
@@ -788,6 +1281,42 @@ function ContratosTab({ patientId }: { patientId: number }) {
 
   return (
     <div className="space-y-4">
+      <TabHeader
+        title="Contratos e termos"
+        description="Aqui aparecem os contratos importados do Prontuário Verde e também novos arquivos que forem anexados para este paciente."
+        actions={
+          <>
+            <Button size="sm" variant="outline" onClick={() => navigate("/assinaturas")}>
+              <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+              Abrir assinaturas
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => navigate("/assinaturas")}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Novo contrato
+            </Button>
+          </>
+        }
+      />
+
+      <DocumentUploadPanel
+        patientId={patientId}
+        defaultFolderLabel="Contratos e termos"
+        allowedTypes={["contrato", "termo"]}
+        title="Anexar contrato ou termo assinado"
+        description="Use este envio para acrescentar contratos, consentimentos e termos que já estejam prontos em PDF ou imagem."
+      />
+
+      {contratosTermos.length === 0 ? (
+        <Card className="border-border/50">
+          <CardContent className="py-12 text-center">
+            <ScrollText className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+            <p className="text-sm text-muted-foreground">
+              Nenhum contrato ou termo registrado para este paciente.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card className="border-border/50">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
@@ -818,6 +1347,7 @@ function ContratosTab({ patientId }: { patientId: number }) {
    ExamesTab — exam requests for patient
    ───────────────────────────────────────────────── */
 function ExamesTab({ patientId }: { patientId: number }) {
+  const [, navigate] = useLocation();
   const { data: exams, isLoading } = trpc.examRequests.getByPatient.useQuery({ patientId });
 
   if (isLoading) {
@@ -828,20 +1358,33 @@ function ExamesTab({ patientId }: { patientId: number }) {
     );
   }
 
-  if (!exams || exams.length === 0) {
-    return (
-      <Card className="border-border/50">
-        <CardContent className="py-12 text-center">
-          <FlaskConical className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
-          <p className="text-sm text-muted-foreground">Nenhuma solicitação de exame registrada para este paciente.</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
-    <div className="space-y-3">
-      {exams.map((exam: any) => (
+    <div className="space-y-4">
+      <TabHeader
+        title="Solicitações de exames"
+        description="Consulte o histórico completo e abra a central de exames com este paciente já selecionado para criar novas solicitações ou carregar modelos editáveis."
+        actions={
+          <>
+            <Button size="sm" variant="outline" onClick={() => navigate(`/exames?patientId=${patientId}&create=1`)}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Nova solicitação
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => navigate(`/exames?patientId=${patientId}`)}>
+              <ClipboardPlus className="mr-1.5 h-3.5 w-3.5" />
+              Modelos de exames
+            </Button>
+          </>
+        }
+      />
+
+      {!exams || exams.length === 0 ? (
+        <Card className="border-border/50">
+          <CardContent className="py-12 text-center">
+            <FlaskConical className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+            <p className="text-sm text-muted-foreground">Nenhuma solicitação de exame registrada para este paciente.</p>
+          </CardContent>
+        </Card>
+      ) : exams.map((exam: any) => (
         <Card key={exam.id} className="border-border/50">
           <CardContent className="p-4">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
@@ -876,20 +1419,180 @@ function ExamesTab({ patientId }: { patientId: number }) {
   );
 }
 
-/* ─────────────────────────────────────────────────
-   ProcedimentosTab — placeholder (no patient-specific backend yet)
-   ───────────────────────────────────────────────── */
-function ProcedimentosTab({ patientId: _pid }: { patientId: number }) {
+function ProcedimentosTab({ patientId }: { patientId: number }) {
+  const [, navigate] = useLocation();
+  const { data: budgets } = trpc.budgets.getByPatient.useQuery({ patientId });
+
+  const procedureItems = useMemo(() => {
+    return (budgets ?? []).flatMap((budget: any) =>
+      Array.isArray(budget.items)
+        ? budget.items.map((item: any) => ({
+            budgetId: budget.id,
+            status: budget.status,
+            date: budget.date,
+            procedureName: item.procedureName || "Procedimento",
+            areaName: item.areaName || "",
+            quantity: item.quantity || 1,
+          }))
+        : [],
+    );
+  }, [budgets]);
+
   return (
-    <Card className="border-border/50">
-      <CardContent className="py-12 text-center">
-        <Package className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
-        <p className="text-sm font-medium text-muted-foreground">Procedimentos realizados</p>
-        <p className="text-xs text-muted-foreground/70 mt-1">
-          Em breve será possível registrar procedimentos clínicos diretamente pelo prontuário.
-        </p>
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <TabHeader
+        title="Procedimentos e planos terapêuticos"
+        description="Os procedimentos planejados nos orçamentos do paciente aparecem aqui para facilitar a visão do tratamento."
+        actions={
+          <Button size="sm" variant="outline" onClick={() => navigate(`/orcamentos?patientId=${patientId}&create=1`)}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            Planejar procedimento
+          </Button>
+        }
+      />
+
+      {procedureItems.length === 0 ? (
+        <Card className="border-border/50">
+          <CardContent className="py-12 text-center">
+            <Package className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+            <p className="text-sm font-medium text-muted-foreground">Nenhum procedimento planejado encontrado.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {procedureItems.map((item: any, index: number) => (
+            <Card key={`${item.budgetId}-${item.procedureName}-${index}`} className="border-border/50">
+              <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Package className="h-4 w-4 text-[#C9A55B]" />
+                    <span className="text-sm font-semibold">{item.procedureName}</span>
+                    {item.areaName ? <Badge variant="outline" className="text-[10px]">{item.areaName}</Badge> : null}
+                    <Badge variant="secondary" className="text-[10px]">Qtd. {item.quantity}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Orçamento #{item.budgetId} · {item.date ? new Date(`${item.date}T12:00:00`).toLocaleDateString("pt-BR") : "Sem data"}
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-[10px]">{repairMojibake(item.status || "rascunho")}</Badge>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AgendamentosTab({ patientId }: { patientId: number }) {
+  const [, navigate] = useLocation();
+  const { data: appointments, isLoading } = trpc.appointments.getByPatient.useQuery({ patientId });
+
+  return (
+    <div className="space-y-4">
+      <TabHeader
+        title="Agendamentos do paciente"
+        description="Visualize consultas anteriores e futuras deste paciente, com horário, profissional e observações."
+        actions={
+          <Button size="sm" variant="outline" onClick={() => navigate("/agenda")}>
+            <Calendar className="mr-1.5 h-3.5 w-3.5" />
+            Abrir agenda
+          </Button>
+        }
+      />
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-[#C9A55B]" />
+        </div>
+      ) : !appointments || appointments.length === 0 ? (
+        <Card className="border-border/50">
+          <CardContent className="py-12 text-center">
+            <Calendar className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+            <p className="text-sm text-muted-foreground">Nenhum agendamento encontrado para este paciente.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {appointments.map((appointment: any) => (
+            <Card key={appointment.id} className="border-border/50">
+              <CardContent className="space-y-3 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Calendar className="h-4 w-4 text-[#C9A55B]" />
+                    <span className="text-sm font-semibold">
+                      {new Date(appointment.scheduledAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                    </span>
+                    <Badge variant="outline" className="text-[10px]">{repairMojibake(appointment.status || "agendada")}</Badge>
+                  </div>
+                  {appointment.room ? <Badge variant="secondary" className="text-[10px]">{repairMojibake(appointment.room)}</Badge> : null}
+                </div>
+                <div className="grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
+                  <p><span className="font-medium text-foreground">Tipo:</span> {repairMojibake(appointment.type || "Consulta")}</p>
+                  <p><span className="font-medium text-foreground">Profissional:</span> {repairMojibake(appointment.doctorName || "Não informado")}</p>
+                </div>
+                {appointment.notes ? (
+                  <p className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+                    {repairMojibake(appointment.notes)}
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GaleriaTab({ patientId }: { patientId: number }) {
+  const [, navigate] = useLocation();
+  const { data: photos = [] } = trpc.photos.getByPatient.useQuery({ patientId });
+  const { data: folders = [] } = trpc.photoGallery.getFolders.useQuery({ patientId });
+
+  return (
+    <div className="space-y-4">
+      <TabHeader
+        title="Galeria comparativa do paciente"
+        description="Abra a galeria principal para comparar até quatro fotos ou vídeos lado a lado, usar filtros de pasta e enviar links seguros."
+        actions={
+          <Button size="sm" variant="outline" onClick={() => navigate(`/fotos?patientId=${patientId}`)}>
+            <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+            Abrir galeria principal
+          </Button>
+        }
+      />
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <Card className="border-border/50">
+          <CardContent className="p-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Mídias disponíveis</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{photos.length}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/50">
+          <CardContent className="p-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Pastas temáticas</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{folders.length}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/50">
+          <CardContent className="p-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Comparação</p>
+            <p className="mt-2 text-sm text-muted-foreground">A galeria principal permite comparar até 4 mídias lado a lado.</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="border-border/50">
+        <CardContent className="py-10 text-center">
+          <ImageIcon className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+          <p className="text-sm text-muted-foreground">
+            Use o botão acima para abrir a galeria completa do sistema já focada neste paciente.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -903,7 +1606,22 @@ export default function ProntuarioDetalhe() {
     () =>
       isReceptionist
         ? ["historico", "evolucao"]
-        : ["historico", "anamnese", "evolucao", "atestados", "contratos", "prescricoes", "orcamentos", "imagens", "anexos", "exames", "procedimentos"],
+        : [
+            "historico",
+            "anamnese",
+            "evolucao",
+            "secretaria",
+            "atestados",
+            "contratos",
+            "prescricoes",
+            "orcamentos",
+            "imagens",
+            "galeria",
+            "anexos",
+            "exames",
+            "procedimentos",
+            "agendamentos",
+          ],
     [isReceptionist],
   );
   const [activeTab, setActiveTab] = useState(() => {
@@ -913,7 +1631,13 @@ export default function ProntuarioDetalhe() {
   });
 
   const { data: patient, isLoading, refetch: refetchPatient } = trpc.patients.getById.useQuery({ id: patientId });
+  const { data: evolutionIndex } = trpc.clinicalEvolution.getByPatient.useQuery({ patientId }, { enabled: !isReceptionist });
   const [editPatientOpen, setEditPatientOpen] = useState(false);
+  const secretaryRecords = useMemo(
+    () => (evolutionIndex ?? []).filter((record: any) => isSecretaryOnlyEvolutionRecord(record)),
+    [evolutionIndex],
+  );
+  const latestSecretaryRecord = secretaryRecords[0] ?? null;
 
   useEffect(() => {
     const syncTabFromHash = () => {
@@ -969,6 +1693,35 @@ export default function ProntuarioDetalhe() {
         <p className="text-[10px] text-[#C9A55B]">Prontuário protegido pela LGPD. Todos os acessos são registrados.</p>
       </div>
 
+      {!isReceptionist && latestSecretaryRecord && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300/40 bg-amber-50/70 p-3">
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-amber-900">Há registros da secretaria neste prontuário.</p>
+            <p className="text-xs text-amber-800">
+              Último registro em{" "}
+              {new Date(latestSecretaryRecord.startedAt || latestSecretaryRecord.createdAt).toLocaleString("pt-BR", {
+                dateStyle: "short",
+                timeStyle: "short",
+              })}
+              . Clique para visualizar em aba separada.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="border-amber-400/50 text-amber-900 hover:bg-amber-100"
+            onClick={() => {
+              setActiveTab("secretaria");
+              if (typeof window !== "undefined") {
+                window.history.replaceState(null, "", `${window.location.pathname}#secretaria`);
+              }
+            }}
+          >
+            Ver registros da secretaria
+          </Button>
+        </div>
+      )}
+
       {/* Tabs */}
       <Tabs
         value={activeTab}
@@ -992,6 +1745,9 @@ export default function ProntuarioDetalhe() {
               <TabsTrigger value="anamnese" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
                 <ClipboardList className="h-3.5 w-3.5" />Anamnese
               </TabsTrigger>
+              <TabsTrigger value="secretaria" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <UserCheck className="h-3.5 w-3.5" />Secretaria
+              </TabsTrigger>
               <TabsTrigger value="atestados" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
                 <FileText className="h-3.5 w-3.5" />Atestados / Docs
               </TabsTrigger>
@@ -1007,6 +1763,9 @@ export default function ProntuarioDetalhe() {
               <TabsTrigger value="imagens" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
                 <ImageIcon className="h-3.5 w-3.5" />Imagens
               </TabsTrigger>
+              <TabsTrigger value="galeria" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <Layers3 className="h-3.5 w-3.5" />Galeria
+              </TabsTrigger>
               <TabsTrigger value="anexos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
                 <Paperclip className="h-3.5 w-3.5" />Anexos
               </TabsTrigger>
@@ -1015,6 +1774,9 @@ export default function ProntuarioDetalhe() {
               </TabsTrigger>
               <TabsTrigger value="procedimentos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
                 <Package className="h-3.5 w-3.5" />Procedimentos
+              </TabsTrigger>
+              <TabsTrigger value="agendamentos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <Calendar className="h-3.5 w-3.5" />Agendamentos
               </TabsTrigger>
             </>
           )}
@@ -1025,14 +1787,17 @@ export default function ProntuarioDetalhe() {
         {!isReceptionist && (
           <>
             <TabsContent value="anamnese" className="mt-4"><AnamneseTab patientId={patientId} /></TabsContent>
+            <TabsContent value="secretaria" className="mt-4"><SecretariaTab patientId={patientId} /></TabsContent>
             <TabsContent value="atestados" className="mt-4"><AtestadosTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
             <TabsContent value="contratos" className="mt-4"><ContratosTab patientId={patientId} /></TabsContent>
             <TabsContent value="prescricoes" className="mt-4"><PrescricoesTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
             <TabsContent value="orcamentos" className="mt-4"><OrcamentoTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
             <TabsContent value="imagens" className="mt-4"><ImagensTab patientId={patientId} /></TabsContent>
+            <TabsContent value="galeria" className="mt-4"><GaleriaTab patientId={patientId} /></TabsContent>
             <TabsContent value="anexos" className="mt-4"><AnexosTab patientId={patientId} /></TabsContent>
             <TabsContent value="exames" className="mt-4"><ExamesTab patientId={patientId} /></TabsContent>
             <TabsContent value="procedimentos" className="mt-4"><ProcedimentosTab patientId={patientId} /></TabsContent>
+            <TabsContent value="agendamentos" className="mt-4"><AgendamentosTab patientId={patientId} /></TabsContent>
           </>
         )}
       </Tabs>

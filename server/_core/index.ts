@@ -12,6 +12,7 @@ import { registerAuthRoutes } from "./authRoutes";
 import { authenticateRequest } from "./auth";
 import { transcribeAudio } from "./voiceTranscription";
 import { resolveSystemExport } from "../lib/system-export";
+import { refineTranscriptToPtBr } from "../lib/clinical-transcription";
 import * as dbComplete from "../db_complete";
 
 function getRequestBaseUrl(req: express.Request) {
@@ -455,7 +456,20 @@ async function startServer() {
       return res.status(400).send(`${result.error}.${detail}`.trim());
     }
 
-    return res.json(result);
+    try {
+      const refinedTranscript = await refineTranscriptToPtBr(result.text || "");
+      return res.json({
+        ...result,
+        text: refinedTranscript || result.text || "",
+        refinedTranscript: refinedTranscript || result.text || "",
+      });
+    } catch (error) {
+      console.warn("Falha ao refinar a transcrição clínica em PT-BR:", error);
+      return res.json({
+        ...result,
+        refinedTranscript: result.text || "",
+      });
+    }
   });
 
   app.get("/anamnese-publica/:token", async (req, res) => {

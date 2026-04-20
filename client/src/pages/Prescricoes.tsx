@@ -1,5 +1,6 @@
 ﻿import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { useEffect } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,6 +58,21 @@ export default function Prescricoes() {
   const { data: templates } = trpc.prescriptions.listTemplates.useQuery();
   const selectedPatientId = filterPatientId === "all" ? 0 : Number(filterPatientId);
   const { data: allPrescriptions, refetch: refetchAll } = trpc.prescriptions.getByPatient.useQuery({ patientId: selectedPatientId });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const linkedPatientId = params.get("patientId");
+    const shouldCreate = params.get("create") === "1";
+
+    if (linkedPatientId && /^\d+$/.test(linkedPatientId)) {
+      setFilterPatientId(linkedPatientId);
+      setForm((current) => ({ ...current, patientId: linkedPatientId }));
+      if (shouldCreate) {
+        setShowCreate(true);
+      }
+    }
+  }, []);
 
   const createMutation = trpc.prescriptions.create.useMutation({
     onSuccess: async () => {

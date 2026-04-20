@@ -568,8 +568,7 @@ export default function ConfiguracoesFiscaisNacional() {
             <Textarea className="mt-1" rows={5} value={form.textoLegalFixo} onChange={(e) => setField("textoLegalFixo", e.target.value)} />
           </div>
           <div className="rounded-lg border border-border/70 bg-background/60 p-4 text-sm">
-            A forma de pagamento escolhida na emissão será anexada automaticamente ao texto com o padrão:
-            <strong> Pagamento efetuado via: ...</strong>
+            A descrição da NFS-e seguirá apenas o texto padrão do serviço e o texto legal fixo configurado abaixo.
           </div>
           <div className="rounded-lg border border-[#C9A55B]/20 bg-[#C9A55B]/8 p-4 text-sm text-muted-foreground">
             Se o portal nacional da sua prefeitura não exigir esses campos no preenchimento manual, você pode manter código do serviço e alíquota de ISS em branco no sistema.

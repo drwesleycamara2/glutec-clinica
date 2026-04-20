@@ -12,7 +12,7 @@ import Pacientes from "./pages/Pacientes";
 import Prontuarios from "./pages/Prontuarios";
 import PacienteDetalhe from "./pages/PacienteDetalhe";
 import ProntuarioDetalhe from "./pages/ProntuarioDetalhe";
-import Configuracoes from "./pages/Configuracoes";
+import Configuracoes from "./pages/ConfiguracoesSafe";
 import Templates from "./pages/Templates";
 import Prescricoes from "./pages/Prescricoes";
 import Exames from "./pages/ExamesClinicos";

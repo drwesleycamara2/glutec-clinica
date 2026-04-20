@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { CalendarDays, Camera, CheckCircle2, Copy, FolderClosed, FolderPlus, ImageIcon, Layers3, Link2, Maximize2, Plus, Search, Trash2, Video } from "lucide-react";
 import { type ChangeEvent, type SyntheticEvent, useMemo, useRef, useState } from "react";
+import { useEffect } from "react";
 import { toast } from "sonner";
 
 const CATEGORIES = [
@@ -91,6 +92,7 @@ export default function Fotos() {
   const folderFilter = resolveFolderValue(selectedFolderValue);
 
   const { data: patientMatches } = trpc.patients.list.useQuery({ query: patientSearch || undefined, limit: 12 }, { enabled: patientSearch.trim().length >= 2 });
+  const { data: selectedPatient } = trpc.patients.getById.useQuery({ id: parsedPatientId }, { enabled: hasSelectedPatient });
   const { data: folders = [] } = trpc.photoGallery.getFolders.useQuery({ patientId: parsedPatientId }, { enabled: hasSelectedPatient });
   const { data: uploadLinks = [] } = trpc.photoGallery.listUploadLinks.useQuery({ patientId: parsedPatientId }, { enabled: hasSelectedPatient });
   const { data: photos = [], isLoading } = trpc.photos.getByPatient.useQuery({ patientId: parsedPatientId, category: selectedCategory || undefined, folderId: folderFilter }, { enabled: hasSelectedPatient });
@@ -166,6 +168,21 @@ export default function Fotos() {
       toast.error("Não foi possível copiar o link.");
     }
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const linkedPatientId = params.get("patientId");
+    if (linkedPatientId && /^\d+$/.test(linkedPatientId)) {
+      setPatientId(linkedPatientId);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedPatient?.fullName || selectedPatient?.name) {
+      setSelectedPatientLabel(selectedPatient.fullName ?? selectedPatient.name ?? "");
+    }
+  }, [selectedPatient]);
 
   return (
     <div className="space-y-6">

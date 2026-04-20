@@ -533,6 +533,22 @@ export const appRouter = router({
         return dbComplete.createAppointment(input, ctx.user.id);
       }),
 
+    update: protectedProcedure
+      .input(z.object({
+        appointmentId: z.number(),
+        patientId: z.number(),
+        doctorId: z.number(),
+        scheduledAt: z.string(),
+        durationMinutes: z.number(),
+        room: z.string().min(1),
+        type: z.string(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { appointmentId, ...payload } = input;
+        return dbComplete.updateAppointment(appointmentId, payload, ctx.user.id);
+      }),
+
     getByDate: protectedProcedure
       .input(z.object({
         from: z.string(),
@@ -540,6 +556,15 @@ export const appRouter = router({
       }))
       .query(async ({ input }) => {
         return dbComplete.getAppointmentsByDateRange(input.from, input.to);
+      }),
+
+    getByPatient: protectedProcedure
+      .input(z.object({
+        patientId: z.number(),
+      }))
+      .query(async ({ input }) => {
+        const history = await dbComplete.getPatientHistory(input.patientId);
+        return history.appointments ?? [];
       }),
 
     updateStatus: protectedProcedure
@@ -934,6 +959,8 @@ export const appRouter = router({
         state: z.string().optional(),
         zipCode: z.string().optional(),
         specialties: z.array(z.string()).optional(),
+        structuralSectors: z.array(z.string().min(1)).optional(),
+        patientAttachmentFolders: z.array(z.string().min(1)).optional(),
         openingHours: z.array(z.object({
           day: z.string(),
           open: z.string(),
@@ -1080,6 +1107,12 @@ export const appRouter = router({
     list: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listBudgets();
     }),
+
+    getByPatient: protectedProcedure
+      .input(z.object({ patientId: z.number() }))
+      .query(async ({ input }) => {
+        return dbComplete.listBudgetsByPatient(input.patientId);
+      }),
 
     create: protectedProcedure
       .input(z.object({
@@ -1692,6 +1725,20 @@ export const appRouter = router({
       .input(z.object({ patientId: z.number() }))
       .query(async ({ input }) => {
         return dbComplete.getPatientDocuments(input.patientId);
+      }),
+    uploadDocument: protectedProcedure
+      .input(z.object({
+        patientId: z.number(),
+        type: z.string().min(1),
+        folderLabel: z.string().optional(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        base64: z.string().min(16),
+        mimeType: z.string().optional(),
+        originalFileName: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return dbComplete.uploadPatientDocument(input, ctx.user.id);
       }),
   }),
 

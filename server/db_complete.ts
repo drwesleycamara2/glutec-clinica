@@ -186,6 +186,13 @@ async function loadTussCatalog() {
 
 function inferExtensionFromMimeType(mimeType?: string | null) {
   const normalized = String(mimeType ?? "").toLowerCase();
+  if (normalized.includes("pdf")) return "pdf";
+  if (normalized.includes("msword")) return "doc";
+  if (normalized.includes("wordprocessingml")) return "docx";
+  if (normalized.includes("excel")) return "xls";
+  if (normalized.includes("spreadsheetml")) return "xlsx";
+  if (normalized.includes("zip")) return "zip";
+  if (normalized.includes("text/plain")) return "txt";
   if (normalized.includes("mp4")) return "mp4";
   if (normalized.includes("quicktime") || normalized.includes("mov")) return "mov";
   if (normalized.includes("webm")) return "webm";
@@ -330,6 +337,71 @@ function parseTemplateSections(sections: any) {
     }
   }
   return [];
+}
+
+const DEFAULT_CLINIC_STRUCTURAL_SECTORS = ["Consultório", "Centro Cirúrgico"];
+const DEFAULT_PATIENT_ATTACHMENT_FOLDERS = ["Documentos pessoais", "Resultados de exames"];
+
+function normalizeClinicStructuralSectors(input: unknown): string[] {
+  const source = Array.isArray(input)
+    ? input
+    : typeof input === "string" && input.trim()
+    ? (() => {
+        try {
+          const parsed = JSON.parse(input);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return input
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean);
+        }
+      })()
+    : [];
+
+  const seen = new Set<string>();
+  const normalized = source
+    .map((item) => normalizePtBrTitleCase(String(item || "").trim()))
+    .filter(Boolean)
+    .filter((item) => {
+      const key = item.toLocaleLowerCase("pt-BR");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+  return normalized.length ? normalized : [...DEFAULT_CLINIC_STRUCTURAL_SECTORS];
+}
+
+function normalizeClinicAttachmentFolders(input: unknown): string[] {
+  const source = Array.isArray(input)
+    ? input
+    : typeof input === "string" && input.trim()
+    ? (() => {
+        try {
+          const parsed = JSON.parse(input);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return input
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean);
+        }
+      })()
+    : [];
+
+  const seen = new Set<string>();
+  const normalized = source
+    .map((item) => normalizePtBrTitleCase(String(item || "").trim()))
+    .filter(Boolean)
+    .filter((item) => {
+      const key = item.toLocaleLowerCase("pt-BR");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+  return normalized.length ? normalized : [...DEFAULT_PATIENT_ATTACHMENT_FOLDERS];
 }
 
 function normalizeTemplateRow(row: any) {
@@ -583,7 +655,7 @@ export async function createAppointment(data: any, userId: number) {
   const room = String(data.room ?? "").trim();
 
   if (!room) {
-    throw new Error("Informe a sala do atendimento.");
+    throw new Error("Selecione onde o atendimento acontecerá.");
   }
 
   const conflictingBlocks = unwrapRows<any>(await db.execute(sql`
@@ -648,6 +720,88 @@ export async function createAppointment(data: any, userId: number) {
     select *
     from appointments
     where id = ${insertedId}
+    limit 1
+  `));
+
+  return rows[0] ?? { success: true };
+}
+
+export async function updateAppointment(appointmentId: number, data: any, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const scheduledAt = new Date(data.scheduledAt);
+  if (Number.isNaN(scheduledAt.getTime())) {
+    throw new Error("Data e hora do agendamento inválidas.");
+  }
+
+  const duration = Math.max(5, Number(data.durationMinutes || data.duration || 30));
+  const endsAt = new Date(scheduledAt.getTime() + duration * 60 * 1000);
+  const room = String(data.room ?? "").trim();
+
+  if (!room) {
+    throw new Error("Selecione onde o atendimento acontecerá.");
+  }
+
+  const currentRows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from appointments
+    where id = ${appointmentId}
+    limit 1
+  `));
+
+  if (!currentRows[0]) {
+    throw new Error("Agendamento não encontrado.");
+  }
+
+  const conflictingBlocks = unwrapRows<any>(await db.execute(sql`
+    select *
+    from appointment_blocks
+    where active = true
+      and startsAt < ${endsAt}
+      and endsAt > ${scheduledAt}
+      and (room is null or room = ${room})
+      and (doctorId is null or doctorId = ${data.doctorId})
+    limit 1
+  `));
+
+  if (conflictingBlocks[0]) {
+    throw new Error("Existe um bloqueio de agenda para este período.");
+  }
+
+  const conflictingAppointments = unwrapRows<any>(await db.execute(sql`
+    select *
+    from appointments
+    where id <> ${appointmentId}
+      and status not in ('cancelada', 'falta')
+      and room = ${room}
+      and scheduledAt < ${endsAt}
+      and date_add(scheduledAt, interval duration minute) > ${scheduledAt}
+    limit 1
+  `));
+
+  if (conflictingAppointments[0]) {
+    throw new Error("Não é possível agendar neste horário porque este local já está ocupado.");
+  }
+
+  await db.execute(sql`
+    update appointments
+    set
+      patientId = ${data.patientId},
+      doctorId = ${data.doctorId},
+      scheduledAt = ${scheduledAt},
+      duration = ${duration},
+      type = ${data.type ?? "consulta"},
+      notes = ${data.notes ?? null},
+      room = ${room},
+      updatedAt = NOW()
+    where id = ${appointmentId}
+  `);
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from appointments
+    where id = ${appointmentId}
     limit 1
   `));
 
@@ -1185,6 +1339,72 @@ export async function uploadPatientPhoto(data: any, userId: number) {
   `));
 
   return rows[0] ? normalizePhotoRow(rows[0]) : { success: true };
+}
+
+export async function uploadPatientDocument(data: {
+  patientId: number;
+  type: string;
+  name?: string | null;
+  description?: string | null;
+  folderLabel?: string | null;
+  base64: string;
+  mimeType?: string | null;
+  originalFileName?: string | null;
+}, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const stored = savePatientMediaToPublicDir(
+    Number(data.patientId),
+    String(data.base64 ?? ""),
+    data.mimeType,
+    "manual",
+  );
+
+  const fileName =
+    String(data.name ?? "").trim() ||
+    String(data.originalFileName ?? "").trim() ||
+    `Arquivo ${new Date().toLocaleDateString("pt-BR")}`;
+
+  const result = await db.execute(sql`
+    insert into patient_documents (
+      patientId,
+      doctorId,
+      type,
+      name,
+      description,
+      folderLabel,
+      fileUrl,
+      fileKey,
+      fileSize,
+      mimeType
+    ) values (
+      ${data.patientId},
+      ${userId},
+      ${data.type || "outro"},
+      ${fileName},
+      ${data.description ?? null},
+      ${data.folderLabel ?? null},
+      ${stored.photoUrl},
+      ${stored.photoKey},
+      ${Math.round((String(data.base64 ?? "").length * 3) / 4)},
+      ${stored.mimeType ?? data.mimeType ?? null}
+    )
+  `);
+
+  const insertedId =
+    Array.isArray(result) && typeof result[0] === "object"
+      ? (result[0] as any)?.insertId ?? (result[0] as any)?.id
+      : (result as any)?.insertId;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from patient_documents
+    where id = ${insertedId}
+    limit 1
+  `));
+
+  return rows[0] ? normalizeDocumentRow(rows[0]) : { success: true };
 }
 
 export async function createPhotoFolder(patientId: number, name: string, description: string | undefined, userId: number) {
@@ -1971,24 +2191,48 @@ export async function getClinicSettings() {
   if (!db) return null;
 
   const rows = unwrapRows<any>(await db.execute(sql`SELECT * FROM clinic_settings LIMIT 1`));
-  return rows[0] ?? null;
+  const settings = rows[0] ?? null;
+  if (!settings) {
+    return {
+      structuralSectors: [...DEFAULT_CLINIC_STRUCTURAL_SECTORS],
+      patientAttachmentFolders: [...DEFAULT_PATIENT_ATTACHMENT_FOLDERS],
+    };
+  }
+
+  return {
+    ...settings,
+    structuralSectors: normalizeClinicStructuralSectors(settings.structuralSectors),
+    patientAttachmentFolders: normalizeClinicAttachmentFolders(settings.patientAttachmentFolders),
+  };
 }
 
 export async function updateClinicSettings(data: any) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
+  const payload = {
+    ...data,
+    structuralSectors:
+      data.structuralSectors === undefined
+        ? undefined
+        : JSON.stringify(normalizeClinicStructuralSectors(data.structuralSectors)),
+    patientAttachmentFolders:
+      data.patientAttachmentFolders === undefined
+        ? undefined
+        : JSON.stringify(normalizeClinicAttachmentFolders(data.patientAttachmentFolders)),
+  };
+
   const existing = await getClinicSettings();
 
   if (existing) {
     // Build SET clause dynamically using raw SQL for column names (trusted keys only)
-    const entries = Object.entries(data).filter(([_, v]) => v !== undefined);
+    const entries = Object.entries(payload).filter(([_, v]) => v !== undefined);
     if (entries.length === 0) return { success: true };
 
     const setClauses = entries.map(([key, val]) => sql`${sql.raw(`\`${key}\``)} = ${val}`);
     await db.execute(sql`UPDATE clinic_settings SET ${sql.join(setClauses, sql`, `)} WHERE id = ${existing.id}`);
   } else {
-    const entries = Object.entries(data).filter(([_, v]) => v !== undefined);
+    const entries = Object.entries(payload).filter(([_, v]) => v !== undefined);
     if (entries.length === 0) return { success: true };
 
     const colNames = entries.map(([key]) => sql.raw(`\`${key}\``));
@@ -2053,25 +2297,6 @@ function inferDocumentType(document: string | null | undefined): "cpf" | "cnpj" 
   return digits.length > 11 ? "cnpj" : "cpf";
 }
 
-function formatPaymentDescription(formaPagamento: string | null | undefined, detalhesPagamento: string | null | undefined) {
-  const normalized = String(formaPagamento ?? "").trim().toLowerCase();
-  const details = String(detalhesPagamento ?? "").trim();
-
-  const labels: Record<string, string> = {
-    pix: "PIX",
-    dinheiro: "DINHEIRO",
-    cartao_credito: "CARTÃO DE CRÉDITO",
-    cartao_debito: "CARTÃO DE DÉBITO",
-    boleto: "BOLETO",
-    transferencia: "TRANSFERÊNCIA BANCÁRIA",
-    financiamento: "FINANCIAMENTO",
-    outro: "OUTRO",
-  };
-
-  const baseLabel = labels[normalized] ?? (normalized ? normalized.replace(/_/g, " ").toUpperCase() : "FORMA DE PAGAMENTO NÃO INFORMADA");
-  return details ? `${baseLabel} ${details}`.trim().toUpperCase() : baseLabel;
-}
-
 function buildFiscalServiceDescription(
   fiscal: any,
   overrides: {
@@ -2088,13 +2313,8 @@ function buildFiscalServiceDescription(
       DEFAULT_FISCAL_SERVICE_DESCRIPTION,
   ).trim();
   const legalText = String(fiscal?.textoLegalFixo || DEFAULT_FISCAL_LEGAL_TEXT).trim();
-  const paymentDescription = formatPaymentDescription(
-    overrides.formaPagamento,
-    overrides.detalhesPagamento,
-  );
   const parts = [
     (baseDescription || DEFAULT_FISCAL_SERVICE_DESCRIPTION).toUpperCase(),
-    `FORMA DE PAGAMENTO: ${paymentDescription.toUpperCase()}`,
     (legalText || DEFAULT_FISCAL_LEGAL_TEXT).toUpperCase(),
   ];
 
@@ -2633,6 +2853,11 @@ export async function listBudgets() {
       latestNfse: latestNfseByBudgetId.get(Number(budget.id)) ?? null,
     };
   });
+}
+
+export async function listBudgetsByPatient(patientId: number) {
+  const budgets = await listBudgets();
+  return budgets.filter((budget: any) => Number(budget.patientId) === Number(patientId));
 }
 
 export async function getBudgetById(id: number) {

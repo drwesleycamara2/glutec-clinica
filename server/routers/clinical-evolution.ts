@@ -3,6 +3,44 @@ import { protectedProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import * as db from "../db_clinical_evolution";
 import * as coreDb from "../db";
+import { structureTranscriptForClinicalEvolution } from "../lib/clinical-transcription";
+
+function escapeHtml(value?: string | null) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function buildClinicalEvolutionHtmlFromSections(sections: {
+  queixaPrincipal: string;
+  historiaAtualPregressa: string;
+  exameFisico: string;
+  hipoteseDiagnostica: string;
+  conduta: string;
+  observacoes: string;
+}) {
+  const renderParagraphs = (text: string) =>
+    escapeHtml(text || "")
+      .split(/\n{2,}/)
+      .map((paragraph) => paragraph.trim())
+      .filter(Boolean)
+      .map((paragraph) => `<p>${paragraph.replace(/\n/g, "<br />")}</p>`)
+      .join("") || "<p></p>";
+
+  return [
+    ["Queixa principal", sections.queixaPrincipal],
+    ["História Atual e Pregressa", sections.historiaAtualPregressa],
+    ["Exame físico", sections.exameFisico],
+    ["Hipótese diagnóstica", sections.hipoteseDiagnostica],
+    ["Conduta", sections.conduta],
+    ["Observações", sections.observacoes],
+  ]
+    .map(([title, content]) => `<p><strong>${title}:</strong></p>${renderParagraphs(content as string)}`)
+    .join("");
+}
 
 export const clinicalEvolutionRouter = router({
   // Create clinical evolution
@@ -31,10 +69,10 @@ export const clinicalEvolutionRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
-      if (ctx.user.role === "recepcionista") {
+      if (ctx.user.role === "recepcionista" || ctx.user.role === "secretaria") {
         throw new TRPCError({
           code: "FORBIDDEN",
-          message: "A recepcionista deve usar o campo exclusivo de observações da secretaria.",
+          message: "A secretaria deve usar o registro administrativo próprio do prontuário.",
         });
       }
 
@@ -83,14 +121,14 @@ export const clinicalEvolutionRouter = router({
   getById: protectedProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ ctx, input }) => {
-      return db.getClinicalEvolutionById(input.id, ctx.user?.role);
+      return db.getClinicalEvolutionById(input.id, ctx.user?.role, ctx.user?.id);
     }),
 
   // Get clinical evolutions by patient
   getByPatient: protectedProcedure
     .input(z.object({ patientId: z.number() }))
     .query(async ({ ctx, input }) => {
-      return db.getClinicalEvolutionsByPatient(input.patientId, ctx.user?.role);
+      return db.getClinicalEvolutionsByPatient(input.patientId, ctx.user?.role, ctx.user?.id);
     }),
 
   // Update clinical evolution
@@ -119,10 +157,10 @@ export const clinicalEvolutionRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
-      if (ctx.user.role === "recepcionista") {
+      if (ctx.user.role === "recepcionista" || ctx.user.role === "secretaria") {
         throw new TRPCError({
           code: "FORBIDDEN",
-          message: "A recepcionista deve usar o campo exclusivo de observações da secretaria.",
+          message: "A secretaria deve usar o registro administrativo próprio do prontuário.",
         });
       }
 
@@ -222,7 +260,7 @@ export const clinicalEvolutionRouter = router({
     .mutation(async ({ ctx, input }) => {
       if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-      const allowedRoles = new Set(["admin", "medico", "enfermeiro", "recepcionista"]);
+      const allowedRoles = new Set(["admin", "medico", "enfermeiro", "recepcionista", "secretaria"]);
       if (!allowedRoles.has(String(ctx.user.role || ""))) {
         throw new TRPCError({
           code: "FORBIDDEN",
@@ -292,6 +330,28 @@ export const clinicalEvolutionRouter = router({
     }),
 
   // Lista histórico de edições auditáveis de uma evolução
+  incorporateTranscription: protectedProcedure
+    .input(
+      z.object({
+        transcription: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
+      if (ctx.user.role === "recepcionista" || ctx.user.role === "secretaria") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "A incorporação inteligente da transcrição é restrita aos profissionais de saúde.",
+        });
+      }
+
+      const structured = await structureTranscriptForClinicalEvolution(input.transcription);
+      return {
+        ...structured,
+        clinicalNotesHtml: buildClinicalEvolutionHtmlFromSections(structured),
+      };
+    }),
+
   getEditHistory: protectedProcedure
     .input(z.object({ evolutionId: z.number() }))
     .query(async ({ input }) => {

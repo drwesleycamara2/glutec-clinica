@@ -87,10 +87,25 @@ const DEFAULT_CLINICAL_NOTES_TEMPLATE = [
   "<p></p>",
 ].join("");
 
+const CLEAN_DEFAULT_CLINICAL_NOTES_TEMPLATE = [
+  "<p><strong>Queixa principal:</strong></p>",
+  "<p></p>",
+  "<p><strong>História atual e pregressa:</strong></p>",
+  "<p></p>",
+  "<p><strong>Exame físico:</strong></p>",
+  "<p></p>",
+  "<p><strong>Hipótese diagnóstica:</strong></p>",
+  "<p></p>",
+  "<p><strong>Conduta:</strong></p>",
+  "<p></p>",
+  "<p><strong>Observações:</strong></p>",
+  "<p></p>",
+].join("");
+
 const emptyForm = (): EvolutionFormState => ({
   attendanceType: "",
   icd10: null,
-  clinicalNotes: DEFAULT_CLINICAL_NOTES_TEMPLATE,
+  clinicalNotes: CLEAN_DEFAULT_CLINICAL_NOTES_TEMPLATE,
   secretaryNotes: "",
   audioTranscription: "",
   assistantUserId: "",
@@ -127,6 +142,15 @@ function buildValidationCode(id?: number) {
   return `GLUTEC-${id ?? "DOC"}-${Date.now().toString(36).toUpperCase()}`;
 }
 
+function isSecretaryOnlyRecord(record: any) {
+  return Boolean(record?.isSecretaryRecord) || (
+    String(record?.secretaryNotes || "").trim().length > 0 &&
+    String(record?.clinicalNotes || "").trim().length === 0 &&
+    String(record?.icdCode || "").trim().length === 0 &&
+    String(record?.audioTranscription || "").trim().length === 0
+  );
+}
+
 function canPersistDraft(form: EvolutionFormState, startedSessionAt: string) {
   // So persistimos rascunho/notificacao apos o usuario clicar em "Iniciar atendimento"
   // (ou ao abrir um registro existente). Se ele apenas navegar para a tela e sair,
@@ -134,7 +158,7 @@ function canPersistDraft(form: EvolutionFormState, startedSessionAt: string) {
   if (form.id) return true;
   if (form.secretaryNotes.trim().length > 0) return true;
   if (!startedSessionAt) return false;
-  return Boolean(form.icd10) || stripHtml(form.clinicalNotes).length > 0 || form.secretaryNotes.trim().length > 0 || form.audioTranscription.trim().length > 0 || Boolean(form.attendanceType);
+  return Boolean(form.icd10) || stripHtml(form.clinicalNotes).length > 0 || form.audioTranscription.trim().length > 0 || Boolean(form.attendanceType);
 }
 
 interface Props {
@@ -209,6 +233,9 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
     { evolutionId: historyForEvolutionId ?? 0 },
     { enabled: historyDialogOpen && Boolean(historyForEvolutionId && historyForEvolutionId > 0) },
   );
+  const incorporateTranscriptionMutation = trpc.clinicalEvolution.incorporateTranscription.useMutation({
+    onError: (error) => toast.error(error.message),
+  });
 
   useEffect(() => {
     const savedDraft = localStorage.getItem(draftStorageKey);
@@ -294,6 +321,19 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
     return !specialty || specialty.includes("evolu") || specialty.includes("prontu") || specialty.includes("consulta");
   });
 
+  const visibleSavedEvolutions = useMemo(
+    () =>
+      (evolutionQuery.data ?? [])
+        .filter((record: any) => !isSecretaryOnlyRecord(record))
+        .slice()
+        .sort((left: any, right: any) => {
+          const l = new Date(left.startedAt ?? left.createdAt ?? 0).getTime();
+          const r = new Date(right.startedAt ?? right.createdAt ?? 0).getTime();
+          return r - l;
+        }),
+    [evolutionQuery.data],
+  );
+
   const buildPayload = (status: "rascunho" | "finalizado") => {
     if (!form.attendanceType) {
       throw new Error("Selecione o tipo de atendimento: Presencial ou Online.");
@@ -327,7 +367,6 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
       icdCode: form.icd10.code,
       icdDescription: form.icd10.description,
       clinicalNotes: form.clinicalNotes,
-      secretaryNotes: form.secretaryNotes || undefined,
       assistantName: form.assistantName.trim(),
       assistantUserId: form.assistantUserId ? Number(form.assistantUserId) : undefined,
       audioTranscription: form.audioTranscription || undefined,
@@ -522,6 +561,43 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
     toast.success(`Modelo "${template.name}" carregado.`);
   };
 
+  const handleSaveTranscriptionDraft = () => {
+    if (!form.audioTranscription.trim()) {
+      toast.error("Nenhuma transcrição disponível para manter separada.");
+      return;
+    }
+    toast.success("Transcrição mantida separadamente. Ela ficará disponível para salvar junto com o atendimento.");
+  };
+
+  const handleIncorporateTranscription = async () => {
+    if (!form.audioTranscription.trim()) {
+      toast.error("Transcreva o áudio antes de incorporar à evolução clínica.");
+      return;
+    }
+
+    const currentNotes = stripHtml(form.clinicalNotes);
+    const templateNotes = stripHtml(CLEAN_DEFAULT_CLINICAL_NOTES_TEMPLATE);
+    const hasExistingClinicalContent = currentNotes.length > 0 && currentNotes !== templateNotes;
+
+    if (hasExistingClinicalContent) {
+      const confirmed = window.confirm(
+        "A incorporação inteligente vai reorganizar o texto atual da evolução clínica a partir da transcrição. Deseja continuar?",
+      );
+      if (!confirmed) return;
+    }
+
+    const result = await incorporateTranscriptionMutation.mutateAsync({
+      transcription: form.audioTranscription,
+    });
+
+    setForm((current) => ({
+      ...current,
+      audioTranscription: result.refinedTranscript || current.audioTranscription,
+      clinicalNotes: result.clinicalNotesHtml || current.clinicalNotes,
+    }));
+    toast.success("Transcrição incorporada à evolução clínica em linguagem médica.");
+  };
+
   const handleSelectEvolution = (record: any) => {
     setSelectedEvolution(record);
     setStartedSessionAt(record.startedAt ? toDateTimeInputValue(new Date(record.startedAt)) : "");
@@ -529,7 +605,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
       id: record.id,
       attendanceType: (record.attendanceType === "presencial" || record.attendanceType === "online") ? record.attendanceType : "",
       icd10: record.icdCode ? { id: record.id, code: record.icdCode, description: record.icdDescription } : null,
-      clinicalNotes: record.clinicalNotes || "",
+      clinicalNotes: record.clinicalNotes || CLEAN_DEFAULT_CLINICAL_NOTES_TEMPLATE,
       secretaryNotes: record.secretaryNotes || "",
       audioTranscription: record.audioTranscription || "",
       assistantUserId: record.assistantUserId ? String(record.assistantUserId) : "",
@@ -659,6 +735,98 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
   };
 
   if (isReceptionist) {
+    const records = (evolutionQuery.data ?? [])
+      .slice()
+      .sort((left: any, right: any) => {
+        const l = new Date(left.startedAt ?? left.createdAt ?? 0).getTime();
+        const r = new Date(right.startedAt ?? right.createdAt ?? 0).getTime();
+        return r - l;
+      });
+
+    return (
+      <div className="space-y-6">
+        <Card className="border-border/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Registro administrativo da secretaria</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Este perfil registra apenas anotações administrativas. Evoluções médicas, anamneses e anexos clínicos permanecem protegidos.
+            </p>
+
+            <div className="space-y-2">
+              <Label>Registro administrativo</Label>
+              <Textarea
+                value={form.secretaryNotes}
+                onChange={(event) => setForm((current) => ({ ...current, secretaryNotes: event.target.value }))}
+                placeholder="Ex.: paciente ligou alterado, pediu retorno, informou pendência financeira ou deixou recado para a equipe."
+                rows={8}
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setSelectedEvolution(null);
+                  setEditingLockedStatus(null);
+                  setStartedSessionAt("");
+                  setForm(emptyForm());
+                }}
+              >
+                Novo registro da secretaria
+              </Button>
+              <Button type="button" onClick={() => handleSaveSecretaryNotes()} disabled={updateSecretaryNotesMutation.isPending}>
+                {updateSecretaryNotesMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Salvar registro
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Meus registros administrativos</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {records.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhum registro administrativo disponível ainda para este paciente.</p>
+            ) : (
+              records.map((record: any) => {
+                const isLegacy = record.isLegacy === true;
+                return (
+                  <div key={`${isLegacy ? "legacy" : "ev"}-${record.id}`} className="rounded-2xl border border-border/60 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="outline">{record.status || "rascunho"}</Badge>
+                          {isLegacy && <Badge variant="secondary">{record.legacySourceLabel || "Importado"}</Badge>}
+                        </div>
+                        <p className="text-sm font-medium">
+                          {record.startedAt ? new Date(record.startedAt).toLocaleString("pt-BR") : (record.createdAt ? new Date(record.createdAt).toLocaleString("pt-BR") : "—")}
+                        </p>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                          {record.secretaryNotes?.trim() || "Sem registro administrativo neste atendimento."}
+                        </p>
+                      </div>
+                      {!isLegacy && (
+                        <Button size="sm" variant="outline" onClick={() => handleSelectEvolution(record)}>
+                          Editar registro
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (false && isReceptionist) {
     const records = (evolutionQuery.data ?? [])
       .slice()
       .sort((left: any, right: any) => {
@@ -903,9 +1071,10 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
         <CardHeader className="pb-3">
           <CardTitle className="text-sm">Atendimento por voz</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <AudioRecorder
             medicalRecordId={form.id}
+            showTranscriptionEditor={false}
             onTranscriptionComplete={(text) =>
               setForm((current) => ({
                 ...current,
@@ -913,6 +1082,32 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
               }))
             }
           />
+
+          <div className="space-y-2 border-t border-border/40 pt-4">
+            <Label>Transcrição de áudio</Label>
+            <Textarea
+              value={form.audioTranscription}
+              onChange={(event) => setForm((current) => ({ ...current, audioTranscription: event.target.value }))}
+              rows={7}
+              placeholder="A transcrição revisada em português do Brasil aparecerá aqui e poderá ser editada antes de salvar ou incorporar."
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" onClick={handleSaveTranscriptionDraft}>
+                <Save className="mr-2 h-4 w-4" />
+                Salvar transcrição
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleIncorporateTranscription()}
+                disabled={incorporateTranscriptionMutation.isPending}
+                className="border-[#C9A55B]/30 text-[#8A6526]"
+              >
+                {incorporateTranscriptionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PenTool className="mr-2 h-4 w-4" />}
+                Incorporar à evolução clínica
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -952,6 +1147,9 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
             />
           </div>
 
+          {false && (
+            <>
+
           <div className="space-y-2">
             <Label>Observações da secretaria</Label>
             <Textarea
@@ -973,6 +1171,9 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
           </div>
 
           {/* CID-10 agora fica ABAIXO da evolução, conforme regra clínica */}
+            </>
+          )}
+
           <div className="space-y-2 pt-2 border-t border-border/40">
             <Label>CID-10 (selecione após descrever a evolução)</Label>
             <Icd10Search
@@ -1007,17 +1208,10 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
           <CardTitle className="text-sm">Atendimentos salvos</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {(evolutionQuery.data ?? []).length === 0 ? (
+          {visibleSavedEvolutions.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nenhum atendimento salvo ainda para este paciente.</p>
           ) : (
-            (evolutionQuery.data ?? [])
-              .slice()
-              .sort((left: any, right: any) => {
-                const l = new Date(left.startedAt ?? left.createdAt ?? 0).getTime();
-                const r = new Date(right.startedAt ?? right.createdAt ?? 0).getTime();
-                return r - l;
-              })
-              .map((record: any) => {
+            visibleSavedEvolutions.map((record: any) => {
                 const isLegacy = record.isLegacy === true;
                 const displayId = isLegacy ? (record.legacyRecordId ?? Math.abs(record.id)) : record.id;
                 return (
@@ -1041,7 +1235,6 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
                         Atendido por {record.doctorName || professionalName} • Acompanhamento: {record.assistantName || "Ninguém"}
                       </p>
                       <p className="text-xs text-muted-foreground">{stripHtml(record.clinicalNotes || "").slice(0, 220) || "Sem resumo clínico."}</p>
-                      {record.secretaryNotes ? <p className="text-xs text-amber-700 whitespace-pre-wrap">Secretaria: {record.secretaryNotes}</p> : null}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {!isLegacy && (

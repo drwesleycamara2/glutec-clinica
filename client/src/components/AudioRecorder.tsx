@@ -11,6 +11,7 @@ import { toast } from "sonner";
 interface AudioRecorderProps {
   onTranscriptionComplete?: (transcription: string) => void;
   medicalRecordId?: number;
+  showTranscriptionEditor?: boolean;
 }
 
 interface SpeechRecognitionLike {
@@ -33,7 +34,11 @@ function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
   return typeof candidate === "function" ? candidate : null;
 }
 
-export function AudioRecorder({ onTranscriptionComplete, medicalRecordId }: AudioRecorderProps) {
+export function AudioRecorder({
+  onTranscriptionComplete,
+  medicalRecordId,
+  showTranscriptionEditor = true,
+}: AudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [transcription, setTranscription] = useState("");
@@ -216,28 +221,6 @@ export function AudioRecorder({ onTranscriptionComplete, medicalRecordId }: Audi
     }
 
     const localTranscript = liveTranscriptRef.current.trim() || transcription.trim();
-    if (localTranscript) {
-      setIsTranscribing(true);
-      createTranscription(
-        {
-          audioUrl: audioUrl || "",
-          audioKey: `browser-live-${Date.now()}`,
-          medicalRecordId,
-        },
-        {
-          onSuccess: (result: any) => {
-            finishWithTranscript(localTranscript, result?.id);
-            setIsTranscribing(false);
-          },
-          onError: () => {
-            finishWithTranscript(localTranscript);
-            setIsTranscribing(false);
-          },
-        },
-      );
-      return;
-    }
-
     setIsTranscribing(true);
 
     try {
@@ -300,11 +283,15 @@ export function AudioRecorder({ onTranscriptionComplete, medicalRecordId }: Audi
       }
 
       const data = await response.json();
-      finishWithTranscript(data.text || "", transcriptionId);
+      finishWithTranscript(data.refinedTranscript || data.text || localTranscript || "", transcriptionId);
     } catch (error) {
       console.error("Erro ao transcrever áudio:", error);
       const message = getErrorMessage(error, "Erro ao transcrever o áudio.");
       toast.error(message);
+      if (localTranscript) {
+        finishWithTranscript(localTranscript, transcriptionId);
+        return;
+      }
       if (transcriptionId) {
         updateTranscription({
           id: transcriptionId,
@@ -398,7 +385,7 @@ export function AudioRecorder({ onTranscriptionComplete, medicalRecordId }: Audi
           </div>
         )}
 
-        {transcription && (
+        {showTranscriptionEditor && transcription && (
           <div className="space-y-2">
             <Label className="text-sm font-medium">Transcrição</Label>
             <Textarea

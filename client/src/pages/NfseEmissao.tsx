@@ -63,22 +63,6 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   erro: { label: "Erro", color: "bg-[#2F2F2F]/10 text-[#2F2F2F]" },
 };
 
-function getPaymentDescription(formaPagamento: string, detalhesPagamento?: string) {
-  const labels: Record<string, string> = {
-    pix: "Pix",
-    dinheiro: "Dinheiro",
-    cartao_credito: "Cartão de crédito",
-    cartao_debito: "Cartão de débito",
-    boleto: "Boleto",
-    transferencia: "Transferência bancária",
-    financiamento: "Financiamento",
-    outro: "Outro",
-  };
-
-  const baseLabel = labels[formaPagamento] ?? formaPagamento.replace(/_/g, " ");
-  return detalhesPagamento?.trim() ? `${baseLabel} ${detalhesPagamento.trim()}` : baseLabel;
-}
-
 const DEFAULT_SERVICE_DESCRIPTION = "Referente a procedimentos médicos ambulatoriais.";
 
 // Tipos
@@ -822,9 +806,6 @@ export default function NfseEmissao() {
             <p className="text-xs font-medium text-muted-foreground mb-2">SERVIÇO</p>
             <p className="text-sm">{form.descricaoServico}</p>
             {form.complementoDescricao && <p className="text-xs text-muted-foreground mt-1">{form.complementoDescricao}</p>}
-            <p className="text-xs text-muted-foreground mt-1">
-              Forma de Pagamento: {getPaymentDescription(form.formaPagamento, form.detalhesPagamento)}
-            </p>
           </div>
 
           {/* Valores */}
