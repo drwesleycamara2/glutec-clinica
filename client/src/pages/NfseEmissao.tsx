@@ -180,16 +180,18 @@ export default function NfseEmissao() {
   const filteredPatients = useMemo(() => {
     if (!patients || !patientSearch) return [];
     const q = patientSearch.toLowerCase();
-    return patients.filter((p: any) =>
-      p.name?.toLowerCase().includes(q) || p.cpf?.includes(q)
-    ).slice(0, 8);
+    return patients.filter((p: any) => {
+      const patientName = String(p.name || p.fullName || "").toLowerCase();
+      const patientCpf = String(p.cpf || "");
+      return patientName.includes(q) || patientCpf.includes(q);
+    }).slice(0, 8);
   }, [patients, patientSearch]);
 
   // Selecionar paciente
   const selectPatient = (patient: any) => {
     setForm({
       ...form,
-      tomadorNome: patient.name || "",
+      tomadorNome: patient.name || patient.fullName || "",
       tomadorDocumento: patient.cpf || "",
       tomadorEmail: patient.email || "",
       tomadorTelefone: patient.phone || "",
@@ -367,7 +369,7 @@ export default function NfseEmissao() {
                     onClick={() => selectPatient(p)}
                     className="w-full text-left px-3 py-2 hover:bg-muted/50 text-sm border-b last:border-0"
                   >
-                    <span className="font-medium">{p.name}</span>
+                    <span className="font-medium">{p.name || p.fullName}</span>
                     {p.cpf && <span className="text-muted-foreground ml-2">CPF: {formatCpfCnpj(p.cpf)}</span>}
                   </button>
                 ))}

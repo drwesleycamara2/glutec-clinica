@@ -32,6 +32,7 @@ const pathModuleMap: Array<{ prefix: string; moduleId: string }> = [
   { prefix: "/evolucao", moduleId: "prontuarios" },
   { prefix: "/fotos", moduleId: "fotos" },
   { prefix: "/documentos", moduleId: "documentos" },
+  { prefix: "/contratos", moduleId: "documentos" },
   { prefix: "/prescricoes", moduleId: "prescricoes" },
   { prefix: "/exames", moduleId: "exames" },
   { prefix: "/assinaturas", moduleId: "assinaturas" },

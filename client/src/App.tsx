@@ -24,6 +24,7 @@ import NfseEmissao from "./pages/NfseEmissao";
 import ConfiguracoesFiscais from "./pages/ConfiguracoesFiscaisNacional";
 import EvolucaoClinica from "./pages/EvolucaoClinica";
 import Documentos from "./pages/Documentos";
+import Contratos from "./pages/Contratos";
 import Fotos from "./pages/Fotos";
 import CRM from "./pages/CRM";
 import Relatorios from "./pages/Relatorios";
@@ -102,6 +103,7 @@ function ProtectedRoutes() {
         <Route path="/nfse" component={NfseEmissao} />
         <Route path="/fiscal" component={ConfiguracoesFiscais} />
         <Route path="/documentos" component={Documentos} />
+        <Route path="/contratos" component={Contratos} />
         <Route path="/fotos" component={Fotos} />
         <Route path="/crm" component={CRM} />
         <Route path="/relatorios/prontuario">{() => <AdminOnly component={RelatorioProntuario} />}</Route>

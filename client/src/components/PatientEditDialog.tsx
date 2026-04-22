@@ -8,13 +8,14 @@
  */
 import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Save, User } from "lucide-react";
+import { Loader2, Save, Trash2, User } from "lucide-react";
 import { toast } from "sonner";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "desconhecido"];
@@ -91,13 +92,16 @@ interface Props {
   patientId: number | null;
   onClose: () => void;
   onSaved?: () => void;
+  onDeleted?: () => void;
 }
 
-export function PatientEditDialog({ patientId, onClose, onSaved }: Props) {
+export function PatientEditDialog({ patientId, onClose, onSaved, onDeleted }: Props) {
   const open = patientId !== null && patientId > 0;
   const [form, setForm] = useState<Form>(EMPTY);
   const [birthDisplay, setBirthDisplay] = useState("");
   const [loadingCep, setLoadingCep] = useState(false);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   const { data: patient, isLoading } = trpc.patients.getById.useQuery(
     { id: patientId || 0 },
@@ -114,6 +118,17 @@ export function PatientEditDialog({ patientId, onClose, onSaved }: Props) {
       onClose();
     },
     onError: (e: any) => toast.error(e?.message || "Erro ao atualizar."),
+  });
+
+  const deleteMutation = trpc.patients.delete.useMutation({
+    onSuccess: () => {
+      toast.success("Prontuario excluido.");
+      utils.patients.list.invalidate();
+      if (patientId) utils.patients.getById.invalidate({ id: patientId });
+      onDeleted?.();
+      onClose();
+    },
+    onError: (e: any) => toast.error(e?.message || "Erro ao excluir prontuario."),
   });
 
   useEffect(() => {
@@ -191,6 +206,16 @@ export function PatientEditDialog({ patientId, onClose, onSaved }: Props) {
       emergencyContactName: form.emergencyContactName || undefined,
       emergencyContactPhone: form.emergencyContactPhone.replace(/\D/g, "") || undefined,
     });
+  };
+
+  const handleDelete = () => {
+    if (!patientId || !isAdmin) return;
+    const patientName = form.fullName.trim() || "este paciente";
+    const confirmed = window.confirm(
+      `Excluir o prontuario de ${patientName}? Esta acao remove o prontuario da lista principal, mas mantem o registro no banco para auditoria.`,
+    );
+    if (!confirmed) return;
+    deleteMutation.mutate({ id: patientId });
   };
 
   return (
@@ -364,10 +389,21 @@ export function PatientEditDialog({ patientId, onClose, onSaved }: Props) {
         )}
 
         <DialogFooter>
+          {isAdmin ? (
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleteMutation.isPending || updateMutation.isPending || isLoading}
+              className="mr-auto"
+            >
+              {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Excluir prontuario
+            </Button>
+          ) : null}
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button
             onClick={handleSubmit}
-            disabled={updateMutation.isPending || isLoading}
+            disabled={updateMutation.isPending || deleteMutation.isPending || isLoading}
             className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] text-white"
           >
             {updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}

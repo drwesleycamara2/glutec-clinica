@@ -90,6 +90,7 @@ const menuSections: MenuSection[] = [
       { icon: ClipboardList, label: "Prontuários", path: "/prontuarios", moduleId: "prontuarios" },
       { icon: Camera, label: "Imagens", path: "/fotos", moduleId: "fotos" },
       { icon: Files, label: "Documentos", path: "/documentos", moduleId: "documentos" },
+      { icon: ScrollText, label: "Contratos", path: "/contratos", moduleId: "documentos" },
       { icon: FileText, label: "Prescrições", path: "/prescricoes", moduleId: "prescricoes" },
       { icon: Stethoscope, label: "Exames", path: "/exames", moduleId: "exames" },
       { icon: ShieldCheck, label: "Assinaturas", path: "/assinaturas", moduleId: "assinaturas" },

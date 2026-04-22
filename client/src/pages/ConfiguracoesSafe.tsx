@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -20,6 +21,7 @@ import {
   Plus,
   MinusCircle,
   FolderOpen,
+  FileLock2,
 } from "lucide-react";
 
 const DEFAULT_STRUCTURAL_SECTORS = ["Consultório", "Centro Cirúrgico"];
@@ -28,6 +30,8 @@ const DEFAULT_ATTACHMENT_FOLDERS = ["Documentos pessoais", "Resultados de exames
 export default function ConfiguracoesSafe() {
   const { theme, toggleTheme } = useTheme();
   const [, navigate] = useLocation();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const clinicQuery = trpc.clinic.get.useQuery();
   const updateClinicMutation = trpc.clinic.update.useMutation({
     onSuccess: async () => {
@@ -330,6 +334,23 @@ export default function ConfiguracoesSafe() {
             </button>
           </CardContent>
         </Card>
+
+        {isAdmin ? (
+          <Card className="border-primary/10 bg-card/50 backdrop-blur-sm">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <FileLock2 className="h-5 w-5 text-primary" />
+                <CardTitle>Backup e portabilidade</CardTitle>
+              </div>
+              <CardDescription>Exporte prontuarios, cadastros, anamneses, atendimentos, exames, anexos, fotos, contratos, historico e agenda.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex h-[140px] items-center justify-center">
+              <button onClick={() => navigate("/relatorios/portabilidade")} className="btn-glossy-gold px-6 py-2 text-sm">
+                Solicitar backup completo
+              </button>
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
     </div>
   );

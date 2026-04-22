@@ -210,6 +210,7 @@ export function validateAnamnesisQuestions(questions: AnamnesisQuestion[]): stri
 export function serializeAnamnesisQuestions(questions: AnamnesisQuestion[]) {
   return questions.map((question) => ({
     text: question.text,
+    id: question.id,
     type: question.type,
     options: question.options,
     required: question.required !== false,

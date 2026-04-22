@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import type { ChangeEvent, ReactNode } from "react";
 import { trpc } from "@/lib/trpc";
@@ -52,12 +52,13 @@ function buildHistorySummary(record: any) {
     record.physicalExam,
     record.diagnosis,
   ]
+    .map((value) => formatImportedText(value))
     .filter(Boolean)
     .join("\n\n");
 }
 
 function summarizeText(text?: string | null, maxLength: number = 180) {
-  const normalized = repairMojibake(text).replace(/\s+/g, " ").trim();
+  const normalized = formatImportedText(text).replace(/\s+/g, " ").trim();
   if (!normalized) return "";
   if (normalized.length <= maxLength) return normalized;
   return `${normalized.slice(0, maxLength).trimEnd()}...`;
@@ -66,7 +67,7 @@ function summarizeText(text?: string | null, maxLength: number = 180) {
 function repairMojibake(value?: string | null) {
   let text = String(value ?? "");
   if (!text) return "";
-  if (!/ÃƒÆ’|Ãƒâ€š|Ãƒâ€™|Ãƒâ€œ|Ãƒâ€|Ãƒâ€¢|ÃƒÂ¯Ã‚Â¿Ã‚Â½|Ã¯Â¿Â½/.test(text)) return text;
+  if (!(/[\u00c3\u00c2\uFFFD]/.test(text) || /\u00e2[\u0080-\u00bf]/.test(text))) return text;
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -80,6 +81,46 @@ function repairMojibake(value?: string | null) {
   }
 
   return text.replace(/\uFFFD/g, "").trim();
+}
+
+function decodeHtmlEntities(value: string) {
+  const entities: Record<string, string> = {
+    nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'",
+    ccedil: "c", Ccedil: "C", aacute: "a", eacute: "e", iacute: "i", oacute: "o", uacute: "u",
+    agrave: "a", egrave: "e", atilde: "a", otilde: "o", acirc: "a", ecirc: "e", ocirc: "o",
+  };
+  return value
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)))
+    .replace(/&([a-zA-Z]+);/g, (match, entity) => entities[entity] ?? match);
+}
+
+function formatImportedText(value?: string | null) {
+  let text = repairMojibake(value);
+  if (!text) return "";
+
+  text = text
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "- ")
+    .replace(/<[^>]+>/g, " ");
+
+  return decodeHtmlEntities(text)
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function getThreeLinePreview(value: string) {
+  const lines = value.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (lines.length <= 3 && value.length <= 360) return { preview: value, truncated: false };
+  if (lines.length > 3) return { preview: lines.slice(0, 3).join("\n"), truncated: true };
+  return { preview: value.slice(0, 360).trimEnd() + "...", truncated: true };
 }
 
 function groupDocumentsByType(documents: any[]) {
@@ -144,6 +185,79 @@ async function fileToBase64(file: File) {
   });
 }
 
+function textToBase64(value: string) {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
+
+function sanitizeFileName(value: string) {
+  return value.replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, " ").trim() || "documento-clinico";
+}
+
+function normalizeTemplateSearchText(value?: string | null) {
+  return repairMojibake(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+}
+
+function isAttestationOrDeclarationTemplate(template: any) {
+  const haystack = normalizeTemplateSearchText(
+    [template?.name, template?.specialty, template?.description].filter(Boolean).join(" "),
+  );
+  return (
+    haystack.includes("atestado") ||
+    haystack.includes("declaracao") ||
+    haystack.includes("declaracoes") ||
+    haystack.includes("declara") ||
+    haystack.includes("laudo")
+  );
+}
+
+function inferClinicalDocumentType(template: any): "atestado" | "declaracao" | "laudo" {
+  const haystack = normalizeTemplateSearchText(
+    [template?.name, template?.specialty, template?.description].filter(Boolean).join(" "),
+  );
+  if (haystack.includes("declaracao") || haystack.includes("declara")) return "declaracao";
+  if (haystack.includes("laudo")) return "laudo";
+  return "atestado";
+}
+
+function applyDocumentPlaceholders(content: string, patientName: string) {
+  const today = new Date().toLocaleDateString("pt-BR");
+  return content
+    .replace(/\[NOME_PACIENTE\]/g, patientName)
+    .replace(/\{NOME_PACIENTE\}/g, patientName)
+    .replace(/\[PACIENTE\]/g, patientName)
+    .replace(/\{PACIENTE\}/g, patientName)
+    .replace(/\[DATA_ATUAL\]/g, today)
+    .replace(/\{DATA_ATUAL\}/g, today)
+    .replace(/\[CIDADE\]/g, "Mogi Gua\u00e7u - SP")
+    .replace(/\{CIDADE\}/g, "Mogi Gua\u00e7u - SP");
+}
+
+function templateToClinicalDocumentText(template: any, patientName: string) {
+  const sections = Array.isArray(template?.sections) ? template.sections : [];
+  const sectionContent = sections
+    .map((section: any) => {
+      if (typeof section?.content === "string" && section.content.trim()) return section.content.trim();
+      if (typeof section?.text === "string" && section.text.trim()) return section.text.trim();
+
+      const fields = Array.isArray(section?.fields) ? section.fields : [];
+      if (!fields.length) return "";
+      const lines = fields.map((field: any) => `${field?.label || "Campo"}: ${field?.defaultValue || ""}`.trimEnd());
+      return [section?.title, "", ...lines].filter(Boolean).join("\n");
+    })
+    .filter(Boolean);
+
+  const content = sectionContent.length ? sectionContent.join("\n\n") : String(template?.content ?? "");
+  return formatImportedText(applyDocumentPlaceholders(content || `${template?.name || "Documento cl\u00ednico"}\n\nPaciente: ${patientName}\n`, patientName));
+}
+
 function isSecretaryOnlyEvolutionRecord(record: any) {
   return Boolean(record?.isSecretaryRecord) || (
     String(record?.secretaryNotes || "").trim().length > 0 &&
@@ -156,6 +270,7 @@ function isSecretaryOnlyEvolutionRecord(record: any) {
 function HistoricoTab({ patientId }: { patientId: number }) {
   const { user } = useAuth();
   const isReceptionist = user?.role === "recepcionista" || user?.role === "secretaria";
+  const [expandedHistoryItems, setExpandedHistoryItems] = useState<Record<string, boolean>>({});
   const { data: evolutions, isLoading } = trpc.clinicalEvolution.getByPatient.useQuery({ patientId });
   const visibleEvolutions = useMemo(
     () =>
@@ -200,9 +315,20 @@ function HistoricoTab({ patientId }: { patientId: number }) {
           ev.attendanceType === "presencial" ? "Presencial" : null;
         const isLegacy = ev.isLegacy === true;
         const displayId = isLegacy ? (ev.legacyRecordId ?? Math.abs(ev.id)) : ev.id;
+        const historyKey = (isLegacy ? "legacy" : "ev") + "-" + ev.id;
+        const clinicalText = formatImportedText(ev.clinicalNotes);
+        const secretaryText = formatImportedText(ev.secretaryNotes);
+        const audioText = formatImportedText(ev.audioTranscription);
+        const mainText = isReceptionist ? secretaryText : clinicalText;
+        const isExpanded = Boolean(expandedHistoryItems[historyKey]);
+        const preview = getThreeLinePreview(mainText || "");
+        const displayedText = isExpanded ? mainText : preview.preview;
+        const relatedExams = Array.isArray(ev.relatedExams) ? ev.relatedExams : [];
+        const relatedPrescriptions = Array.isArray(ev.relatedPrescriptions) ? ev.relatedPrescriptions : [];
+        const relatedDocuments = Array.isArray(ev.relatedDocuments) ? ev.relatedDocuments : [];
 
         return (
-          <Card key={`${isLegacy ? "legacy" : "ev"}-${ev.id}`} className="border-border/50">
+          <Card key={historyKey} className="border-border/50">
             <CardContent className="p-4">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                 <div className="flex items-center gap-2">
@@ -215,10 +341,10 @@ function HistoricoTab({ patientId }: { patientId: number }) {
                   )}
                   {isLegacy && (
                     <Badge variant="secondary" className="text-[10px]">
-                      {ev.legacySourceLabel || "Importado"}
+                      {formatImportedText(ev.legacySourceLabel) || "Importado"}
                     </Badge>
                   )}
-                  {ev.status && <Badge variant="outline" className="text-[10px]">{ev.status}</Badge>}
+                  {ev.status && <Badge variant="outline" className="text-[10px]">{repairMojibake(ev.status)}</Badge>}
                 </div>
                 <span className="text-xs text-muted-foreground">{date}</span>
               </div>
@@ -226,22 +352,60 @@ function HistoricoTab({ patientId }: { patientId: number }) {
               {isReceptionist ? (
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Registro administrativo</p>
-                  <p className="text-sm whitespace-pre-wrap">{ev.secretaryNotes?.trim() || "Sem registro administrativo neste atendimento."}</p>
+                  <p className="text-sm whitespace-pre-wrap">{displayedText || "Sem registro administrativo neste atendimento."}</p>
+                  {preview.truncated ? (
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      className="h-auto px-0 py-1 text-xs"
+                      onClick={() => setExpandedHistoryItems((current) => ({ ...current, [historyKey]: !isExpanded }))}
+                    >
+                      {isExpanded ? "Ver menos" : "Ver mais"}
+                    </Button>
+                  ) : null}
                 </div>
               ) : (
                 <>
-                  {ev.clinicalNotes && (
+                  {clinicalText && (
                     <div className="mb-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Notas clínicas</p>
-                      <p className="text-sm whitespace-pre-wrap">{ev.clinicalNotes}</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Notas clinicas</p>
+                      <p className="text-sm whitespace-pre-wrap">{displayedText}</p>
+                      {preview.truncated ? (
+                        <Button
+                          type="button"
+                          variant="link"
+                          size="sm"
+                          className="h-auto px-0 py-1 text-xs"
+                          onClick={() => setExpandedHistoryItems((current) => ({ ...current, [historyKey]: !isExpanded }))}
+                        >
+                          {isExpanded ? "Ver menos" : "Ver mais"}
+                        </Button>
+                      ) : null}
                     </div>
                   )}
-                  {ev.audioTranscription && (
+                  {audioText && (
                     <div className="mb-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Transcrição de áudio</p>
-                      <p className="text-sm whitespace-pre-wrap text-muted-foreground">{ev.audioTranscription}</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Transcricao de audio</p>
+                      <p className="text-sm whitespace-pre-wrap text-muted-foreground">{audioText}</p>
                     </div>
                   )}
+                  {(relatedExams.length > 0 || relatedPrescriptions.length > 0 || relatedDocuments.length > 0) ? (
+                    <div className="mb-2 rounded-lg border border-border/50 bg-muted/20 p-2">
+                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Solicitacoes e documentos vinculados</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {relatedExams.map((exam: any) => (
+                          <Badge key={"exam-" + exam.id} variant="outline" className="text-[10px]">Exame: {summarizeText(exam.content || exam.exams, 70)}</Badge>
+                        ))}
+                        {relatedPrescriptions.map((rx: any) => (
+                          <Badge key={"rx-" + rx.id} variant="outline" className="text-[10px]">Prescricao: {summarizeText(rx.content || rx.type, 70)}</Badge>
+                        ))}
+                        {relatedDocuments.map((doc: any) => (
+                          <Badge key={"doc-" + doc.id} variant="outline" className="text-[10px]">{repairMojibake(doc.type || "Doc")}: {summarizeText(doc.name || doc.description, 70)}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   {ev.icdCode && (
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">CID-10</p>
@@ -298,7 +462,7 @@ function SecretariaTab({ patientId }: { patientId: number }) {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <UserCheck className="h-4 w-4 text-[#C9A55B]" />
-                  <span className="text-sm font-semibold text-foreground">Registro da secretaria</span>
+                  <span className="text-sm font-semibold text-foreground">Registro da secret&aacute;ria</span>
                   {record.status && <Badge variant="outline" className="text-[10px]">{record.status}</Badge>}
                 </div>
                 <span className="text-xs text-muted-foreground">{date}</span>
@@ -469,24 +633,23 @@ function AnamneseTab({ patientId }: { patientId: number }) {
         </CardContent>
       </Card>
 
-      <div className="space-y-3">
+      <div className="grid gap-3 lg:grid-cols-2">
         {questions.map((question) => (
           <Card key={question.id} className="border-border/50">
-            <CardContent className="p-4 space-y-3">
+            <CardContent className="space-y-2.5 p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <Label className="text-sm font-medium">{repairMojibake(question.text)}</Label>
-                  <p className="text-[11px] text-muted-foreground mt-1">Preenchimento obrigatório.</p>
                 </div>
-                <Badge variant="outline">Obrigatória</Badge>
+                <Badge variant="outline" className="h-5 px-1.5 text-[10px]">Obrigatoria</Badge>
               </div>
 
               {question.type === "text" ? (
                 <Textarea
                   value={question.answer || ""}
                   onChange={(event) => updateQuestion(question.id, { answer: event.target.value })}
-                  rows={3}
-                  className="resize-none"
+                  rows={2}
+                  className="resize-none text-sm"
                   placeholder={question.placeholder || "Digite aqui..."}
                 />
               ) : null}
@@ -539,7 +702,7 @@ function AnamneseTab({ patientId }: { patientId: number }) {
               ) : null}
 
               {shouldShowFollowUp(question) && question.followUp ? (
-                <div className="rounded-xl border border-[#C9A55B]/20 bg-amber-500/5 p-3">
+                <div className="rounded-lg border border-[#C9A55B]/20 bg-amber-500/5 p-2.5">
                   <Label className="text-xs font-medium text-[#8A6526]">{question.followUp.prompt}</Label>
                   <Input
                     className="mt-2"
@@ -768,32 +931,195 @@ function DocumentUploadPanel({
   );
 }
 
-function AtestadosTab({ patientId, patientName: _pn }: { patientId: number; patientName: string }) {
+function AtestadosTab({ patientId, patientName }: { patientId: number; patientName: string }) {
   const [, navigate] = useLocation();
+  const utils = trpc.useUtils();
+  const [showEditor, setShowEditor] = useState(false);
+  const [showTemplateDialog, setShowTemplateDialog] = useState(false);
+  const [documentType, setDocumentType] = useState<"atestado" | "declaracao" | "laudo">("atestado");
+  const [documentTitle, setDocumentTitle] = useState("");
+  const [documentContent, setDocumentContent] = useState("");
+
   const { data: documents, isLoading } = trpc.medicalRecords.getDocuments.useQuery({ patientId });
+  const { data: templates, isLoading: templatesLoading } = trpc.templates.list.useQuery(undefined, {
+    enabled: showTemplateDialog || showEditor,
+  });
+  const uploadTextDocumentMutation = trpc.medicalRecords.uploadDocument.useMutation({
+    onSuccess: async () => {
+      await utils.medicalRecords.getDocuments.invalidate({ patientId });
+      toast.success("Documento salvo no prontuário.");
+      setShowEditor(false);
+    },
+    onError: (error) => toast.error(error.message || "Não foi possível salvar o documento."),
+  });
+
   const relevantDocuments = useMemo(
     () => ((documents as any[]) || []).filter((doc) => ["atestado", "declaracao", "laudo"].includes(String(doc.type || "").toLowerCase())),
     [documents],
   );
 
+  const availableTemplates = useMemo(
+    () => ((templates as any[]) || []).filter(isAttestationOrDeclarationTemplate),
+    [templates],
+  );
+
+  const openBlankEditor = () => {
+    const today = new Date().toLocaleDateString("pt-BR");
+    setDocumentType("atestado");
+    setDocumentTitle(`Atestado - ${patientName}`);
+    setDocumentContent(`ATESTADO\n\nPaciente: ${patientName}\nData: ${today}\n\nAtesto para os devidos fins que `);
+    setShowEditor(true);
+  };
+
+  const applyTemplate = (template: any) => {
+    const nextType = inferClinicalDocumentType(template);
+    setDocumentType(nextType);
+    setDocumentTitle(`${repairMojibake(template?.name || "Documento clínico")} - ${patientName}`);
+    setDocumentContent(templateToClinicalDocumentText(template, patientName));
+    setShowTemplateDialog(false);
+    setShowEditor(true);
+  };
+
+  const saveTextDocument = () => {
+    const content = documentContent.trim();
+    if (!content) {
+      toast.error("Digite o conteúdo do documento antes de salvar.");
+      return;
+    }
+
+    const fallbackTitle = `${documentType === "declaracao" ? "Declaração" : documentType === "laudo" ? "Laudo" : "Atestado"} - ${patientName}`;
+    const title = documentTitle.trim() || fallbackTitle;
+    const fileName = `${sanitizeFileName(title)}.txt`;
+
+    uploadTextDocumentMutation.mutate({
+      patientId,
+      type: documentType,
+      folderLabel: "Documentos clínicos",
+      name: title,
+      description: "Criado no editor de Atestados/Docs do prontuário.",
+      base64: textToBase64(content),
+      mimeType: "text/plain;charset=utf-8",
+      originalFileName: fileName,
+    });
+  };
+
   return (
     <div className="space-y-4">
       <TabHeader
         title="Atestados e documentos clínicos"
-        description="Consulte o histórico já salvo, faça upload de novos arquivos e abra o editor/modelos quando quiser montar um documento na hora."
+        description="Consulte o histórico já salvo, faça upload de novos arquivos e crie documentos em texto livre dentro do prontuário."
         actions={
           <>
-            <Button size="sm" variant="outline" onClick={() => navigate(`/documentos?patientId=${patientId}&type=atestado&create=1`)}>
+            <Button size="sm" variant="outline" onClick={openBlankEditor}>
               <Pencil className="mr-1.5 h-3.5 w-3.5" />
-              Fazer na hora
+              Criar novo
             </Button>
-            <Button size="sm" variant="outline" onClick={() => navigate("/templates")}>
+            <Button size="sm" variant="outline" onClick={() => setShowTemplateDialog(true)}>
               <ClipboardPlus className="mr-1.5 h-3.5 w-3.5" />
               Usar modelo
             </Button>
           </>
         }
       />
+
+      <Dialog open={showTemplateDialog} onOpenChange={setShowTemplateDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Modelos de atestados e declarações</DialogTitle>
+          </DialogHeader>
+
+          {templatesLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-5 w-5 animate-spin text-[#C9A55B]" />
+            </div>
+          ) : availableTemplates.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border/70 p-6 text-center">
+              <FileText className="mx-auto mb-3 h-8 w-8 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">Nenhum modelo de atestado ou declaração encontrado.</p>
+              <Button type="button" variant="outline" className="mt-4" onClick={() => { setShowTemplateDialog(false); navigate("/templates"); }}>
+                Gerenciar modelos
+              </Button>
+            </div>
+          ) : (
+            <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+              {availableTemplates.map((template: any) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  onClick={() => applyTemplate(template)}
+                  className="w-full rounded-lg border border-border/70 bg-background p-4 text-left transition hover:border-[#C9A55B]/60 hover:bg-[#C9A55B]/5"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <FileText className="h-4 w-4 text-[#C9A55B]" />
+                    <span className="text-sm font-semibold">{repairMojibake(template.name)}</span>
+                    {template.specialty ? <Badge variant="outline" className="text-[10px]">{repairMojibake(template.specialty)}</Badge> : null}
+                  </div>
+                  {template.description ? <p className="mt-2 text-xs text-muted-foreground">{repairMojibake(template.description)}</p> : null}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setShowTemplateDialog(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {showEditor ? (
+        <Card className="border-[#C9A55B]/20 bg-[#C9A55B]/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ScrollText className="h-4 w-4 text-[#C9A55B]" />
+              Criar documento
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-[180px_1fr]">
+              <div className="space-y-2">
+                <Label>Tipo</Label>
+                <Select value={documentType} onValueChange={(value) => setDocumentType(value as "atestado" | "declaracao" | "laudo")}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="atestado">Atestado</SelectItem>
+                    <SelectItem value="declaracao">Declaração</SelectItem>
+                    <SelectItem value="laudo">Laudo / relatório</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Título</Label>
+                <Input value={documentTitle} onChange={(event) => setDocumentTitle(event.target.value)} placeholder="Ex.: Atestado de comparecimento" />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Texto do documento</Label>
+              <Textarea
+                value={documentContent}
+                onChange={(event) => setDocumentContent(event.target.value)}
+                rows={12}
+                className="min-h-[260px] resize-y font-mono text-sm"
+                placeholder="Digite aqui o texto do atestado, declaração ou laudo."
+              />
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setShowEditor(false)} disabled={uploadTextDocumentMutation.isPending}>
+                Cancelar
+              </Button>
+              <Button type="button" className="btn-glossy-gold" onClick={saveTextDocument} disabled={uploadTextDocumentMutation.isPending}>
+                {uploadTextDocumentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Salvar no prontuário
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <DocumentUploadPanel
         patientId={patientId}
@@ -828,7 +1154,7 @@ function AtestadosTab({ patientId, patientName: _pn }: { patientId: number; pati
                   <p className="text-xs text-muted-foreground">
                     {doc.createdAt ? new Date(doc.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "Sem data"}
                   </p>
-                  {doc.description ? <p className="text-sm text-muted-foreground">{repairMojibake(doc.description)}</p> : null}
+                  {doc.description ? <p className="text-sm text-muted-foreground">{formatImportedText(doc.description)}</p> : null}
                 </div>
 
                 {doc.fileUrl ? (
@@ -1189,7 +1515,7 @@ function AnexosTab({ patientId }: { patientId: number }) {
                         )}
                         <Badge variant="outline" className="text-[10px]">{repairMojibake(doc.type || "anexo")}</Badge>
                       </div>
-                      {doc.description ? <p className="text-xs text-muted-foreground truncate">{repairMojibake(doc.description)}</p> : null}
+                      {doc.description ? <p className="text-xs text-muted-foreground truncate">{formatImportedText(doc.description)}</p> : null}
                     </div>
                   </div>
                   {doc.fileUrl ? (
@@ -1261,7 +1587,7 @@ function ContratosTab({ patientId }: { patientId: number }) {
                     <Badge variant="outline" className="text-[9px] h-4 px-1">Importado · OnDoctor</Badge>
                   )}
                   {doc.description && (
-                    <span className="text-[10px] text-muted-foreground truncate">{doc.description}</span>
+                    <span className="text-[10px] text-muted-foreground truncate">{formatImportedText(doc.description)}</span>
                   )}
                 </div>
               </div>
@@ -1533,7 +1859,7 @@ function AgendamentosTab({ patientId }: { patientId: number }) {
                 </div>
                 {appointment.notes ? (
                   <p className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-                    {repairMojibake(appointment.notes)}
+                    {formatImportedText(appointment.notes)}
                   </p>
                 ) : null}
               </CardContent>
@@ -1682,6 +2008,7 @@ export default function ProntuarioDetalhe() {
         patientId={editPatientOpen ? patientId : null}
         onClose={() => setEditPatientOpen(false)}
         onSaved={() => refetchPatient()}
+        onDeleted={() => setLocation("/prontuarios")}
       />
 
       {/* Allergy Alert */}
@@ -1717,7 +2044,7 @@ export default function ProntuarioDetalhe() {
               }
             }}
           >
-            Ver registros da secretaria
+            Ver registros da secret&aacute;ria
           </Button>
         </div>
       )}
@@ -1746,7 +2073,7 @@ export default function ProntuarioDetalhe() {
                 <ClipboardList className="h-3.5 w-3.5" />Anamnese
               </TabsTrigger>
               <TabsTrigger value="secretaria" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-                <UserCheck className="h-3.5 w-3.5" />Secretaria
+                <UserCheck className="h-3.5 w-3.5" />Secret&aacute;ria
               </TabsTrigger>
               <TabsTrigger value="atestados" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
                 <FileText className="h-3.5 w-3.5" />Atestados / Docs

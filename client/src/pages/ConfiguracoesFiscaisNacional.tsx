@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useLocation } from "wouter";
 import {
   AlertTriangle,
   Building2,
@@ -115,6 +116,7 @@ async function fileToBase64(file: File) {
 }
 
 export default function ConfiguracoesFiscaisNacional() {
+  const [, navigate] = useLocation();
   const { data: fiscal, isLoading, refetch } = trpc.fiscal.get.useQuery();
   const utils = trpc.useUtils();
   const [form, setForm] = useState<FiscalForm>(initialForm);
@@ -262,6 +264,10 @@ export default function ConfiguracoesFiscaisNacional() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button type="button" onClick={() => navigate("/nfse")}>
+            <FileText className="mr-2 h-4 w-4" />
+            Emitir nota
+          </Button>
           <Button
             variant="outline"
             onClick={() => syncMunicipalMutation.mutate({ ambiente: form.ambiente })}

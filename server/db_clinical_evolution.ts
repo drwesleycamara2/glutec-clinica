@@ -21,6 +21,68 @@ function unwrapRows<T = any>(result: any): T[] {
   return [];
 }
 
+type RelatedClinicalActivities = {
+  exams: any[];
+  prescriptions: any[];
+  documents: any[];
+};
+
+function toDateKey(value: any) {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+  return date.toISOString().slice(0, 10);
+}
+
+function recordDateKey(record: any) {
+  return toDateKey(record?.startedAt || record?.date || record?.createdAt);
+}
+
+function isRelatedToRecord(item: any, record: any) {
+  if (item?.medicalRecordId && record?.medicalRecordId && Number(item.medicalRecordId) === Number(record.medicalRecordId)) return true;
+  if (item?.appointmentId && record?.appointmentId && Number(item.appointmentId) === Number(record.appointmentId)) return true;
+  const itemDate = toDateKey(item?.date || item?.createdAt);
+  return Boolean(itemDate && itemDate === recordDateKey(record));
+}
+
+function attachRelatedActivities<T extends Record<string, any>>(records: T[], related: RelatedClinicalActivities) {
+  return records.map((record) => ({
+    ...record,
+    relatedExams: related.exams.filter((item) => isRelatedToRecord(item, record)).slice(0, 6),
+    relatedPrescriptions: related.prescriptions.filter((item) => isRelatedToRecord(item, record)).slice(0, 6),
+    relatedDocuments: related.documents.filter((item) => isRelatedToRecord(item, record)).slice(0, 8),
+  }));
+}
+
+async function getRelatedClinicalActivities(patientId: number): Promise<RelatedClinicalActivities> {
+  const db = await getDb();
+  if (!db) return { exams: [], prescriptions: [], documents: [] };
+
+  const exams = unwrapRows<any>(await db.execute(sql`
+    select id, patientId, appointmentId, medicalRecordId, date, content, exams, createdAt
+    from exam_requests
+    where patientId = ${patientId}
+    order by coalesce(date, createdAt) desc, id desc
+  `));
+
+  const prescriptions = unwrapRows<any>(await db.execute(sql`
+    select id, patientId, appointmentId, medicalRecordId, date, type, content, createdAt
+    from prescriptions
+    where patientId = ${patientId}
+    order by coalesce(date, createdAt) desc, id desc
+  `));
+
+  const documents = unwrapRows<any>(await db.execute(sql`
+    select id, patientId, appointmentId, medicalRecordId, type, name, description, fileUrl, fileKey, createdAt
+    from patient_documents
+    where patientId = ${patientId}
+      and type in ('atestado', 'declaracao', 'laudo', 'solicitacao_exames', 'prescricao', 'exame_pdf')
+    order by createdAt desc, id desc
+  `));
+
+  return { exams, prescriptions, documents };
+}
+
 function isReceptionDeskRole(role?: string | null) {
   const normalized = String(role || "").toLowerCase();
   return normalized === "recepcionista" || normalized === "secretaria";
@@ -158,7 +220,12 @@ export async function getClinicalEvolutionsByPatient(
       )
     : current;
   const visibleLegacy = isReceptionDeskRole(viewerRole) ? [] : legacy;
-  return [...visibleCurrent, ...visibleLegacy].map((record) => redactClinicalFieldsForViewer(record, viewerRole)).sort((a: any, b: any) => {
+  const related = isReceptionDeskRole(viewerRole)
+    ? { exams: [], prescriptions: [], documents: [] }
+    : await getRelatedClinicalActivities(patientId);
+  return attachRelatedActivities([...visibleCurrent, ...visibleLegacy], related)
+    .map((record) => redactClinicalFieldsForViewer(record, viewerRole))
+    .sort((a: any, b: any) => {
     const da = new Date(a.startedAt ?? a.createdAt ?? 0).getTime();
     const db2 = new Date(b.startedAt ?? b.createdAt ?? 0).getTime();
     return db2 - da;

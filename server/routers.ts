@@ -513,6 +513,13 @@ export const appRouter = router({
         const { id, ...rest } = input;
         return dbComplete.updatePatient(id, rest);
       }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        return dbComplete.deletePatient(input.id);
+      }),
   }),
 
   // â”€â”€â”€ APPOINTMENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -619,7 +626,8 @@ export const appRouter = router({
         observations: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        return dbComplete.createPrescription(input, ctx.user.id);
+        const userId = Number(ctx.user.id ?? (ctx.user as any).userId);
+        return dbComplete.createPrescription(input, userId);
       }),
 
     getByPatient: protectedProcedure
@@ -1725,6 +1733,11 @@ export const appRouter = router({
       .input(z.object({ patientId: z.number() }))
       .query(async ({ input }) => {
         return dbComplete.getPatientDocuments(input.patientId);
+      }),
+    listContracts: protectedProcedure
+      .input(z.object({ query: z.string().optional(), limit: z.number().optional() }).optional())
+      .query(async ({ input }) => {
+        return dbComplete.listContractDocuments(input?.query, input?.limit);
       }),
     uploadDocument: protectedProcedure
       .input(z.object({

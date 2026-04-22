@@ -320,11 +320,131 @@ function normalizePhotoRow(row: any) {
   };
 }
 
+function extractDocumentFileReference(row: any) {
+  const values = [
+    row?.fileUrl,
+    row?.fileKey,
+    row?.url,
+    row?.storageKey,
+    row?.path,
+    row?.originalPath,
+    row?.description,
+    row?.name,
+  ];
+
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (!text) continue;
+    if (/^(https?:|data:|\/).+\.(pdf|docx?|jpe?g|png)$/i.test(text)) return text;
+
+    const markerMatch = text.match(/arquivo original:\s*([^,;\n]+?\.(?:pdf|docx?|jpe?g|png))/i);
+    if (markerMatch?.[1]) return markerMatch[1].trim();
+
+    const knownPathMatch = text.match(/((?:prontuarioverde|imports|uploads|patient-documents|documents)[a-z0-9_\-\/. ]+\.(?:pdf|docx?|jpe?g|png))/i);
+    if (knownPathMatch?.[1]) return knownPathMatch[1].trim();
+
+    const genericPathMatch = text.match(/([a-z0-9_-]+(?:\/[a-z0-9_. -]+)+\.(?:pdf|docx?|jpe?g|png))/i);
+    if (genericPathMatch?.[1]) return genericPathMatch[1].trim();
+  }
+
+  return "";
+}
+
 function normalizeDocumentRow(row: any) {
+  const fileUrl = normalizeMediaUrl(extractDocumentFileReference(row));
   return {
     ...row,
-    fileUrl: normalizeMediaUrl(row.fileUrl),
+    fileUrl,
+    url: fileUrl,
   };
+}
+
+function normalizeDocumentKeyPart(value?: string | null) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function inferContractDocumentKind(document: any) {
+  const haystack = normalizeDocumentKeyPart([document?.name, document?.description, document?.type].filter(Boolean).join(" "));
+  if (haystack.includes("contrato")) return "contrato";
+  if (haystack.includes("termo")) return "termo";
+  return String(document?.type || "documento").toLowerCase();
+}
+
+function extractDocumentDateKey(document: any) {
+  const source = [document?.name, document?.description, document?.createdAt].filter(Boolean).join(" ");
+  const iso = source.match(/\b(20\d{2})[-_/](\d{1,2})[-_/](\d{1,2})\b/);
+  if (iso) return iso[1] + "-" + iso[2].padStart(2, "0") + "-" + iso[3].padStart(2, "0");
+
+  const br = source.match(/\b(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})\b/);
+  if (br) {
+    const year = br[3].length === 2 ? "20" + br[3] : br[3];
+    return year + "-" + br[2].padStart(2, "0") + "-" + br[1].padStart(2, "0");
+  }
+
+  if (document?.createdAt) {
+    const date = new Date(document.createdAt);
+    if (!Number.isNaN(date.getTime())) return date.toISOString().slice(0, 10);
+  }
+
+  return "sem-data";
+}
+
+function contractDocumentDedupKey(document: any) {
+  const type = String(document?.type || "").toLowerCase();
+  if (type !== "contrato" && type !== "termo") return "documento:" + document?.id;
+
+  const patientId = String(document?.patientId ?? "sem-paciente");
+  const kind = inferContractDocumentKind(document);
+  const dateKey = extractDocumentDateKey(document);
+  const source = String(document?.sourceSystem || "importado").toLowerCase();
+  return [patientId, source, kind, dateKey].join(":");
+}
+
+function documentAvailabilityScore(document: any) {
+  let score = 0;
+  if (document?.fileUrl || document?.url) score += 1000;
+  if (document?.fileKey) score += 300;
+  if (Number(document?.fileSize || 0) > 0) score += 100;
+  if (document?.mimeType === "application/pdf") score += 20;
+  if (document?.sourceSystem === "prontuario_verde") score += 5;
+  score += Number(document?.id || 0) / 1000000;
+  return score;
+}
+
+function isContractOrTermDocument(document: any) {
+  const type = String(document?.type || "").toLowerCase();
+  return type === "contrato" || type === "termo";
+}
+
+function hasDownloadableDocumentFile(document: any) {
+  return Boolean(document?.fileUrl || document?.url || document?.fileKey);
+}
+
+function shouldShowDocumentInPatientLists(document: any) {
+  return !isContractOrTermDocument(document) || hasDownloadableDocumentFile(document);
+}
+
+function dedupeDocumentsForDisplay(documents: any[]) {
+  const byKey = new Map<string, any>();
+  for (const document of documents) {
+    const key = contractDocumentDedupKey(document);
+    const current = byKey.get(key);
+    if (!current || documentAvailabilityScore(document) > documentAvailabilityScore(current)) {
+      byKey.set(key, document);
+    }
+  }
+
+  return Array.from(byKey.values()).sort((a, b) => {
+    const da = new Date(a?.createdAt ?? 0).getTime();
+    const db = new Date(b?.createdAt ?? 0).getTime();
+    if (db !== da) return db - da;
+    return Number(b?.id || 0) - Number(a?.id || 0);
+  });
 }
 
 function parseTemplateSections(sections: any) {
@@ -439,11 +559,14 @@ export async function listPatients(
 
   const whereClause = normalizedQuery
     ? sql`
-        where fullName like ${`%${normalizedQuery}%`}
-           or cpf like ${`%${normalizedQuery}%`}
-           or phone like ${`%${normalizedQuery}%`}
+        where coalesce(active, 1) <> 0
+          and (
+            fullName like ${`%${normalizedQuery}%`}
+            or cpf like ${`%${normalizedQuery}%`}
+            or phone like ${`%${normalizedQuery}%`}
+          )
       `
-    : sql``;
+    : sql`where coalesce(active, 1) <> 0`;
 
   const rows = unwrapRows<any>(await db.execute(sql`
     select *
@@ -638,6 +761,19 @@ export async function updatePatient(id: number, data: any) {
   `);
 
   return { id, fullName: normalizedFullName };
+}
+
+export async function deletePatient(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  await db.execute(sql`
+    update patients
+    set active = 0, updatedAt = now()
+    where id = ${id}
+  `);
+
+  return { success: true };
 }
 
 // --- APPOINTMENTS ------------------------------------------------------------
@@ -917,6 +1053,11 @@ export async function createPrescription(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
+  const doctorId = Number(userId);
+  if (!Number.isFinite(doctorId) || doctorId <= 0) {
+    throw new Error("Usuario responsavel pela prescricao nao foi identificado.");
+  }
+
   const result = await db.execute(sql`
     insert into prescriptions (
       patientId,
@@ -926,7 +1067,7 @@ export async function createPrescription(data: any, userId: number) {
       observations
     ) values (
       ${data.patientId},
-      ${userId},
+      ${doctorId},
       ${data.type},
       ${data.content},
       ${data.observations ?? null}
@@ -2101,7 +2242,40 @@ export async function getPatientDocuments(patientId: number) {
     order by createdAt desc, id desc
   `));
 
-  return rows.map(normalizeDocumentRow);
+  return dedupeDocumentsForDisplay(rows.map(normalizeDocumentRow).filter(shouldShowDocumentInPatientLists));
+}
+
+export async function listContractDocuments(query?: string, limit: number = 500) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const normalizedQuery = String(query ?? "").trim();
+  const whereClause = normalizedQuery
+    ? sql`
+        where pd.type in ('contrato', 'termo')
+          and (
+            pd.name like ${`%${normalizedQuery}%`}
+            or pd.description like ${`%${normalizedQuery}%`}
+            or p.fullName like ${`%${normalizedQuery}%`}
+            or p.cpf like ${`%${normalizedQuery}%`}
+          )
+      `
+    : sql`where pd.type in ('contrato', 'termo')`;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select
+      pd.*,
+      p.fullName as patientName,
+      p.cpf as patientCpf,
+      p.phone as patientPhone
+    from patient_documents pd
+    left join patients p on p.id = pd.patientId
+    ${whereClause}
+    order by pd.createdAt desc, pd.id desc
+    limit ${limit}
+  `));
+
+  return dedupeDocumentsForDisplay(rows.map(normalizeDocumentRow).filter(hasDownloadableDocumentFile));
 }
 
 export async function getPatientHistory(patientId: number) {

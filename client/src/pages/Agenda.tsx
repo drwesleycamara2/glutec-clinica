@@ -114,6 +114,46 @@ function formatDateHeader(date: Date) {
   return `${DAY_NAMES_FULL[date.getDay()]}, ${date.getDate()} DE ${MONTHS_PT[date.getMonth()].toUpperCase()} DE ${date.getFullYear()}`;
 }
 
+function repairImportedText(value?: string | null) {
+  let content = String(value ?? "");
+  if (!content) return "";
+  if (/[\u00c3\u00c2\uFFFD]/.test(content) || /\u00e2[\u0080-\u00bf]/.test(content)) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const bytes = Uint8Array.from(Array.from(content).map((char) => char.charCodeAt(0) & 0xff));
+        const decoded = new TextDecoder("utf-8").decode(bytes);
+        if (!decoded || decoded === content) break;
+        content = decoded;
+      } catch {
+        break;
+      }
+    }
+  }
+  return content.replace(/\uFFFD/g, "").trim();
+}
+
+function formatImportedText(value?: string | null) {
+  let content = repairImportedText(value);
+  if (!content) return "";
+  const entities: Record<string, string> = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+  return content
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "- ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)))
+    .replace(/&([a-zA-Z]+);/g, (match, entity) => entities[entity] ?? match)
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function buildDateTimeForSlot(baseDate: Date, slot: string) {
   const [hours, minutes] = slot.split(":").map(Number);
   const date = new Date(baseDate);
@@ -416,7 +456,7 @@ export default function Agenda() {
       scheduledAt: toDateTimeInputValue(new Date(appointment.scheduledAt)),
       durationMinutes: String(appointment.duration ?? appointment.durationMinutes ?? 30),
       type: appointment.type || "consulta",
-      notes: appointment.notes || "",
+      notes: formatImportedText(appointment.notes) || "",
       room: appointment.room || "",
     });
     setSelectedEvent(null);
@@ -856,7 +896,7 @@ export default function Agenda() {
                             Sala: {block.room || "Todas"} · Profissional: {block.doctorId ? getDoctorName(block.doctorId) : "Todos"}
                           </p>
                           {block.notes ? (
-                            <p className="text-xs text-gray-500">{block.notes}</p>
+                            <p className="text-xs text-gray-500">{formatImportedText(block.notes)}</p>
                           ) : null}
                         </div>
 
@@ -1347,7 +1387,7 @@ export default function Agenda() {
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Observações</p>
                 <p className="mt-2 whitespace-pre-wrap text-sm text-gray-800">
-                  {selectedEvent.notes || "Nenhuma observação registrada para este agendamento."}
+                  {formatImportedText(selectedEvent.notes) || "Nenhuma observação registrada para este agendamento."}
                 </p>
               </div>
             </div>
@@ -1375,7 +1415,7 @@ export default function Agenda() {
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Observações</p>
                 <p className="mt-2 whitespace-pre-wrap text-sm text-gray-800">
-                  {selectedEvent.notes || "Sem observações adicionais para este bloqueio."}
+                  {formatImportedText(selectedEvent.notes) || "Sem observações adicionais para este bloqueio."}
                 </p>
               </div>
             </div>

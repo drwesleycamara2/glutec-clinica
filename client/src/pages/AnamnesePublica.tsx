@@ -19,6 +19,21 @@ type PublicAnamnesisResponse = {
   profilePhotoUrl?: string | null;
 };
 
+function makeUniqueQuestionId(question: AnamnesisQuestion, index: number, usedIds: Set<string>) {
+  const rawBase = String(question.id || question.text || `pergunta-${index + 1}`).trim();
+  const safeBase = rawBase || `pergunta-${index + 1}`;
+  let candidate = safeBase;
+  let suffix = 2;
+
+  while (usedIds.has(candidate)) {
+    candidate = `${safeBase}-${suffix}`;
+    suffix += 1;
+  }
+
+  usedIds.add(candidate);
+  return candidate;
+}
+
 export default function AnamnesePublica() {
   const { token } = useParams<{ token: string }>();
   const [loading, setLoading] = useState(true);
@@ -50,8 +65,10 @@ export default function AnamnesePublica() {
         const payload = (await response.json()) as PublicAnamnesisResponse;
         if (cancelled) return;
 
-        const hydratedQuestions = (payload.questions || []).map((question) => ({
+        const usedQuestionIds = new Set<string>();
+        const hydratedQuestions = (payload.questions || []).map((question, index) => ({
           ...question,
+          id: makeUniqueQuestionId(question, index, usedQuestionIds),
           answer: payload.answers?.[question.text] || "",
           followUpAnswer: payload.answers?.[`${question.text}::__complemento`] || "",
           options: Array.isArray(question.options) ? question.options : [],
