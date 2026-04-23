@@ -1,4 +1,4 @@
-﻿import { useAuth } from "@/_core/hooks/useAuth";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   AlertDialog,
@@ -44,6 +44,7 @@ import {
   MessageSquare,
   Package,
   Receipt,
+  ScrollText,
   Settings,
   ShieldCheck,
   Stethoscope,
