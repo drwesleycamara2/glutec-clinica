@@ -184,6 +184,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
   const [editingLockedStatus, setEditingLockedStatus] = useState<null | "finalizado" | "assinado">(null);
   const [justificationDialogOpen, setJustificationDialogOpen] = useState(false);
   const [pendingSaveAction, setPendingSaveAction] = useState<null | "rascunho" | "finalizado">(null);
+  const [finalizeConfirmOpen, setFinalizeConfirmOpen] = useState(false);
   const [editJustificationText, setEditJustificationText] = useState("");
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [historyForEvolutionId, setHistoryForEvolutionId] = useState<number | null>(null);
@@ -472,11 +473,6 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
   }, [draftStorageKey, form, isReceptionist, patientId, patientName, startedSessionAt]);
 
   const handleFinalize = async (opts?: { justification?: string }) => {
-    if (!opts?.justification) {
-      const confirmed = window.confirm("Finalizar a consulta agora? Depois disso ela ficará registrada como concluída.");
-      if (!confirmed) return;
-    }
-
     try {
       const payload = buildPayload("finalizado");
       if (form.id) {
@@ -1192,7 +1188,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
             <Button
               type="button"
               variant="outline"
-              onClick={() => handleFinalize()}
+              onClick={() => setFinalizeConfirmOpen(true)}
               disabled={createMutation.isPending || updateMutation.isPending}
               className="border-emerald-600/30 text-emerald-700"
             >
@@ -1383,7 +1379,36 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
         </DialogContent>
       </Dialog>
 
-      {/* Diálogo de justificativa para edição de consulta finalizada/assinada */}
+      {/* Dialogo de confirmacao antes de finalizar o atendimento */}
+      <Dialog open={finalizeConfirmOpen} onOpenChange={setFinalizeConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Finalizar atendimento?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>Confirme para encerrar este atendimento.</p>
+            <p>Depois disso ele ficara registrado como concluido no historico do paciente.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFinalizeConfirmOpen(false)}>
+              Voltar
+            </Button>
+            <Button
+              onClick={async () => {
+                setFinalizeConfirmOpen(false);
+                await handleFinalize();
+              }}
+              disabled={createMutation.isPending || updateMutation.isPending}
+              className="border-emerald-600/30 bg-emerald-600 text-white hover:bg-emerald-700"
+            >
+              {(createMutation.isPending || updateMutation.isPending) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Confirmar finalizacao
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialogo de justificativa para edicao de consulta finalizada/assinada */}
       <Dialog
         open={justificationDialogOpen}
         onOpenChange={(open) => {

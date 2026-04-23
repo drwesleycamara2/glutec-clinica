@@ -28,6 +28,138 @@ function unwrapRows<T = any>(result: any): T[] {
 
   return (result ?? []) as T[];
 }
+
+const tableColumnCache = new Map<string, Promise<Map<string, string>>>();
+let ensurePrescriptionSchemaPromise: Promise<void> | null = null;
+
+function clearTableColumnCache(tableName: string) {
+  tableColumnCache.delete(tableName);
+}
+
+async function getTableColumns(tableName: string) {
+  let cached = tableColumnCache.get(tableName);
+  if (!cached) {
+    cached = (async () => {
+      const db = await getDb();
+      if (!db) return new Map<string, string>();
+
+      const rows = unwrapRows<any>(await db.execute(sql`
+        select
+          column_name as columnName,
+          column_type as columnType,
+          data_type as dataType
+        from information_schema.columns
+        where table_schema = database()
+          and table_name = ${tableName}
+      `));
+
+      return new Map(
+        rows.map((row) => [
+          String(row.columnName),
+          String(row.columnType || row.dataType || ""),
+        ]),
+      );
+    })();
+    tableColumnCache.set(tableName, cached);
+  }
+
+  return cached;
+}
+
+async function ensurePrescriptionSchema(db: any) {
+  if (!ensurePrescriptionSchemaPromise) {
+    ensurePrescriptionSchemaPromise = (async () => {
+      const columns = await getTableColumns("prescriptions");
+      const alterations: string[] = [];
+
+      if (!columns.has("type")) {
+        const afterClause = columns.has("medicalRecordId") ? " AFTER `medicalRecordId`" : "";
+        alterations.push(`ADD COLUMN \`type\` VARCHAR(64) NULL${afterClause}`);
+      }
+
+      if (!columns.has("observations")) {
+        const afterClause = columns.has("content")
+          ? " AFTER `content`"
+          : columns.has("items")
+            ? " AFTER `items`"
+            : "";
+        alterations.push(`ADD COLUMN \`observations\` TEXT NULL${afterClause}`);
+      }
+
+      if (alterations.length > 0) {
+        await db.execute(sql.raw(`ALTER TABLE prescriptions ${alterations.join(", ")}`));
+        clearTableColumnCache("prescriptions");
+      }
+    })();
+  }
+
+  try {
+    await ensurePrescriptionSchemaPromise;
+  } catch (error) {
+    ensurePrescriptionSchemaPromise = null;
+    throw error;
+  }
+}
+
+function formatSqlDate(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function stripHtmlToPlainText(value?: string | null) {
+  return String(value ?? "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/\u00a0/g, " ")
+    .replace(/\r/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+function parsePrescriptionItems(items: unknown) {
+  if (!items) return null;
+  try {
+    const parsed = typeof items === "string" ? JSON.parse(items) : items;
+    if (Array.isArray(parsed)) {
+      return {
+        text: parsed
+          .map((item: any) => [item?.description, item?.instructions]
+            .filter(Boolean)
+            .map((value) => String(value).trim())
+            .join("\n"))
+          .filter(Boolean)
+          .join("\n\n"),
+      };
+    }
+    if (parsed && typeof parsed === "object") {
+      return parsed as Record<string, any>;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function normalizePrescriptionRecord(record: any) {
+  const parsedItems = parsePrescriptionItems(record?.items);
+  const contentFromItems = parsedItems?.html || parsedItems?.content || parsedItems?.text || "";
+  const normalizedContent = String(record?.content ?? contentFromItems ?? "");
+  const normalizedObservations = record?.observations ?? parsedItems?.observations ?? null;
+  const normalizedType = String(record?.type ?? parsedItems?.type ?? "simples");
+
+  return {
+    ...record,
+    content: normalizedContent,
+    observations: normalizedObservations,
+    type: normalizedType,
+  };
+}
 function normalizeMediaUrl(value?: string | null) {
   const raw = String(value ?? "").trim();
   if (!raw) return "";
@@ -1117,20 +1249,50 @@ export async function createPrescription(data: any, userId: number) {
     throw new Error("Usuario responsavel pela prescricao nao foi identificado.");
   }
 
+  await ensurePrescriptionSchema(db);
+  const columns = await getTableColumns("prescriptions");
+  const normalizedContent = String(data.content ?? "").trim();
+  const normalizedObservations = data.observations ? String(data.observations).trim() : null;
+
+  const payload: Record<string, unknown> = {
+    patientId: data.patientId,
+    doctorId,
+  };
+
+  if (columns.has("appointmentId") && data.appointmentId !== undefined) {
+    payload.appointmentId = data.appointmentId;
+  }
+  if (columns.has("medicalRecordId") && data.medicalRecordId !== undefined) {
+    payload.medicalRecordId = data.medicalRecordId;
+  }
+  if (columns.has("date")) {
+    payload.date = formatSqlDate();
+  }
+  if (columns.has("type")) {
+    payload.type = data.type;
+  }
+  if (columns.has("content")) {
+    payload.content = normalizedContent;
+  }
+  if (columns.has("observations")) {
+    payload.observations = normalizedObservations;
+  }
+  if (columns.has("items")) {
+    payload.items = JSON.stringify({
+      type: data.type,
+      html: normalizedContent,
+      text: stripHtmlToPlainText(normalizedContent),
+      observations: normalizedObservations,
+    });
+  }
+
+  const entries = Object.entries(payload).filter(([_, value]) => value !== undefined);
+  const colNames = entries.map(([key]) => sql.raw(`\`${key}\``));
+  const colValues = entries.map(([_, value]) => sql`${value}`);
+
   const result = await db.execute(sql`
-    insert into prescriptions (
-      patientId,
-      doctorId,
-      type,
-      content,
-      observations
-    ) values (
-      ${data.patientId},
-      ${doctorId},
-      ${data.type},
-      ${data.content},
-      ${data.observations ?? null}
-    )
+    INSERT INTO prescriptions (${sql.join(colNames, sql`, `)})
+    VALUES (${sql.join(colValues, sql`, `)})
   `);
 
   const insertedId =
@@ -1150,19 +1312,21 @@ export async function getPrescriptionsByPatient(patientId: number) {
   if (!db) return [];
 
   if (!patientId || patientId <= 0) {
-    return unwrapRows<any>(await db.execute(sql`
+    const rows = unwrapRows<any>(await db.execute(sql`
       select *
       from prescriptions
       order by createdAt desc, id desc
     `));
+    return rows.map(normalizePrescriptionRecord);
   }
 
-  return unwrapRows<any>(await db.execute(sql`
+  const rows = unwrapRows<any>(await db.execute(sql`
     select *
     from prescriptions
     where patientId = ${patientId}
     order by createdAt desc, id desc
   `));
+  return rows.map(normalizePrescriptionRecord);
 }
 
 export async function getPrescriptionById(id: number) {
@@ -1176,7 +1340,7 @@ export async function getPrescriptionById(id: number) {
     limit 1
   `));
 
-  return rows[0] ?? null;
+  return rows[0] ? normalizePrescriptionRecord(rows[0]) : null;
 }
 
 export async function listPrescriptionTemplates() {

@@ -270,7 +270,7 @@ export default function Prescricoes() {
       )}
 
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+        <DialogContent className="max-h-[90vh] w-[min(92vw,56rem)] max-w-4xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Pill className="h-5 w-5 text-primary" />
@@ -279,12 +279,12 @@ export default function Prescricoes() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            <div className="grid gap-3 md:grid-cols-2">
-              <div>
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
+              <div className="min-w-0">
                 <Label>Paciente *</Label>
                 <Select value={form.patientId} onValueChange={(value) => setForm((current) => ({ ...current, patientId: value }))}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Selecione o paciente" />
+                  <SelectTrigger className="mt-1 w-full min-w-0">
+                    <SelectValue placeholder="Selecione o paciente" className="truncate" />
                   </SelectTrigger>
                   <SelectContent>
                     {(patients ?? []).map((patient) => (
@@ -296,14 +296,14 @@ export default function Prescricoes() {
                 </Select>
               </div>
 
-              <div>
-                <Label>Tipo de receituário</Label>
+              <div className="min-w-0">
+                <Label>Tipo de receituario</Label>
                 <Select
                   value={form.type}
                   onValueChange={(value) => setForm((current) => ({ ...current, type: value as PrescriptionForm["type"] }))}
                 >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue />
+                  <SelectTrigger className="mt-1 w-full min-w-0">
+                    <SelectValue className="truncate" />
                   </SelectTrigger>
                   <SelectContent>
                     {PRESCRIPTION_TYPES.map((type) => (
