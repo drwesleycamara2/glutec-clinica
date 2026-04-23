@@ -1,4 +1,4 @@
-﻿import fs from "fs";
+import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { execFileSync } from "child_process";
@@ -776,6 +776,29 @@ export async function deletePatient(id: number) {
   return { success: true };
 }
 
+type AppointmentCancellationSource = "clinica" | "paciente" | "sistema";
+
+const APPOINTMENT_CANCELLATION_LABELS: Record<AppointmentCancellationSource, string> = {
+  clinica: "Agendamento cancelado pela clínica",
+  paciente: "Agendamento cancelado pelo paciente",
+  sistema: "Agendamento cancelado pelo sistema",
+};
+
+function buildAppointmentCancellationReason(
+  cancelledBy: AppointmentCancellationSource,
+  note?: string | null,
+) {
+  const happenedAt = new Date().toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+  });
+  const label = APPOINTMENT_CANCELLATION_LABELS[cancelledBy] ?? APPOINTMENT_CANCELLATION_LABELS.clinica;
+  const normalizedNote = String(note ?? "").trim();
+
+  return normalizedNote
+    ? `${label} em ${happenedAt}. Observação: ${normalizedNote}`
+    : `${label} em ${happenedAt}.`;
+}
+
 // --- APPOINTMENTS ------------------------------------------------------------
 export async function createAppointment(data: any, userId: number) {
   const db = await getDb();
@@ -966,11 +989,47 @@ export async function getAppointmentsByDateRange(from: string, to: string) {
   `));
 }
 
-export async function updateAppointmentStatus(appointmentId: number, status: string) {
+export async function updateAppointmentStatus(
+  appointmentId: number,
+  data: {
+    status: string;
+    cancelledBy?: AppointmentCancellationSource;
+    note?: string;
+  },
+) {
   const db = await getDb();
-  if (!db) return;
-  
-  await db.update(sql`appointments`).set({ status }).where(eq(sql`id`, appointmentId));
+  if (!db) throw new Error("DB unavailable");
+
+  const currentRows = unwrapRows<any>(await db.execute(sql`
+    select id, status, cancelReason
+    from appointments
+    where id = ${appointmentId}
+    limit 1
+  `));
+
+  if (!currentRows[0]) {
+    throw new Error("Agendamento não encontrado.");
+  }
+
+  const normalizedStatus = String(data.status ?? "").trim();
+  if (!normalizedStatus) {
+    throw new Error("Status do agendamento não informado.");
+  }
+
+  const cancelReason =
+    normalizedStatus === "cancelada"
+      ? buildAppointmentCancellationReason(data.cancelledBy ?? "clinica", data.note)
+      : null;
+
+  await db.execute(sql`
+    update appointments
+    set
+      status = ${normalizedStatus},
+      cancelReason = ${cancelReason},
+      updatedAt = NOW()
+    where id = ${appointmentId}
+  `);
+
   return { success: true };
 }
 

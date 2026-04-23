@@ -1,6 +1,10 @@
-﻿import type { Express } from "express";
+import type { Express } from "express";
 import { randomBytes } from "crypto";
-import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import {
+  COOKIE_NAME,
+  MUST_CHANGE_PASSWORD_SESSION_MS,
+  SESSION_DURATION_MS,
+} from "@shared/const";
 import { getSessionCookieOptions } from "./cookies";
 import * as db from "../db";
 import { passwordResetEmailTemplate, sendEmail } from "./mailerSafePtbr";
@@ -227,13 +231,17 @@ export function registerAuthRoutes(app: Express) {
         role: user.role,
         twoFactorVerified: false,
       },
-      user.mustChangePassword ? 30 * 60 * 1000 : ONE_YEAR_MS
+      user.mustChangePassword
+        ? MUST_CHANGE_PASSWORD_SESSION_MS
+        : SESSION_DURATION_MS
     );
 
     const cookieOptions = getSessionCookieOptions(req);
     res.cookie(COOKIE_NAME, sessionToken, {
       ...cookieOptions,
-      maxAge: user.mustChangePassword ? 30 * 60 * 1000 : ONE_YEAR_MS,
+      ...(user.mustChangePassword
+        ? { maxAge: MUST_CHANGE_PASSWORD_SESSION_MS }
+        : {}),
     });
 
     if (user.mustChangePassword) {
@@ -276,7 +284,7 @@ export function registerAuthRoutes(app: Express) {
     });
 
     const cookieOptions = getSessionCookieOptions(req);
-    res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+    res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
     return res.json({ status: "ok", user: sanitizeUser((await db.getUserById(user.id)) ?? user) });
   });
 
@@ -316,7 +324,7 @@ export function registerAuthRoutes(app: Express) {
     });
 
     const cookieOptions = getSessionCookieOptions(req);
-    res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+    res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
     return res.json({
       status: "ok",
       user: sanitizeUser((await db.getUserById(user.id)) ?? user),
@@ -376,7 +384,7 @@ export function registerAuthRoutes(app: Express) {
     });
 
     const cookieOptions = getSessionCookieOptions(req);
-    res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+    res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
     return res.json({ status: "requires_2fa_setup", user: sanitizeUser(user) });
   });
 
@@ -423,7 +431,7 @@ export function registerAuthRoutes(app: Express) {
     });
 
     const cookieOptions = getSessionCookieOptions(req);
-    res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+    res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
     return res.json({
       status: updatedUser.twoFactorEnabled ? "ok" : "requires_2fa_setup",
       user: sanitizeUser(updatedUser),

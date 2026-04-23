@@ -10,7 +10,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { randomBytes } from "crypto";
 import type { Request } from "express";
 import { parse as parseCookieHeader } from "cookie";
-import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { COOKIE_NAME, SESSION_DURATION_MS } from "@shared/const";
 import { ENV } from "./env";
 import * as db from "../db";
 import type { User } from "../../drizzle/schema";
@@ -62,7 +62,7 @@ export function generateSecureToken(bytes = 32): string {
 
 export async function createSessionToken(
   payload: LocalSessionPayload,
-  expiresInMs: number = ONE_YEAR_MS
+  expiresInMs: number = SESSION_DURATION_MS
 ): Promise<string> {
   const expiresIn = Math.floor((Date.now() + expiresInMs) / 1000);
   return new SignJWT({ ...payload, type: "session" })

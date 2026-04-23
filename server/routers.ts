@@ -1,4 +1,4 @@
-﻿import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
@@ -577,10 +577,16 @@ export const appRouter = router({
     updateStatus: protectedProcedure
       .input(z.object({
         appointmentId: z.number(),
-        status: z.string(),
+        status: z.enum(["agendada", "confirmada", "em_atendimento", "concluida", "cancelada", "falta"]),
+        cancelledBy: z.enum(["clinica", "paciente", "sistema"]).optional(),
+        note: z.string().optional(),
       }))
-      .mutation(async ({ ctx, input }) => {
-        return dbComplete.updateAppointmentStatus(input.appointmentId, input.status);
+      .mutation(async ({ input }) => {
+        return dbComplete.updateAppointmentStatus(input.appointmentId, {
+          status: input.status,
+          cancelledBy: input.cancelledBy,
+          note: input.note,
+        });
       }),
   }),
 

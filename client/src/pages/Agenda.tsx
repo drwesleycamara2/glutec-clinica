@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -152,6 +152,25 @@ function formatImportedText(value?: string | null) {
     .replace(/[ \t]{2,}/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+const STATUS_BADGE_CLASSES: Record<string, string> = {
+  agendada: "border border-yellow-300 bg-yellow-100 text-yellow-700",
+  confirmada: "border border-emerald-300 bg-emerald-100 text-emerald-700",
+  em_atendimento: "border border-sky-300 bg-sky-100 text-sky-700",
+  concluida: "border border-gray-200 bg-white text-gray-700",
+  cancelada: "border border-rose-300 bg-rose-100 text-rose-700",
+  falta: "border border-zinc-300 bg-zinc-100 text-zinc-700",
+};
+
+function getStatusBadgeClass(status?: string) {
+  return STATUS_BADGE_CLASSES[String(status ?? "")] ?? "border border-gray-200 bg-white text-gray-700";
+}
+
+function getCancellationSummary(appointment: any) {
+  if (appointment?.status !== "cancelada") return "";
+  const summary = formatImportedText(appointment?.cancelReason);
+  return summary || "Agendamento cancelado.";
 }
 
 function buildDateTimeForSlot(baseDate: Date, slot: string) {
@@ -347,6 +366,7 @@ export default function Agenda() {
     const dayOfWeek = date.getDay();
 
     const dayAppointments = filteredAppointments.filter((appointment) => isSameDay(new Date(appointment.scheduledAt), date));
+    const activeDayAppointments = dayAppointments.filter((appointment) => appointment.status !== "cancelada");
     const dayStart = new Date(date);
     dayStart.setHours(0, 0, 0, 0);
     const dayEnd = new Date(date);
@@ -361,17 +381,17 @@ export default function Agenda() {
     // Sábado: cinza se vazio, vermelho se tiver qualquer agendamento
     if (dayOfWeek === 6) {
       if (dayBlocks.length > 0) return "bloqueado";
-      return dayAppointments.length > 0 ? "sabado_ocupado" : "sabado_vazio";
+      return activeDayAppointments.length > 0 ? "sabado_ocupado" : "sabado_vazio";
     }
 
     // Dias bloqueados ou feriados: roxo
     if (dayBlocks.length > 0) return "bloqueado";
 
     // Dia livre: verde
-    if (dayAppointments.length === 0) return "livre";
+    if (activeDayAppointments.length === 0) return "livre";
 
     // Agenda cheia: vermelho
-    if (dayAppointments.length >= TIME_SLOTS.length) return "ocupado";
+    if (activeDayAppointments.length >= TIME_SLOTS.length) return "ocupado";
 
     // Parcialmente ocupado: amarelo
     return "parcial";
@@ -658,6 +678,9 @@ export default function Agenda() {
                         </td>
                         <td className="px-3 py-3">
                           <span className="text-sm font-medium text-gray-900">{appointment.patientName}</span>
+                          {appointment.status === "cancelada" ? (
+                            <p className="mt-1 text-xs text-rose-600">{getCancellationSummary(appointment)}</p>
+                          ) : null}
                         </td>
                         <td className="px-3 py-3">
                           <span className="text-xs capitalize text-gray-600">{appointment.type ?? "Consulta"}</span>
@@ -666,7 +689,7 @@ export default function Agenda() {
                           <span className="text-xs text-gray-600">{appointment.room || "Não informado"}</span>
                         </td>
                         <td className="px-3 py-3 text-center">
-                          <Badge className="border border-yellow-300 bg-yellow-100 text-yellow-700">
+                          <Badge className={getStatusBadgeClass(appointment.status)}>
                             {STATUS_LABELS[appointment.status] ?? appointment.status}
                           </Badge>
                         </td>
@@ -736,7 +759,7 @@ export default function Agenda() {
                               <span className="text-sm font-semibold text-gray-900">
                                 {new Date(item.scheduledAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                               </span>
-                              <Badge className="border border-[#C9A55B]/25 bg-[#C9A55B]/10 text-[#8A6526]">
+                              <Badge className={getStatusBadgeClass(item.status)}>
                                 {STATUS_LABELS[item.status] ?? item.status}
                               </Badge>
                             </div>
@@ -744,6 +767,9 @@ export default function Agenda() {
                             <p className="text-xs text-gray-500">
                               {getDoctorName(item.doctorId)} · {item.room || "Sem sala"}
                             </p>
+                            {item.status === "cancelada" ? (
+                              <p className="mt-2 text-xs text-rose-600">{getCancellationSummary(item)}</p>
+                            ) : null}
                           </button>
                         ))
                       )}
@@ -825,7 +851,7 @@ export default function Agenda() {
                             <span className="text-base font-semibold text-gray-900">
                               {new Date(item.scheduledAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                             </span>
-                            <Badge className="border border-gray-200 bg-white text-gray-700">
+                            <Badge className={getStatusBadgeClass(item.status)}>
                               {STATUS_LABELS[item.status] ?? item.status}
                             </Badge>
                           </div>
@@ -833,6 +859,9 @@ export default function Agenda() {
                           <p className="text-xs text-gray-500">
                             {getDoctorName(item.doctorId)} · {item.room || "Sem sala"}
                           </p>
+                          {item.status === "cancelada" ? (
+                            <p className="text-xs text-rose-600">{getCancellationSummary(item)}</p>
+                          ) : null}
                         </div>
 
                         <div className="flex flex-wrap gap-2">
@@ -1075,6 +1104,9 @@ export default function Agenda() {
                   </div>
                   <p className="mt-2 text-sm text-gray-900">{getPatientName(item.patientId)}</p>
                   <p className="text-xs text-gray-500">{item.room || "Sem sala"}</p>
+                  {item.status === "cancelada" ? (
+                    <p className="mt-2 text-xs text-rose-600">{getCancellationSummary(item)}</p>
+                  ) : null}
                 </button>
               ))
             )}
@@ -1101,11 +1133,14 @@ export default function Agenda() {
                     <span className="text-sm font-semibold text-gray-900">
                       {new Date(item.scheduledAt).toLocaleDateString("pt-BR")}
                     </span>
-                    <Badge className="border border-gray-200 bg-white text-gray-700">
+                    <Badge className={getStatusBadgeClass(item.status)}>
                       {STATUS_LABELS[item.status] ?? item.status}
                     </Badge>
                   </div>
                   <p className="mt-2 text-sm text-gray-900">{getPatientName(item.patientId)}</p>
+                  {item.status === "cancelada" ? (
+                    <p className="mt-2 text-xs text-rose-600">{getCancellationSummary(item)}</p>
+                  ) : null}
                 </button>
               ))
             )}
@@ -1378,11 +1413,20 @@ export default function Agenda() {
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Badge className="border border-[#C9A55B]/25 bg-[#C9A55B]/10 text-[#8A6526]">
+                <Badge className={getStatusBadgeClass(selectedEvent.status)}>
                   {STATUS_LABELS[selectedEvent.status] ?? selectedEvent.status}
                 </Badge>
                 <Badge className="border border-gray-200 bg-white text-gray-700">{selectedEvent.type ?? "Consulta"}</Badge>
               </div>
+
+              {selectedEvent.status === "cancelada" ? (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-rose-600">Cancelamento</p>
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-rose-700">
+                    {getCancellationSummary(selectedEvent)}
+                  </p>
+                </div>
+              ) : null}
 
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Observações</p>
@@ -1438,7 +1482,7 @@ export default function Agenda() {
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => updateStatusMutation.mutate({ appointmentId: selectedEvent.id, status: "cancelada" })}
+                  onClick={() => updateStatusMutation.mutate({ appointmentId: selectedEvent.id, status: "cancelada", cancelledBy: "clinica" })}
                 >
                   Cancelar
                 </Button>

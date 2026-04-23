@@ -14,7 +14,7 @@ import {
   hashBackupCodes,
 } from "../_core/totp";
 import { createSessionToken, generateSecureToken } from "../_core/auth";
-import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "../_core/cookies";
 import { sendEmail, inviteEmailTemplate, testSmtpConnection } from "../_core/mailerSafePtbr";
 
@@ -65,7 +65,7 @@ export const twoFactorRouter = router({
         twoFactorVerified: true,
       });
       const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      ctx.res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
 
       return {
         success: true,
