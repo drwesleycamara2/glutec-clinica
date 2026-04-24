@@ -27,12 +27,16 @@ import {
   ArrowLeft, Plus, FileText, Activity, Stethoscope, ClipboardList, Loader2,
   Calendar, User, ShieldCheck, FileDown, UserCheck, Copy, Link2, Paperclip,
   FlaskConical, Package, Save, Upload, Trash2, Search, CheckCircle2, History, FolderOpen, ImageIcon,
-  ScrollText, Pencil, ExternalLink, Receipt, Video, Layers3, ClipboardPlus,
+  ScrollText, Pencil, ExternalLink, Receipt, Video, Layers3, ClipboardPlus, Printer,
 } from "lucide-react";
 import { PatientEditDialog } from "@/components/PatientEditDialog";
 import { AllergyAlert } from "@/components/AllergyAlert";
 import { ExportProntuarioButton } from "@/components/ExportProntuario";
 import { EvolucaoClinicaWorkspace } from "@/components/EvolucaoClinicaWorkspace";
+import { RichTextEditor } from "@/components/RichTextEditor";
+import { generatePremiumPdf } from "@/components/PdfExporter";
+import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
+import { SignatureCertillionButton } from "@/components/SignatureCertillionButton";
 import { useAuth } from "@/_core/hooks/useAuth";
 
 function buildHistorySummary(record: any) {
@@ -134,8 +138,8 @@ function groupDocumentsByType(documents: any[]) {
     exame_imagem: "Resultados de exames",
     solicitacao_exames: "Resultados de exames",
     evolucao_pdf: "Atendimentos anteriores",
-    prescricao: "Prescrições e solicitações",
-    video: "Vídeos",
+    prescricao: "PrescriÃ§Ãµes e solicitaÃ§Ãµes",
+    video: "VÃ­deos",
     outro: "Outros anexos",
   };
 
@@ -151,13 +155,13 @@ const DEFAULT_ATTACHMENT_FOLDERS = ["Documentos pessoais", "Resultados de exames
 
 const DOCUMENT_TYPE_OPTIONS = [
   { value: "atestado", label: "Atestado" },
-  { value: "declaracao", label: "Declaração" },
+  { value: "declaracao", label: "DeclaraÃ§Ã£o" },
   { value: "rg", label: "Documento pessoal" },
-  { value: "cpf", label: "CPF / identificação" },
-  { value: "convenio", label: "Convênio / carteirinha" },
+  { value: "cpf", label: "CPF / identificaÃ§Ã£o" },
+  { value: "convenio", label: "ConvÃªnio / carteirinha" },
   { value: "exame_pdf", label: "Resultado de exame" },
-  { value: "solicitacao_exames", label: "Solicitação de exames" },
-  { value: "laudo", label: "Laudo / relatório" },
+  { value: "solicitacao_exames", label: "SolicitaÃ§Ã£o de exames" },
+  { value: "laudo", label: "Laudo / relatÃ³rio" },
   { value: "contrato", label: "Contrato" },
   { value: "termo", label: "Termo de consentimento" },
   { value: "outro", label: "Outro documento" },
@@ -205,25 +209,72 @@ function normalizeTemplateSearchText(value?: string | null) {
     .toLocaleLowerCase("pt-BR");
 }
 
-function isAttestationOrDeclarationTemplate(template: any) {
-  const haystack = normalizeTemplateSearchText(
-    [template?.name, template?.specialty, template?.description].filter(Boolean).join(" "),
-  );
-  return (
-    haystack.includes("atestado") ||
-    haystack.includes("declaracao") ||
-    haystack.includes("declaracoes") ||
-    haystack.includes("declara") ||
-    haystack.includes("laudo")
-  );
+type ClinicalDocumentType = "atestado" | "declaracao" | "laudo" | "solicitacao_exames";
+
+const CLINICAL_DOCUMENT_METADATA_PREFIX = "__GLUTEC_CLINICAL_DOC__:";
+const CLINICAL_DOCUMENT_TYPE_LABELS: Record<ClinicalDocumentType, string> = {
+  atestado: "Atestado",
+  declaracao: "Declaração",
+  laudo: "Laudo / relatório",
+  solicitacao_exames: "Solicitação de exames",
+};
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
-function inferClinicalDocumentType(template: any): "atestado" | "declaracao" | "laudo" {
+function plainTextToHtml(value?: string | null) {
+  const normalized = formatImportedText(value);
+  if (!normalized) return "<p></p>";
+  return normalized
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br />")}</p>`)
+    .join("");
+}
+
+function buildClinicalDocumentMetadata(content: string, documentType: ClinicalDocumentType) {
+  return `${CLINICAL_DOCUMENT_METADATA_PREFIX}${JSON.stringify({
+    documentType,
+    templateGroup: documentType === "declaracao" ? "declaracao" : documentType === "solicitacao_exames" ? "solicitacao_exames" : "atestado",
+    summary: summarizeText(content, 220),
+    content,
+  })}`;
+}
+
+function normalizeClinicalDocumentType(value?: string | null): ClinicalDocumentType {
+  const normalized = normalizeTemplateSearchText(value);
+  if (normalized.includes("declar")) return "declaracao";
+  if (normalized.includes("solicitacao") || normalized.includes("pedido de exame") || normalized.includes("exame")) return "solicitacao_exames";
+  if (normalized.includes("laudo")) return "laudo";
+  return "atestado";
+}
+
+function isClinicalDocumentTemplate(template: any) {
+  const group = String(template?.group ?? "").toLowerCase();
+  if (["atestado", "declaracao", "solicitacao_exames"].includes(group)) return true;
+
   const haystack = normalizeTemplateSearchText(
     [template?.name, template?.specialty, template?.description].filter(Boolean).join(" "),
   );
-  if (haystack.includes("declaracao") || haystack.includes("declara")) return "declaracao";
-  if (haystack.includes("laudo")) return "laudo";
+  return haystack.includes("atestado") || haystack.includes("declar") || haystack.includes("laudo") || haystack.includes("exame");
+}
+
+function inferClinicalDocumentType(template: any): ClinicalDocumentType {
+  const group = String(template?.group ?? "").toLowerCase();
+  if (group === "declaracao") return "declaracao";
+  if (group === "solicitacao_exames") return "solicitacao_exames";
+  if (group === "atestado") return "atestado";
+  return normalizeClinicalDocumentType([template?.name, template?.specialty, template?.description].filter(Boolean).join(" "));
+}
+
+function getClinicalDocumentTemplateGroup(type: ClinicalDocumentType) {
+  if (type === "declaracao") return "declaracao";
+  if (type === "solicitacao_exames") return "solicitacao_exames";
   return "atestado";
 }
 
@@ -235,27 +286,47 @@ function applyDocumentPlaceholders(content: string, patientName: string) {
     .replace(/\[PACIENTE\]/g, patientName)
     .replace(/\{PACIENTE\}/g, patientName)
     .replace(/\[DATA_ATUAL\]/g, today)
-    .replace(/\{DATA_ATUAL\}/g, today)
-    .replace(/\[CIDADE\]/g, "Mogi Gua\u00e7u - SP")
-    .replace(/\{CIDADE\}/g, "Mogi Gua\u00e7u - SP");
+    .replace(/\{DATA_ATUAL\}/g, today);
 }
 
-function templateToClinicalDocumentText(template: any, patientName: string) {
+function templateToClinicalDocumentHtml(template: any, patientName: string) {
   const sections = Array.isArray(template?.sections) ? template.sections : [];
   const sectionContent = sections
     .map((section: any) => {
       if (typeof section?.content === "string" && section.content.trim()) return section.content.trim();
       if (typeof section?.text === "string" && section.text.trim()) return section.text.trim();
-
       const fields = Array.isArray(section?.fields) ? section.fields : [];
-      if (!fields.length) return "";
-      const lines = fields.map((field: any) => `${field?.label || "Campo"}: ${field?.defaultValue || ""}`.trimEnd());
-      return [section?.title, "", ...lines].filter(Boolean).join("\n");
+      return fields.map((field: any) => field?.label).filter(Boolean).join("\n");
     })
-    .filter(Boolean);
+    .filter(Boolean)
+    .join("\n\n");
 
-  const content = sectionContent.length ? sectionContent.join("\n\n") : String(template?.content ?? "");
-  return formatImportedText(applyDocumentPlaceholders(content || `${template?.name || "Documento cl\u00ednico"}\n\nPaciente: ${patientName}\n`, patientName));
+  const content = applyDocumentPlaceholders(sectionContent || String(template?.content ?? ""), patientName);
+  if (!content.trim()) {
+    return buildDefaultClinicalDocumentHtml("atestado", patientName);
+  }
+
+  return /<\/?[a-z][\s\S]*>/i.test(content) ? content : plainTextToHtml(content);
+}
+
+function buildDefaultClinicalDocumentHtml(type: ClinicalDocumentType, patientName: string) {
+  const today = new Date().toLocaleDateString("pt-BR");
+  if (type === "declaracao") {
+    return [`<p><strong>DECLARAÇÃO</strong></p>`, `<p></p>`, `<p>Declaro, para os devidos fins, que ${patientName} esteve em atendimento em ${today}.</p>`].join("");
+  }
+  if (type === "solicitacao_exames") {
+    return [`<p><strong>SOLICITAÇÃO DE EXAMES</strong></p>`, `<p></p>`, `<p>Paciente: ${patientName}</p>`, `<p>Data: ${today}</p>`, `<p></p>`, `<p>Solicito a realização dos seguintes exames:</p>`].join("");
+  }
+  if (type === "laudo") {
+    return [`<p><strong>LAUDO / RELATÓRIO</strong></p>`, `<p></p>`, `<p>Paciente: ${patientName}</p>`, `<p>Data: ${today}</p>`, `<p></p>`].join("");
+  }
+  return [`<p><strong>ATESTADO MÉDICO</strong></p>`, `<p></p>`, `<p>Paciente: ${patientName}</p>`, `<p>Data: ${today}</p>`, `<p></p>`, `<p>Atesto, para os devidos fins, que ${patientName} esteve em atendimento nesta data.</p>`].join("");
+}
+
+function isTextualClinicalDocument(document: any) {
+  const mimeType = String(document?.mimeType ?? "").toLowerCase();
+  const fileUrl = String(document?.fileUrl ?? "");
+  return Boolean(String(document?.content ?? "").trim()) || mimeType.includes("text/plain") || mimeType.includes("text/html") || /\.(txt|html?)$/i.test(fileUrl);
 }
 
 function isSecretaryOnlyEvolutionRecord(record: any) {
@@ -295,8 +366,8 @@ function HistoricoTab({ patientId }: { patientId: number }) {
           <History className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
           <p className="text-sm text-muted-foreground">
             {isReceptionist
-              ? "Nenhum registro administrativo seu foi encontrado neste prontuário ainda."
-              : "Nenhum atendimento clínico registrado neste prontuário ainda."}
+              ? "Nenhum registro administrativo seu foi encontrado neste prontuÃ¡rio ainda."
+              : "Nenhum atendimento clÃ­nico registrado neste prontuÃ¡rio ainda."}
           </p>
         </CardContent>
       </Card>
@@ -334,7 +405,7 @@ function HistoricoTab({ patientId }: { patientId: number }) {
                 <div className="flex items-center gap-2">
                   <Activity className="h-4 w-4 text-[#C9A55B]" />
                   <span className="text-sm font-semibold text-foreground">
-                    {isReceptionist ? `Registro #${displayId}` : `Evolução #${displayId}`}
+                    {isReceptionist ? `Registro #${displayId}` : `EvoluÃ§Ã£o #${displayId}`}
                   </span>
                   {attendanceLabel && !isReceptionist && (
                     <Badge variant="outline" className="text-[10px]">{attendanceLabel}</Badge>
@@ -409,7 +480,7 @@ function HistoricoTab({ patientId }: { patientId: number }) {
                   {ev.icdCode && (
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">CID-10</p>
-                      <Badge variant="outline" className="text-xs">{ev.icdCode}{ev.icdDescription ? ` — ${ev.icdDescription}` : ""}</Badge>
+                      <Badge variant="outline" className="text-xs">{ev.icdCode}{ev.icdDescription ? ` â€” ${ev.icdDescription}` : ""}</Badge>
                     </div>
                   )}
                 </>
@@ -487,7 +558,7 @@ function AnamneseTab({ patientId }: { patientId: number }) {
       toast.success("Anamnese salva com sucesso.");
       void refetchAnamneses();
     },
-    onError: (error: any) => toast.error(error?.message || "Não foi possível salvar a anamnese."),
+    onError: (error: any) => toast.error(error?.message || "NÃ£o foi possÃ­vel salvar a anamnese."),
   });
   const createAnamnesisLinkMutation = trpc.anamnesisShare.createLink.useMutation();
 
@@ -515,7 +586,7 @@ function AnamneseTab({ patientId }: { patientId: number }) {
 
   const defaultTemplate = availableTemplates[0] ?? SYSTEM_ANAMNESIS_TEMPLATES[0];
   const [selectedTemplateId, setSelectedTemplateId] = useState(defaultTemplate?.id || "anamnesis-feminina-padrao");
-  const [anamnesisTitle, setAnamnesisTitle] = useState(defaultTemplate?.name || "Anamnese feminina padrão");
+  const [anamnesisTitle, setAnamnesisTitle] = useState(defaultTemplate?.name || "Anamnese feminina padrÃ£o");
   const [anamnesisDate, setAnamnesisDate] = useState(new Date().toISOString().slice(0, 10));
   const [questions, setQuestions] = useState<AnamnesisQuestion[]>(cloneAnamnesisQuestions(defaultTemplate?.questions || SYSTEM_ANAMNESIS_TEMPLATES[0].questions));
   const [expandedRecordId, setExpandedRecordId] = useState<number | null>(null);
@@ -582,9 +653,9 @@ function AnamneseTab({ patientId }: { patientId: number }) {
       });
 
       await navigator.clipboard.writeText(result.shareUrl);
-      toast.success("Link curto copiado. Ao enviar pelo WhatsApp, a mensagem mostrará a identidade visual da clínica.");
+      toast.success("Link curto copiado. Ao enviar pelo WhatsApp, a mensagem mostrarÃ¡ a identidade visual da clÃ­nica.");
     } catch (error: any) {
-      toast.error(error?.message || "Não foi possível gerar o link da anamnese.");
+      toast.error(error?.message || "NÃ£o foi possÃ­vel gerar o link da anamnese.");
     }
   };
 
@@ -598,14 +669,14 @@ function AnamneseTab({ patientId }: { patientId: number }) {
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
               <Label>Nome da anamnese</Label>
-              <Input value={anamnesisTitle} onChange={(event) => setAnamnesisTitle(event.target.value)} placeholder="Ex: Anamnese feminina padrão" />
+              <Input value={anamnesisTitle} onChange={(event) => setAnamnesisTitle(event.target.value)} placeholder="Ex: Anamnese feminina padrÃ£o" />
             </div>
             <div className="space-y-2">
               <Label>Data da anamnese</Label>
               <Input type="date" value={anamnesisDate} onChange={(event) => setAnamnesisDate(event.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>Modelo disponível</Label>
+              <Label>Modelo disponÃ­vel</Label>
               <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione um modelo" />
@@ -719,11 +790,11 @@ function AnamneseTab({ patientId }: { patientId: number }) {
 
       <Card className="border-border/50">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Anamneses já registradas</CardTitle>
+          <CardTitle className="text-sm">Anamneses jÃ¡ registradas</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           {!savedAnamneses?.length ? (
-            <p className="text-sm text-muted-foreground">Nenhuma anamnese registrada neste prontuário ainda.</p>
+            <p className="text-sm text-muted-foreground">Nenhuma anamnese registrada neste prontuÃ¡rio ainda.</p>
           ) : savedAnamneses.map((record: any) => {
             const isOpen = expandedRecordId === record.id;
             const dateLabel = new Date(record.anamnesisDate || record.submittedAt || record.createdAt).toLocaleString("pt-BR");
@@ -733,20 +804,20 @@ function AnamneseTab({ patientId }: { patientId: number }) {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold">{repairMojibake(record.title) || "Anamnese sem nome"}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{dateLabel}{record.templateName ? ` · Modelo: ${repairMojibake(record.templateName)}` : ""}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{dateLabel}{record.templateName ? ` Â· Modelo: ${repairMojibake(record.templateName)}` : ""}</p>
                     </div>
-                    <Badge variant="outline">{record.source === "share" ? "Paciente" : "Clínica"}</Badge>
+                    <Badge variant="outline">{record.source === "share" ? "Paciente" : "ClÃ­nica"}</Badge>
                   </div>
                 </button>
                 {isOpen ? (
                   <div className="mt-4 space-y-3 border-t border-border/50 pt-3">
                     {record.visibilityRestricted ? (
                       <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-sm text-muted-foreground">
-                        Respostas disponíveis apenas para a equipe clínica autorizada. Este perfil pode acompanhar apenas se a anamnese já foi preenchida.
+                        Respostas disponÃ­veis apenas para a equipe clÃ­nica autorizada. Este perfil pode acompanhar apenas se a anamnese jÃ¡ foi preenchida.
                       </div>
                     ) : (
                       (record.questions || []).map((question: any, index: number) => {
-                        const answer = record.answers?.[question.text] || "Não informado";
+                        const answer = record.answers?.[question.text] || "NÃ£o informado";
                         const followUpAnswer = record.answers?.[`${question.text}::__complemento`] || "";
                         return (
                           <div key={`${record.id}-${index}`} className="rounded-lg bg-muted/30 p-3">
@@ -793,7 +864,7 @@ function DocumentUploadPanel({
   defaultFolderLabel,
   allowedTypes,
   title = "Inserir arquivo",
-  description = "Envie arquivos PDF, imagens ou documentos para este prontuário.",
+  description = "Envie arquivos PDF, imagens ou documentos para este prontuÃ¡rio.",
 }: {
   patientId: number;
   defaultFolderLabel?: string;
@@ -836,7 +907,7 @@ function DocumentUploadPanel({
       await utils.medicalRecords.getDocuments.invalidate({ patientId });
     },
     onError: (error: any) => {
-      toast.error(error?.message || "Não foi possível anexar o arquivo.");
+      toast.error(error?.message || "NÃ£o foi possÃ­vel anexar o arquivo.");
     },
   });
 
@@ -901,11 +972,11 @@ function DocumentUploadPanel({
           </div>
 
           <div className="space-y-2">
-            <Label>Descrição</Label>
+            <Label>DescriÃ§Ã£o</Label>
             <Input
               value={descriptionValue}
               onChange={(event) => setDescriptionValue(event.target.value)}
-              placeholder="Ex.: RG frente, laudo pós-operatório"
+              placeholder="Ex.: RG frente, laudo pÃ³s-operatÃ³rio"
             />
           </div>
         </div>
@@ -923,7 +994,7 @@ function DocumentUploadPanel({
             disabled={uploadMutation.isPending}
           />
           <p className="mt-2 text-[11px] text-muted-foreground">
-            Após selecionar, o envio é feito automaticamente para a pasta escolhida.
+            ApÃ³s selecionar, o envio Ã© feito automaticamente para a pasta escolhida.
           </p>
         </div>
       </CardContent>
@@ -931,75 +1002,166 @@ function DocumentUploadPanel({
   );
 }
 
-function AtestadosTab({ patientId, patientName }: { patientId: number; patientName: string }) {
+function AtestadosTab({ patientId, patientName, patientPhone }: { patientId: number; patientName: string; patientPhone?: string | null }) {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
+  const { user } = useAuth();
   const [showEditor, setShowEditor] = useState(false);
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
-  const [documentType, setDocumentType] = useState<"atestado" | "declaracao" | "laudo">("atestado");
+  const [documentType, setDocumentType] = useState<ClinicalDocumentType>("atestado");
   const [documentTitle, setDocumentTitle] = useState("");
   const [documentContent, setDocumentContent] = useState("");
+  const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null);
+  const [loadingDocumentId, setLoadingDocumentId] = useState<number | null>(null);
 
   const { data: documents, isLoading } = trpc.medicalRecords.getDocuments.useQuery({ patientId });
   const { data: templates, isLoading: templatesLoading } = trpc.templates.list.useQuery(undefined, {
     enabled: showTemplateDialog || showEditor,
   });
+
   const uploadTextDocumentMutation = trpc.medicalRecords.uploadDocument.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (savedDocument: any) => {
       await utils.medicalRecords.getDocuments.invalidate({ patientId });
-      toast.success("Documento salvo no prontuário.");
-      setShowEditor(false);
+      if (savedDocument?.id) {
+        setActiveDocumentId(Number(savedDocument.id));
+      }
+      toast.success(activeDocumentId ? "Nova versão salva no prontuário." : "Documento salvo no prontuário.");
+      setShowEditor(true);
     },
     onError: (error) => toast.error(error.message || "Não foi possível salvar o documento."),
   });
 
   const relevantDocuments = useMemo(
-    () => ((documents as any[]) || []).filter((doc) => ["atestado", "declaracao", "laudo"].includes(String(doc.type || "").toLowerCase())),
+    () => ((documents as any[]) || []).filter((doc) => ["atestado", "declaracao", "laudo", "solicitacao_exames"].includes(String(doc.type || "").toLowerCase())),
     [documents],
   );
 
   const availableTemplates = useMemo(
-    () => ((templates as any[]) || []).filter(isAttestationOrDeclarationTemplate),
+    () => ((templates as any[]) || []).filter(isClinicalDocumentTemplate),
     [templates],
   );
 
-  const openBlankEditor = () => {
-    const today = new Date().toLocaleDateString("pt-BR");
-    setDocumentType("atestado");
-    setDocumentTitle(`Atestado - ${patientName}`);
-    setDocumentContent(`ATESTADO\n\nPaciente: ${patientName}\nData: ${today}\n\nAtesto para os devidos fins que `);
+  const openBlankEditor = (nextType: ClinicalDocumentType = "atestado") => {
+    setDocumentType(nextType);
+    setDocumentTitle(`${CLINICAL_DOCUMENT_TYPE_LABELS[nextType]} - ${patientName}`);
+    setDocumentContent(buildDefaultClinicalDocumentHtml(nextType, patientName));
+    setActiveDocumentId(null);
     setShowEditor(true);
+  };
+
+  const openTemplateManager = () => {
+    const params = new URLSearchParams({
+      group: getClinicalDocumentTemplateGroup(documentType),
+      returnTo: `/prontuarios/${patientId}`,
+    });
+    navigate(`/templates?${params.toString()}`);
   };
 
   const applyTemplate = (template: any) => {
     const nextType = inferClinicalDocumentType(template);
     setDocumentType(nextType);
-    setDocumentTitle(`${repairMojibake(template?.name || "Documento clínico")} - ${patientName}`);
-    setDocumentContent(templateToClinicalDocumentText(template, patientName));
+    setDocumentTitle(`${repairMojibake(template?.name || CLINICAL_DOCUMENT_TYPE_LABELS[nextType])} - ${patientName}`);
+    setDocumentContent(templateToClinicalDocumentHtml(template, patientName));
+    setActiveDocumentId(null);
     setShowTemplateDialog(false);
     setShowEditor(true);
   };
 
+  const resolveDocumentContent = async (document: any) => {
+    if (String(document?.content ?? "").trim()) return String(document.content);
+    if (!isTextualClinicalDocument(document) || !document?.fileUrl) return "";
+    const response = await fetch(document.fileUrl);
+    if (!response.ok) throw new Error("Não foi possível abrir o documento salvo.");
+    const text = await response.text();
+    return /<\/?[a-z][\s\S]*>/i.test(text) || String(document?.mimeType ?? "").toLowerCase().includes("html")
+      ? text
+      : plainTextToHtml(text);
+  };
+
+  const handleOpenSavedDocument = async (document: any) => {
+    setLoadingDocumentId(Number(document.id));
+    try {
+      const content = await resolveDocumentContent(document);
+      if (!content) {
+        if (document?.fileUrl) {
+          window.open(document.fileUrl, "_blank", "noopener,noreferrer");
+          return;
+        }
+        toast.error("Este documento não possui um conteúdo textual para abrir no editor.");
+        return;
+      }
+
+      setDocumentType(normalizeClinicalDocumentType(document?.type));
+      setDocumentTitle(repairMojibake(document?.name || document?.fileName || "Documento clínico"));
+      setDocumentContent(content);
+      setActiveDocumentId(Number(document.id));
+      setShowEditor(true);
+    } catch (error: any) {
+      toast.error(error?.message || "Não foi possível abrir o documento.");
+    } finally {
+      setLoadingDocumentId(null);
+    }
+  };
+
+  const handlePrintDocument = async (title = documentTitle, contentToPrint = documentContent, type = documentType) => {
+    if (!formatImportedText(contentToPrint)) {
+      toast.error("Digite ou carregue um documento antes de gerar o PDF.");
+      return;
+    }
+
+    try {
+      await generatePremiumPdf({
+        filename: `${sanitizeFileName(title || CLINICAL_DOCUMENT_TYPE_LABELS[type])}.pdf`,
+        title: CLINICAL_DOCUMENT_TYPE_LABELS[type],
+        subtitle: `Paciente: ${patientName}`,
+        content: contentToPrint,
+        includeWatermark: true,
+      });
+    } catch {
+      toast.error("Não foi possível gerar o PDF deste documento.");
+    }
+  };
+
+  const handlePrintSavedDocument = async (document: any) => {
+    try {
+      const content = await resolveDocumentContent(document);
+      if (content) {
+        await handlePrintDocument(
+          repairMojibake(document?.name || document?.fileName || "Documento clínico"),
+          content,
+          normalizeClinicalDocumentType(document?.type),
+        );
+        return;
+      }
+      if (document?.fileUrl) {
+        window.open(document.fileUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+      toast.error("Não foi possível gerar o PDF deste documento.");
+    } catch (error: any) {
+      toast.error(error?.message || "Não foi possível gerar o PDF deste documento.");
+    }
+  };
+
   const saveTextDocument = () => {
     const content = documentContent.trim();
-    if (!content) {
+    if (!formatImportedText(content)) {
       toast.error("Digite o conteúdo do documento antes de salvar.");
       return;
     }
 
-    const fallbackTitle = `${documentType === "declaracao" ? "Declaração" : documentType === "laudo" ? "Laudo" : "Atestado"} - ${patientName}`;
+    const fallbackTitle = `${CLINICAL_DOCUMENT_TYPE_LABELS[documentType]} - ${patientName}`;
     const title = documentTitle.trim() || fallbackTitle;
-    const fileName = `${sanitizeFileName(title)}.txt`;
 
     uploadTextDocumentMutation.mutate({
       patientId,
       type: documentType,
-      folderLabel: "Documentos clínicos",
+      folderLabel: documentType === "solicitacao_exames" ? "Resultados de exames" : "Documentos clínicos",
       name: title,
-      description: "Criado no editor de Atestados/Docs do prontuário.",
+      description: buildClinicalDocumentMetadata(content, documentType),
       base64: textToBase64(content),
-      mimeType: "text/plain;charset=utf-8",
-      originalFileName: fileName,
+      mimeType: "text/html;charset=utf-8",
+      originalFileName: `${sanitizeFileName(title)}.html`,
     });
   };
 
@@ -1007,16 +1169,20 @@ function AtestadosTab({ patientId, patientName }: { patientId: number; patientNa
     <div className="space-y-4">
       <TabHeader
         title="Atestados e documentos clínicos"
-        description="Consulte o histórico já salvo, faça upload de novos arquivos e crie documentos em texto livre dentro do prontuário."
+        description="Crie documentos em editor rico, aplique modelos por grupo e acesse o histórico salvo do prontuário."
         actions={
           <>
-            <Button size="sm" variant="outline" onClick={openBlankEditor}>
+            <Button size="sm" variant="outline" onClick={() => openBlankEditor("atestado")}>
               <Pencil className="mr-1.5 h-3.5 w-3.5" />
               Criar novo
             </Button>
             <Button size="sm" variant="outline" onClick={() => setShowTemplateDialog(true)}>
               <ClipboardPlus className="mr-1.5 h-3.5 w-3.5" />
               Usar modelo
+            </Button>
+            <Button size="sm" variant="outline" onClick={openTemplateManager}>
+              <Copy className="mr-1.5 h-3.5 w-3.5" />
+              Criar modelo
             </Button>
           </>
         }
@@ -1025,20 +1191,16 @@ function AtestadosTab({ patientId, patientName }: { patientId: number; patientNa
       <Dialog open={showTemplateDialog} onOpenChange={setShowTemplateDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Modelos de atestados e declarações</DialogTitle>
+            <DialogTitle>Modelos de documentos clínicos</DialogTitle>
           </DialogHeader>
 
           {templatesLoading ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader2 className="h-5 w-5 animate-spin text-[#C9A55B]" />
-            </div>
+            <div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-[#C9A55B]" /></div>
           ) : availableTemplates.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border/70 p-6 text-center">
               <FileText className="mx-auto mb-3 h-8 w-8 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">Nenhum modelo de atestado ou declaração encontrado.</p>
-              <Button type="button" variant="outline" className="mt-4" onClick={() => { setShowTemplateDialog(false); navigate("/templates"); }}>
-                Gerenciar modelos
-              </Button>
+              <p className="text-sm text-muted-foreground">Nenhum modelo disponível neste momento.</p>
+              <Button type="button" variant="outline" className="mt-4" onClick={openTemplateManager}>Gerenciar modelos</Button>
             </div>
           ) : (
             <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
@@ -1052,7 +1214,7 @@ function AtestadosTab({ patientId, patientName }: { patientId: number; patientNa
                   <div className="flex flex-wrap items-center gap-2">
                     <FileText className="h-4 w-4 text-[#C9A55B]" />
                     <span className="text-sm font-semibold">{repairMojibake(template.name)}</span>
-                    {template.specialty ? <Badge variant="outline" className="text-[10px]">{repairMojibake(template.specialty)}</Badge> : null}
+                    <Badge variant="outline" className="text-[10px]">{repairMojibake(template.groupLabel || template.specialty || "Modelo")}</Badge>
                   </div>
                   {template.description ? <p className="mt-2 text-xs text-muted-foreground">{repairMojibake(template.description)}</p> : null}
                 </button>
@@ -1061,9 +1223,7 @@ function AtestadosTab({ patientId, patientName }: { patientId: number; patientNa
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setShowTemplateDialog(false)}>
-              Fechar
-            </Button>
+            <Button type="button" variant="outline" onClick={() => setShowTemplateDialog(false)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1071,22 +1231,21 @@ function AtestadosTab({ patientId, patientName }: { patientId: number; patientNa
       {showEditor ? (
         <Card className="border-[#C9A55B]/20 bg-[#C9A55B]/5">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ScrollText className="h-4 w-4 text-[#C9A55B]" />
-              Criar documento
+            <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-base">
+              <span className="flex items-center gap-2"><ScrollText className="h-4 w-4 text-[#C9A55B]" />Documento clínico</span>
+              {activeDocumentId ? <Badge variant="outline">Documento salvo #{activeDocumentId}</Badge> : <Badge variant="secondary">Novo documento</Badge>}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-[180px_1fr]">
+            <div className="grid gap-3 md:grid-cols-[220px_1fr]">
               <div className="space-y-2">
                 <Label>Tipo</Label>
-                <Select value={documentType} onValueChange={(value) => setDocumentType(value as "atestado" | "declaracao" | "laudo")}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                <Select value={documentType} onValueChange={(value) => setDocumentType(value as ClinicalDocumentType)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="atestado">Atestado</SelectItem>
                     <SelectItem value="declaracao">Declaração</SelectItem>
+                    <SelectItem value="solicitacao_exames">Solicitação de exames</SelectItem>
                     <SelectItem value="laudo">Laudo / relatório</SelectItem>
                   </SelectContent>
                 </Select>
@@ -1098,25 +1257,50 @@ function AtestadosTab({ patientId, patientName }: { patientId: number; patientNa
             </div>
 
             <div className="space-y-2">
-              <Label>Texto do documento</Label>
-              <Textarea
+              <Label>Conteúdo do documento</Label>
+              <RichTextEditor
                 value={documentContent}
-                onChange={(event) => setDocumentContent(event.target.value)}
-                rows={12}
-                className="min-h-[260px] resize-y font-mono text-sm"
-                placeholder="Digite aqui o texto do atestado, declaração ou laudo."
+                onChange={setDocumentContent}
+                placeholder="Digite aqui o texto do documento..."
+                minHeight="320px"
               />
             </div>
 
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/50 bg-background/70 px-4 py-3 text-xs text-muted-foreground">
+              <span>{activeDocumentId ? "Você pode reabrir, assinar, baixar em PDF e enviar este documento pelo prontuário." : "Salve primeiro para habilitar assinatura digital e envio por WhatsApp."}</span>
+              <span>{formatImportedText(documentContent).length} caracteres visíveis</span>
+            </div>
+
             <div className="flex flex-wrap justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setShowEditor(false)} disabled={uploadTextDocumentMutation.isPending}>
-                Cancelar
+              <Button type="button" variant="outline" onClick={() => setShowEditor(false)} disabled={uploadTextDocumentMutation.isPending}>Fechar</Button>
+              <Button type="button" variant="outline" onClick={() => void handlePrintDocument()}>
+                <Printer className="mr-2 h-4 w-4" />
+                Salvar em PDF / imprimir
               </Button>
               <Button type="button" className="btn-glossy-gold" onClick={saveTextDocument} disabled={uploadTextDocumentMutation.isPending}>
                 {uploadTextDocumentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                Salvar no prontuário
+                {activeDocumentId ? "Salvar nova versão" : "Salvar no prontuário"}
               </Button>
+              {activeDocumentId ? (
+                <WhatsAppSendButton
+                  documentType="atestado"
+                  documentId={activeDocumentId}
+                  defaultPhone={patientPhone ?? ""}
+                  documentLabel={CLINICAL_DOCUMENT_TYPE_LABELS[documentType]}
+                />
+              ) : null}
             </div>
+
+            {activeDocumentId && (user as any)?.cloudSignatureCpf ? (
+              <SignatureCertillionButton
+                documentType="atestado"
+                documentId={activeDocumentId}
+                documentAlias={`${documentTitle || CLINICAL_DOCUMENT_TYPE_LABELS[documentType]} — ${patientName}`}
+                documentContent={documentContent}
+                signerCpf={(user as any).cloudSignatureCpf}
+                onSigned={() => { void utils.medicalRecords.getDocuments.invalidate({ patientId }); }}
+              />
+            ) : null}
           </CardContent>
         </Card>
       ) : null}
@@ -1124,59 +1308,81 @@ function AtestadosTab({ patientId, patientName }: { patientId: number; patientNa
       <DocumentUploadPanel
         patientId={patientId}
         defaultFolderLabel="Documentos clínicos"
-        allowedTypes={["atestado", "declaracao", "laudo", "outro"]}
-        title="Anexar atestado, laudo ou outro documento"
+        allowedTypes={["atestado", "declaracao", "laudo", "solicitacao_exames", "outro"]}
+        title="Anexar atestado, declaração, laudo ou solicitação"
         description="Use este envio para adicionar PDFs, scans ou arquivos clínicos já prontos ao prontuário."
       />
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-[#C9A55B]" />
-        </div>
+        <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-[#C9A55B]" /></div>
       ) : relevantDocuments.length === 0 ? (
-        <Card className="border-border/50">
-          <CardContent className="py-12 text-center">
-            <FileText className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
-            <p className="text-sm text-muted-foreground">Nenhum atestado ou documento clínico registrado para este paciente.</p>
-          </CardContent>
-        </Card>
+        <Card className="border-border/50"><CardContent className="py-12 text-center"><FileText className="mx-auto mb-3 h-10 w-10 text-muted-foreground/30" /><p className="text-sm text-muted-foreground">Nenhum documento clínico registrado para este paciente.</p></CardContent></Card>
       ) : (
         <div className="space-y-3">
-          {relevantDocuments.map((doc: any) => (
-            <Card key={doc.id} className="border-border/50">
-              <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <FileText className="h-4 w-4 text-[#C9A55B]" />
-                    <span className="text-sm font-semibold">{doc.name || doc.fileName || "Documento clínico"}</span>
-                    <Badge variant="outline" className="text-[10px]">{repairMojibake(doc.type || "documento")}</Badge>
+          {relevantDocuments.map((document: any) => {
+            const canOpenInEditor = isTextualClinicalDocument(document);
+            return (
+              <Card key={document.id} className="border-border/50">
+                <CardContent className="space-y-3 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <FileText className="h-4 w-4 text-[#C9A55B]" />
+                        <span className="text-sm font-semibold">{repairMojibake(document.name || document.fileName || "Documento clínico")}</span>
+                        <Badge variant="outline" className="text-[10px]">{CLINICAL_DOCUMENT_TYPE_LABELS[normalizeClinicalDocumentType(document.type)]}</Badge>
+                        {document.signatureValidationCode ? <Badge variant="secondary" className="text-[10px]">Assinado</Badge> : null}
+                      </div>
+                      <p className="text-xs text-muted-foreground">{document.createdAt ? new Date(document.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "Sem data"}</p>
+                      {document.description ? <p className="text-sm text-muted-foreground">{formatImportedText(document.description)}</p> : null}
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {doc.createdAt ? new Date(doc.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "Sem data"}
-                  </p>
-                  {doc.description ? <p className="text-sm text-muted-foreground">{formatImportedText(doc.description)}</p> : null}
-                </div>
 
-                {doc.fileUrl ? (
-                  <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
-                    <Button size="sm" variant="outline">
-                      <FileDown className="mr-1.5 h-3.5 w-3.5" />
-                      Abrir arquivo
+                  <div className="flex flex-wrap gap-2">
+                    {canOpenInEditor ? (
+                      <Button size="sm" variant="outline" onClick={() => void handleOpenSavedDocument(document)} disabled={loadingDocumentId === Number(document.id)}>
+                        {loadingDocumentId === Number(document.id) ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Pencil className="mr-1.5 h-3.5 w-3.5" />}
+                        Abrir no editor
+                      </Button>
+                    ) : null}
+                    <Button size="sm" variant="outline" onClick={() => void handlePrintSavedDocument(document)}>
+                      <Printer className="mr-1.5 h-3.5 w-3.5" />
+                      Salvar em PDF / imprimir
                     </Button>
-                  </a>
-                ) : null}
-              </CardContent>
-            </Card>
-          ))}
+                    {document.fileUrl ? (
+                      <a href={document.fileUrl} target="_blank" rel="noopener noreferrer">
+                        <Button size="sm" variant="outline"><FileDown className="mr-1.5 h-3.5 w-3.5" />Abrir arquivo</Button>
+                      </a>
+                    ) : null}
+                    <WhatsAppSendButton
+                      documentType="atestado"
+                      documentId={Number(document.id)}
+                      defaultPhone={patientPhone ?? ""}
+                      documentLabel={CLINICAL_DOCUMENT_TYPE_LABELS[normalizeClinicalDocumentType(document.type)]}
+                    />
+                    {canOpenInEditor && (user as any)?.cloudSignatureCpf ? (
+                      <SignatureCertillionButton
+                        documentType="atestado"
+                        documentId={Number(document.id)}
+                        documentAlias={`${repairMojibake(document.name || document.fileName || "Documento clínico")} — ${patientName}`}
+                        documentContent={String(document.content || "")}
+                        signerCpf={(user as any).cloudSignatureCpf}
+                        onSigned={() => { void utils.medicalRecords.getDocuments.invalidate({ patientId }); }}
+                      />
+                    ) : null}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-/* ─────────────────────────────────────────────────
-   PrescricoesTab — lists prescriptions for patient
-   ───────────────────────────────────────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   PrescricoesTab â€” lists prescriptions for patient
+   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function PrescricoesTab({ patientId, patientName: _pn }: { patientId: number; patientName: string }) {
   const [, navigate] = useLocation();
   const { data: prescriptions, isLoading } = trpc.prescriptions.getByPatient.useQuery({ patientId });
@@ -1240,9 +1446,9 @@ function PrescricoesTab({ patientId, patientName: _pn }: { patientId: number; pa
   );
 }
 
-/* ─────────────────────────────────────────────────
-   OrcamentoTab — links to budget page with patient context
-   ───────────────────────────────────────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   OrcamentoTab â€” links to budget page with patient context
+   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function OrcamentoTab({ patientId, patientName: _pn }: { patientId: number; patientName: string }) {
   const [, navigate] = useLocation();
   const { data: budgets, isLoading } = trpc.budgets.getByPatient.useQuery({ patientId });
@@ -1336,9 +1542,9 @@ function OrcamentoTab({ patientId, patientName: _pn }: { patientId: number; pati
   );
 }
 
-/* ─────────────────────────────────────────────────
-   ImagensTab — patient photos
-   ───────────────────────────────────────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   ImagensTab â€” patient photos
+   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function ImagensTab({ patientId }: { patientId: number }) {
   const [, navigate] = useLocation();
   const { data: photos, isLoading } = trpc.photos.getByPatient.useQuery({ patientId });
@@ -1356,13 +1562,13 @@ function ImagensTab({ patientId }: { patientId: number }) {
   return (
     <div className="space-y-4">
       <TabHeader
-        title="Imagens e vídeos do paciente"
-        description="Abra a galeria principal já filtrada para este paciente, envie novas mídias e organize tudo por data, categoria ou pasta clínica."
+        title="Imagens e vÃ­deos do paciente"
+        description="Abra a galeria principal jÃ¡ filtrada para este paciente, envie novas mÃ­dias e organize tudo por data, categoria ou pasta clÃ­nica."
         actions={
           <>
             <Button size="sm" variant="outline" onClick={() => navigate(`/fotos?patientId=${patientId}`)}>
               <Upload className="mr-1.5 h-3.5 w-3.5" />
-              Anexar fotos e vídeos
+              Anexar fotos e vÃ­deos
             </Button>
             <Button size="sm" variant="outline" onClick={() => navigate(`/fotos?patientId=${patientId}`)}>
               <Layers3 className="mr-1.5 h-3.5 w-3.5" />
@@ -1375,13 +1581,13 @@ function ImagensTab({ patientId }: { patientId: number }) {
       <div className="grid gap-3 md:grid-cols-3">
         <Card className="border-border/50">
           <CardContent className="p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Mídias registradas</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">MÃ­dias registradas</p>
             <p className="mt-2 text-2xl font-semibold text-foreground">{photos?.length ?? 0}</p>
           </CardContent>
         </Card>
         <Card className="border-border/50">
           <CardContent className="p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Pastas clínicas</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Pastas clÃ­nicas</p>
             <p className="mt-2 text-2xl font-semibold text-foreground">{folders.length}</p>
           </CardContent>
         </Card>
@@ -1419,7 +1625,7 @@ function ImagensTab({ patientId }: { patientId: number }) {
                 <div className="flex items-center justify-between gap-2">
                   <Badge variant="outline" className="text-[10px]">
                     {photo.mediaType === "video" ? <Video className="mr-1 h-3 w-3" /> : null}
-                    {repairMojibake(photo.category || "mídia")}
+                    {repairMojibake(photo.category || "mÃ­dia")}
                   </Badge>
                 </div>
                 {photo.description ? <p className="text-xs text-muted-foreground truncate">{repairMojibake(photo.description)}</p> : null}
@@ -1432,9 +1638,9 @@ function ImagensTab({ patientId }: { patientId: number }) {
   );
 }
 
-/* ─────────────────────────────────────────────────
-   AnexosTab — patient attachments / documents
-   ───────────────────────────────────────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   AnexosTab â€” patient attachments / documents
+   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function AnexosTab({ patientId }: { patientId: number }) {
   const { data: clinicSettings } = trpc.clinic.get.useQuery();
   const { data: documents, isLoading } = trpc.medicalRecords.getDocuments.useQuery({ patientId });
@@ -1463,7 +1669,7 @@ function AnexosTab({ patientId }: { patientId: number }) {
     <div className="space-y-4">
       <TabHeader
         title="Anexos gerais do paciente"
-        description="Organize documentos em pastas padrão da clínica. Você pode criar novas pastas em Configurações e elas aparecerão aqui para todos os pacientes."
+        description="Organize documentos em pastas padrÃ£o da clÃ­nica. VocÃª pode criar novas pastas em ConfiguraÃ§Ãµes e elas aparecerÃ£o aqui para todos os pacientes."
         actions={
           <Button size="sm" variant="outline" onClick={() => (window.location.href = "/configuracoes")}>
             <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
@@ -1476,8 +1682,8 @@ function AnexosTab({ patientId }: { patientId: number }) {
         patientId={patientId}
         defaultFolderLabel={visibleFolders[0] || DEFAULT_ATTACHMENT_FOLDERS[0]}
         allowedTypes={["rg", "cpf", "convenio", "exame_pdf", "laudo", "outro"]}
-        title="Enviar documentos para o prontuário"
-        description="Selecione a pasta correta e o tipo do documento. As pastas padrão ficam disponíveis para todos os pacientes."
+        title="Enviar documentos para o prontuÃ¡rio"
+        description="Selecione a pasta correta e o tipo do documento. As pastas padrÃ£o ficam disponÃ­veis para todos os pacientes."
       />
 
       {documentsList.length === 0 ? (
@@ -1535,10 +1741,10 @@ function AnexosTab({ patientId }: { patientId: number }) {
   );
 }
 
-/* ─────────────────────────────────────────────────
-   ContratosTab — lista contratos e termos assinados
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   ContratosTab â€” lista contratos e termos assinados
    (inclui os importados do Prontuario Verde via sourceSystem)
-   ───────────────────────────────────────────────── */
+   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function ContratosTab({ patientId }: { patientId: number }) {
   const [, navigate] = useLocation();
   const { data: documents, isLoading } = trpc.medicalRecords.getDocuments.useQuery({ patientId });
@@ -1581,10 +1787,10 @@ function ContratosTab({ patientId }: { patientId: number }) {
                     </p>
                   )}
                   {doc.sourceSystem === "prontuario_verde" && (
-                    <Badge variant="outline" className="text-[9px] h-4 px-1">Importado · Verde</Badge>
+                    <Badge variant="outline" className="text-[9px] h-4 px-1">Importado Â· Verde</Badge>
                   )}
                   {doc.sourceSystem === "onedoctor" && (
-                    <Badge variant="outline" className="text-[9px] h-4 px-1">Importado · OnDoctor</Badge>
+                    <Badge variant="outline" className="text-[9px] h-4 px-1">Importado Â· OnDoctor</Badge>
                   )}
                   {doc.description && (
                     <span className="text-[10px] text-muted-foreground truncate">{formatImportedText(doc.description)}</span>
@@ -1609,7 +1815,7 @@ function ContratosTab({ patientId }: { patientId: number }) {
     <div className="space-y-4">
       <TabHeader
         title="Contratos e termos"
-        description="Aqui aparecem os contratos importados do Prontuário Verde e também novos arquivos que forem anexados para este paciente."
+        description="Aqui aparecem os contratos importados do ProntuÃ¡rio Verde e tambÃ©m novos arquivos que forem anexados para este paciente."
         actions={
           <>
             <Button size="sm" variant="outline" onClick={() => navigate("/assinaturas")}>
@@ -1629,7 +1835,7 @@ function ContratosTab({ patientId }: { patientId: number }) {
         defaultFolderLabel="Contratos e termos"
         allowedTypes={["contrato", "termo"]}
         title="Anexar contrato ou termo assinado"
-        description="Use este envio para acrescentar contratos, consentimentos e termos que já estejam prontos em PDF ou imagem."
+        description="Use este envio para acrescentar contratos, consentimentos e termos que jÃ¡ estejam prontos em PDF ou imagem."
       />
 
       {contratosTermos.length === 0 ? (
@@ -1669,9 +1875,9 @@ function ContratosTab({ patientId }: { patientId: number }) {
   );
 }
 
-/* ─────────────────────────────────────────────────
-   ExamesTab — exam requests for patient
-   ───────────────────────────────────────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   ExamesTab â€” exam requests for patient
+   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function ExamesTab({ patientId }: { patientId: number }) {
   const [, navigate] = useLocation();
   const { data: exams, isLoading } = trpc.examRequests.getByPatient.useQuery({ patientId });
@@ -1687,13 +1893,13 @@ function ExamesTab({ patientId }: { patientId: number }) {
   return (
     <div className="space-y-4">
       <TabHeader
-        title="Solicitações de exames"
-        description="Consulte o histórico completo e abra a central de exames com este paciente já selecionado para criar novas solicitações ou carregar modelos editáveis."
+        title="SolicitaÃ§Ãµes de exames"
+        description="Consulte o histÃ³rico completo e abra a central de exames com este paciente jÃ¡ selecionado para criar novas solicitaÃ§Ãµes ou carregar modelos editÃ¡veis."
         actions={
           <>
             <Button size="sm" variant="outline" onClick={() => navigate(`/exames?patientId=${patientId}&create=1`)}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Nova solicitação
+              Nova solicitaÃ§Ã£o
             </Button>
             <Button size="sm" variant="outline" onClick={() => navigate(`/exames?patientId=${patientId}`)}>
               <ClipboardPlus className="mr-1.5 h-3.5 w-3.5" />
@@ -1707,7 +1913,7 @@ function ExamesTab({ patientId }: { patientId: number }) {
         <Card className="border-border/50">
           <CardContent className="py-12 text-center">
             <FlaskConical className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
-            <p className="text-sm text-muted-foreground">Nenhuma solicitação de exame registrada para este paciente.</p>
+            <p className="text-sm text-muted-foreground">Nenhuma solicitaÃ§Ã£o de exame registrada para este paciente.</p>
           </CardContent>
         </Card>
       ) : exams.map((exam: any) => (
@@ -1716,7 +1922,7 @@ function ExamesTab({ patientId }: { patientId: number }) {
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-2">
                 <FlaskConical className="h-4 w-4 text-[#C9A55B]" />
-                <span className="text-sm font-semibold">Solicitação #{exam.id}</span>
+                <span className="text-sm font-semibold">SolicitaÃ§Ã£o #{exam.id}</span>
               </div>
               <span className="text-xs text-muted-foreground">
                 {exam.createdAt ? new Date(exam.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—"}
@@ -1767,8 +1973,8 @@ function ProcedimentosTab({ patientId }: { patientId: number }) {
   return (
     <div className="space-y-4">
       <TabHeader
-        title="Procedimentos e planos terapêuticos"
-        description="Os procedimentos planejados nos orçamentos do paciente aparecem aqui para facilitar a visão do tratamento."
+        title="Procedimentos e planos terapÃªuticos"
+        description="Os procedimentos planejados nos orÃ§amentos do paciente aparecem aqui para facilitar a visÃ£o do tratamento."
         actions={
           <Button size="sm" variant="outline" onClick={() => navigate(`/orcamentos?patientId=${patientId}&create=1`)}>
             <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -1797,7 +2003,7 @@ function ProcedimentosTab({ patientId }: { patientId: number }) {
                     <Badge variant="secondary" className="text-[10px]">Qtd. {item.quantity}</Badge>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Orçamento #{item.budgetId} · {item.date ? new Date(`${item.date}T12:00:00`).toLocaleDateString("pt-BR") : "Sem data"}
+                    Orçamento #{item.budgetId} Â· {item.date ? new Date(`${item.date}T12:00:00`).toLocaleDateString("pt-BR") : "Sem data"}
                   </p>
                 </div>
                 <Badge variant="outline" className="text-[10px]">{repairMojibake(item.status || "rascunho")}</Badge>
@@ -1818,7 +2024,7 @@ function AgendamentosTab({ patientId }: { patientId: number }) {
     <div className="space-y-4">
       <TabHeader
         title="Agendamentos do paciente"
-        description="Visualize consultas anteriores e futuras deste paciente, com horário, profissional e observações."
+        description="Visualize consultas anteriores e futuras deste paciente, com horÃ¡rio, profissional e observaÃ§Ãµes."
         actions={
           <Button size="sm" variant="outline" onClick={() => navigate("/agenda")}>
             <Calendar className="mr-1.5 h-3.5 w-3.5" />
@@ -1855,7 +2061,7 @@ function AgendamentosTab({ patientId }: { patientId: number }) {
                 </div>
                 <div className="grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
                   <p><span className="font-medium text-foreground">Tipo:</span> {repairMojibake(appointment.type || "Consulta")}</p>
-                  <p><span className="font-medium text-foreground">Profissional:</span> {repairMojibake(appointment.doctorName || "Não informado")}</p>
+                  <p><span className="font-medium text-foreground">Profissional:</span> {repairMojibake(appointment.doctorName || "NÃ£o informado")}</p>
                 </div>
                 {appointment.notes ? (
                   <p className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
@@ -1880,7 +2086,7 @@ function GaleriaTab({ patientId }: { patientId: number }) {
     <div className="space-y-4">
       <TabHeader
         title="Galeria comparativa do paciente"
-        description="Abra a galeria principal para comparar até quatro fotos ou vídeos lado a lado, usar filtros de pasta e enviar links seguros."
+        description="Abra a galeria principal para comparar atÃ© quatro fotos ou vÃ­deos lado a lado, usar filtros de pasta e enviar links seguros."
         actions={
           <Button size="sm" variant="outline" onClick={() => navigate(`/fotos?patientId=${patientId}`)}>
             <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
@@ -1892,20 +2098,20 @@ function GaleriaTab({ patientId }: { patientId: number }) {
       <div className="grid gap-3 md:grid-cols-3">
         <Card className="border-border/50">
           <CardContent className="p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Mídias disponíveis</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">MÃ­dias disponÃ­veis</p>
             <p className="mt-2 text-2xl font-semibold text-foreground">{photos.length}</p>
           </CardContent>
         </Card>
         <Card className="border-border/50">
           <CardContent className="p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Pastas temáticas</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Pastas temÃ¡ticas</p>
             <p className="mt-2 text-2xl font-semibold text-foreground">{folders.length}</p>
           </CardContent>
         </Card>
         <Card className="border-border/50">
           <CardContent className="p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Comparação</p>
-            <p className="mt-2 text-sm text-muted-foreground">A galeria principal permite comparar até 4 mídias lado a lado.</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">ComparaÃ§Ã£o</p>
+            <p className="mt-2 text-sm text-muted-foreground">A galeria principal permite comparar atÃ© 4 mÃ­dias lado a lado.</p>
           </CardContent>
         </Card>
       </div>
@@ -1914,7 +2120,7 @@ function GaleriaTab({ patientId }: { patientId: number }) {
         <CardContent className="py-10 text-center">
           <ImageIcon className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
           <p className="text-sm text-muted-foreground">
-            Use o botão acima para abrir a galeria completa do sistema já focada neste paciente.
+            Use o botÃ£o acima para abrir a galeria completa do sistema jÃ¡ focada neste paciente.
           </p>
         </CardContent>
       </Card>
@@ -1979,7 +2185,7 @@ export default function ProntuarioDetalhe() {
   }, [validTabs]);
 
   if (isLoading) return <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-[#C9A55B]" /></div>;
-  if (!patient) return <div className="text-center py-16 text-muted-foreground">Paciente não encontrado.</div>;
+  if (!patient) return <div className="text-center py-16 text-muted-foreground">Paciente nÃ£o encontrado.</div>;
 
   return (
     <div className="space-y-4">
@@ -1989,7 +2195,7 @@ export default function ProntuarioDetalhe() {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-semibold truncate">{patient.fullName}</h1>
-            <Badge variant="outline" className="text-[10px] shrink-0">PEP · CFM 1821/2007</Badge>
+            <Badge variant="outline" className="text-[10px] shrink-0">PEP Â· CFM 1821/2007</Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
             {patient.cpf && `CPF: ${patient.cpf}`}
@@ -2017,15 +2223,15 @@ export default function ProntuarioDetalhe() {
       {/* LGPD notice */}
       <div className="flex items-center gap-2 p-2.5 rounded-lg bg-blue-500/5 border border-blue-500/20">
         <ShieldCheck className="h-3.5 w-3.5 text-[#C9A55B] shrink-0" />
-        <p className="text-[10px] text-[#C9A55B]">Prontuário protegido pela LGPD. Todos os acessos são registrados.</p>
+        <p className="text-[10px] text-[#C9A55B]">ProntuÃ¡rio protegido pela LGPD. Todos os acessos sÃ£o registrados.</p>
       </div>
 
       {!isReceptionist && latestSecretaryRecord && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300/40 bg-amber-50/70 p-3">
           <div className="space-y-1">
-            <p className="text-sm font-semibold text-amber-900">Há registros da secretaria neste prontuário.</p>
+            <p className="text-sm font-semibold text-amber-900">HÃ¡ registros da secretaria neste prontuÃ¡rio.</p>
             <p className="text-xs text-amber-800">
-              Último registro em{" "}
+              Ãšltimo registro em{" "}
               {new Date(latestSecretaryRecord.startedAt || latestSecretaryRecord.createdAt).toLocaleString("pt-BR", {
                 dateStyle: "short",
                 timeStyle: "short",
@@ -2062,10 +2268,10 @@ export default function ProntuarioDetalhe() {
       >
         <TabsList className="w-full justify-start flex-wrap bg-muted/50 h-auto p-1 gap-0.5">
           <TabsTrigger value="historico" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-            <History className="h-3.5 w-3.5" />Histórico
+            <History className="h-3.5 w-3.5" />HistÃ³rico
           </TabsTrigger>
           <TabsTrigger value="evolucao" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-            <Activity className="h-3.5 w-3.5" />Evolução
+            <Activity className="h-3.5 w-3.5" />EvoluÃ§Ã£o
           </TabsTrigger>
           {!isReceptionist && (
             <>
@@ -2082,10 +2288,10 @@ export default function ProntuarioDetalhe() {
                 <ScrollText className="h-3.5 w-3.5" />Contratos / Termos
               </TabsTrigger>
               <TabsTrigger value="prescricoes" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-                <Stethoscope className="h-3.5 w-3.5" />Prescrições
+                <Stethoscope className="h-3.5 w-3.5" />PrescriÃ§Ãµes
               </TabsTrigger>
               <TabsTrigger value="orcamentos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-                <FileText className="h-3.5 w-3.5" />Orçamento
+                <FileText className="h-3.5 w-3.5" />OrÃ§amento
               </TabsTrigger>
               <TabsTrigger value="imagens" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
                 <ImageIcon className="h-3.5 w-3.5" />Imagens
@@ -2115,7 +2321,7 @@ export default function ProntuarioDetalhe() {
           <>
             <TabsContent value="anamnese" className="mt-4"><AnamneseTab patientId={patientId} /></TabsContent>
             <TabsContent value="secretaria" className="mt-4"><SecretariaTab patientId={patientId} /></TabsContent>
-            <TabsContent value="atestados" className="mt-4"><AtestadosTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
+            <TabsContent value="atestados" className="mt-4"><AtestadosTab patientId={patientId} patientName={patient.fullName} patientPhone={patient.phone} /></TabsContent>
             <TabsContent value="contratos" className="mt-4"><ContratosTab patientId={patientId} /></TabsContent>
             <TabsContent value="prescricoes" className="mt-4"><PrescricoesTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
             <TabsContent value="orcamentos" className="mt-4"><OrcamentoTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
@@ -2131,7 +2337,3 @@ export default function ProntuarioDetalhe() {
     </div>
   );
 }
-
-
-
-

@@ -42,6 +42,96 @@ function buildHistorySummary(record: any) {
     .join("<br/><br/>");
 }
 
+function repairReportText(value?: string | null) {
+  let content = String(value ?? "");
+  if (!content) return "";
+  if (/[\u00c3\u00c2\uFFFD]/.test(content) || /\u00e2[\u0080-\u00bf]/.test(content)) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const bytes = Uint8Array.from(Array.from(content).map((char) => char.charCodeAt(0) & 0xff));
+        const decoded = new TextDecoder("utf-8").decode(bytes);
+        if (!decoded || decoded === content) break;
+        content = decoded;
+      } catch {
+        break;
+      }
+    }
+  }
+  return content.replace(/\uFFFD/g, "");
+}
+
+function formatReportText(value?: string | null) {
+  const entities: Record<string, string> = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+  return repairReportText(value)
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "- ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)))
+    .replace(/&([a-zA-Z]+);/g, (match, entity) => entities[entity] ?? match)
+    .replace(/\u00a0/g, " ")
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function escapeHtml(value?: string | null) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatReportDateTime(value?: string | Date | null) {
+  if (!value) return "-";
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? formatReportText(String(value)) : date.toLocaleString("pt-BR");
+}
+
+function getReportSignatureDetails(item: any) {
+  const isSigned = String(item?.status ?? "") === "assinado" || Boolean(item?.signedAt || item?.signatureValidationCode || item?.signatureHash);
+  if (!isSigned) return null;
+  const providerMap: Record<string, string> = {
+    certificado_local_a1: "A1 local / arquivo",
+    d4sign_icp: "D4Sign ICP-Brasil",
+    vidaas: "VIDaaS",
+    bird: "Bird ID",
+    gov: "gov.br",
+  };
+  const provider = String(item?.signatureProvider ?? "").trim();
+  const method = ["vidaas", "bird", "gov"].includes(provider.toLowerCase()) ? "ICP-Brasil A3" : "ICP-Brasil A1";
+  return {
+    signedAt: formatReportDateTime(item?.signedAt),
+    signerName: formatReportText(item?.signedByDoctorName || item?.signedByName || item?.doctorName || "Profissional não identificado"),
+    method,
+    provider: providerMap[provider] || provider || "Não informado",
+    certificateLabel: formatReportText(item?.signatureCertificateLabel || "Certificado não informado"),
+    validationCode: formatReportText(item?.signatureValidationCode || item?.signatureHash || ""),
+  };
+}
+
+function buildReportSignatureHtml(item: any) {
+  const signature = getReportSignatureDetails(item);
+  if (!signature) return "";
+  return `
+    <div style="margin-top:10px;padding:10px;border:1px solid #16a34a;border-radius:10px;background:#f0fdf4;font-size:11px;color:#14532d;">
+      <strong>Assinatura digital válida registrada</strong><br/>
+      Assinado em: ${escapeHtml(signature.signedAt)}<br/>
+      Assinante: ${escapeHtml(signature.signerName)}<br/>
+      Método: ${escapeHtml(signature.method)}<br/>
+      Provedor: ${escapeHtml(signature.provider)}<br/>
+      Certificado: ${escapeHtml(signature.certificateLabel)}${signature.validationCode ? `<br/>Código de validação: ${escapeHtml(signature.validationCode)}` : ""}
+    </div>
+  `;
+}
 export default function RelatorioProntuario() {
   const [, setLocation] = useLocation();
   const [patientSearch, setPatientSearch] = useState("");
@@ -67,7 +157,7 @@ export default function RelatorioProntuario() {
 
   const counts = useMemo<Record<(typeof SECTION_OPTIONS)[number]["id"], number>>(() => ({
     anamneses: history?.records?.length ?? 0,
-    evolucoes: history?.records?.length ?? 0,
+    evolucoes: (history?.evolutions?.length ?? 0) + (history?.records?.length ?? 0),
     prescricoes: history?.prescriptions?.length ?? 0,
     agendamentos: history?.appointments?.length ?? 0,
     anexos: history?.documents?.length ?? 0,
@@ -104,17 +194,31 @@ export default function RelatorioProntuario() {
     }
 
     if (selectedSections.includes("evolucoes")) {
+      const clinicalEvolutions = history.evolutions ?? [];
+      const legacyRecords = history.records ?? [];
       sections.push(`
         <section>
           <h3 style="font-size:16px;margin:0 0 12px 0;color:#8A6526;">Evoluções clínicas</h3>
-          ${(history.records ?? []).map((record: any) => `
+          ${clinicalEvolutions.map((item: any) => `
             <div style="margin-bottom:16px;padding:14px;border:1px solid #e8dcc4;border-radius:14px;">
               <div style="font-weight:600;margin-bottom:8px;">
-                ${new Date(record.date || record.createdAt).toLocaleString("pt-BR")} • ${record.doctorName || "Profissional não identificado"}
+                ${formatReportDateTime(item.startedAt || item.createdAt)} - ${escapeHtml(formatReportText(item.doctorName || "Profissional não identificado"))}
               </div>
-              <div>${buildHistorySummary(record) || "Sem evolução estruturada."}</div>
+              <div style="white-space:pre-wrap;">${escapeHtml(formatReportText(item.clinicalNotes || "Sem evolução estruturada."))}</div>
+              ${item.audioTranscription ? `<div style="margin-top:10px;white-space:pre-wrap;"><strong>Transcrição de áudio:</strong> ${escapeHtml(formatReportText(item.audioTranscription))}</div>` : ""}
+              ${buildReportSignatureHtml(item)}
             </div>
-          `).join("") || "<p>Sem evoluções registradas.</p>"}
+          `).join("")}
+          ${legacyRecords.map((record: any) => `
+            <div style="margin-bottom:16px;padding:14px;border:1px solid #e8dcc4;border-radius:14px;">
+              <div style="font-weight:600;margin-bottom:8px;">
+                ${formatReportDateTime(record.date || record.createdAt)} - ${escapeHtml(formatReportText(record.doctorName || "Profissional não identificado"))}
+              </div>
+              <div style="white-space:pre-wrap;">${escapeHtml(formatReportText(buildHistorySummary(record) || "Sem evolução estruturada."))}</div>
+              ${buildReportSignatureHtml(record)}
+            </div>
+          `).join("")}
+          ${(clinicalEvolutions.length + legacyRecords.length) === 0 ? "<p>Sem evoluções registradas.</p>" : ""}
         </section>
       `);
     }
@@ -221,8 +325,24 @@ export default function RelatorioProntuario() {
         title: "Relatório do prontuário",
         subtitle: `Paciente: ${patient.fullName}`,
         content: buildReportHtml(),
-        includeAuditReport: false,
+        includeAuditReport: Boolean((history?.evolutions ?? []).some((item: any) => getReportSignatureDetails(item))),
         includeWatermark: true,
+        d4signSignatures: (history?.evolutions ?? [])
+          .map((item: any) => {
+            const signature = getReportSignatureDetails(item);
+            if (!signature) return null;
+            return {
+              uuid: `evolucao-${item.id}`,
+              signerName: signature.signerName,
+              signerEmail: "contato@drwesleycamara.com.br",
+              signedAt: signature.signedAt,
+              status: "assinado" as const,
+              signatureMethod: signature.method.includes("A3") ? "icp_brasil_a3" as const : "icp_brasil_a1" as const,
+              signatureHash: signature.validationCode || undefined,
+              certificateInfo: { subject: signature.certificateLabel, issuer: signature.provider },
+            };
+          })
+          .filter(Boolean) as any,
       });
       toast.success("Relatório exportado em PDF.");
     } catch (error) {

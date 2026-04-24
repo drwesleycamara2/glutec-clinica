@@ -452,6 +452,55 @@ function normalizePhotoRow(row: any) {
   };
 }
 
+const CLINICAL_DOCUMENT_METADATA_PREFIX = "__GLUTEC_CLINICAL_DOC__:";
+
+function parseClinicalDocumentMetadata(description?: string | null) {
+  const raw = String(description ?? "").trim();
+  if (!raw.startsWith(CLINICAL_DOCUMENT_METADATA_PREFIX)) return null;
+  try {
+    return JSON.parse(raw.slice(CLINICAL_DOCUMENT_METADATA_PREFIX.length));
+  } catch {
+    return null;
+  }
+}
+
+function serializeClinicalDocumentMetadata(metadata: Record<string, unknown>) {
+  return `${CLINICAL_DOCUMENT_METADATA_PREFIX}${JSON.stringify(metadata)}`;
+}
+
+function resolveStoredTextDocumentContent(row: any) {
+  const metadata = parseClinicalDocumentMetadata(row?.description);
+  if (typeof metadata?.content === "string" && metadata.content.trim()) return metadata.content;
+
+  const fileReference = String(row?.fileKey ?? row?.fileUrl ?? "").replace(/^\/+/, "").trim();
+  const mimeType = String(row?.mimeType ?? "").toLowerCase();
+  if (!fileReference || !(mimeType.includes("text/plain") || mimeType.includes("text/html") || /\.(?:txt|html?)$/i.test(fileReference))) {
+    return "";
+  }
+
+  const publicRoot = path.resolve(process.cwd(), "public");
+  const absolutePath = path.resolve(publicRoot, fileReference.replace(/^public[\\/]/i, ""));
+  if (!absolutePath.startsWith(publicRoot)) return "";
+
+  try {
+    if (!fs.existsSync(absolutePath)) return "";
+    return fs.readFileSync(absolutePath, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+function summarizeClinicalDocumentContent(content?: string | null) {
+  return String(content ?? "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 220);
+}
+
 function extractDocumentFileReference(row: any) {
   const values = [
     row?.fileUrl,
@@ -467,15 +516,15 @@ function extractDocumentFileReference(row: any) {
   for (const value of values) {
     const text = String(value ?? "").trim();
     if (!text) continue;
-    if (/^(https?:|data:|\/).+\.(pdf|docx?|jpe?g|png)$/i.test(text)) return text;
+    if (/^(https?:|data:|\/).+\.(pdf|docx?|jpe?g|png|txt|html?)$/i.test(text)) return text;
 
-    const markerMatch = text.match(/arquivo original:\s*([^,;\n]+?\.(?:pdf|docx?|jpe?g|png))/i);
+    const markerMatch = text.match(/arquivo original:\s*([^,;\n]+?\.(?:pdf|docx?|jpe?g|png|txt|html?))/i);
     if (markerMatch?.[1]) return markerMatch[1].trim();
 
-    const knownPathMatch = text.match(/((?:prontuarioverde|imports|uploads|patient-documents|documents)[a-z0-9_\-\/. ]+\.(?:pdf|docx?|jpe?g|png))/i);
+    const knownPathMatch = text.match(/((?:prontuarioverde|imports|uploads|patient-documents|documents)[a-z0-9_\-\/. ]+\.(?:pdf|docx?|jpe?g|png|txt|html?))/i);
     if (knownPathMatch?.[1]) return knownPathMatch[1].trim();
 
-    const genericPathMatch = text.match(/([a-z0-9_-]+(?:\/[a-z0-9_. -]+)+\.(?:pdf|docx?|jpe?g|png))/i);
+    const genericPathMatch = text.match(/([a-z0-9_-]+(?:\/[a-z0-9_. -]+)+\.(?:pdf|docx?|jpe?g|png|txt|html?))/i);
     if (genericPathMatch?.[1]) return genericPathMatch[1].trim();
   }
 
@@ -484,10 +533,21 @@ function extractDocumentFileReference(row: any) {
 
 function normalizeDocumentRow(row: any) {
   const fileUrl = normalizeMediaUrl(extractDocumentFileReference(row));
+  const metadata = parseClinicalDocumentMetadata(row?.description);
+  const content = resolveStoredTextDocumentContent(row);
+  const summary = metadata?.summary || summarizeClinicalDocumentContent(content) || row?.description || "";
   return {
     ...row,
     fileUrl,
     url: fileUrl,
+    rawDescription: row?.description ?? null,
+    description: summary,
+    content,
+    templateGroup: typeof metadata?.templateGroup === "string" ? metadata.templateGroup : null,
+    signedAt: metadata?.signedAt ?? row?.signedAt ?? null,
+    signedByName: metadata?.signedByName ?? row?.signedByName ?? null,
+    signatureProvider: metadata?.signatureProvider ?? row?.signatureProvider ?? null,
+    signatureValidationCode: metadata?.signatureValidationCode ?? row?.signatureValidationCode ?? null,
   };
 }
 
@@ -591,6 +651,31 @@ function parseTemplateSections(sections: any) {
   return [];
 }
 
+function normalizeTemplateGroup(value?: unknown) {
+  const normalized = String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+
+  if (normalized.includes("anamn")) return "anamnese";
+  if (normalized.includes("evolu") || normalized.includes("consulta") || normalized.includes("prontuario")) return "evolucao";
+  if (normalized.includes("declar")) return "declaracao";
+  if (normalized.includes("prescr")) return "prescricao";
+  if (normalized.includes("solicitacao") || normalized.includes("pedido de exame") || normalized.includes("exame")) return "solicitacao_exames";
+  return "atestado";
+}
+
+function getTemplateGroupLabel(group: string) {
+  switch (group) {
+    case "anamnese": return "Anamnese";
+    case "evolucao": return "Evolução";
+    case "declaracao": return "Declaração";
+    case "prescricao": return "Prescrição";
+    case "solicitacao_exames": return "Solicitação de exames";
+    default: return "Atestado médico";
+  }
+}
+
 const DEFAULT_CLINIC_STRUCTURAL_SECTORS = ["Consultório", "Centro Cirúrgico"];
 const DEFAULT_PATIENT_ATTACHMENT_FOLDERS = ["Documentos pessoais", "Resultados de exames"];
 
@@ -659,9 +744,12 @@ function normalizeClinicAttachmentFolders(input: unknown): string[] {
 function normalizeTemplateRow(row: any) {
   const sections = parseTemplateSections(row.sections);
   const firstSection = Array.isArray(sections) ? sections[0] : null;
+  const group = normalizeTemplateGroup([row?.specialty, row?.name, row?.description].filter(Boolean).join(" "));
   return {
     ...row,
     sections,
+    group,
+    groupLabel: getTemplateGroupLabel(group),
     content:
       firstSection?.content ??
       firstSection?.text ??
@@ -841,7 +929,7 @@ export async function updatePatient(id: number, data: any) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
-  // Reconstrói o JSON do endereço preservando o que não veio no payload
+  // Reconstr?i o JSON do endere?o preservando o que não veio no payload
   const existing = await getPatientById(id);
   if (!existing) throw new Error("Paciente não encontrado.");
 
@@ -868,27 +956,51 @@ export async function updatePatient(id: number, data: any) {
     zip: normalizedAddress.zip,
   });
 
+  const columns = await getTableColumns("patients");
+  const payload: Record<string, unknown> = {};
+  const setColumn = (column: string, value: unknown) => {
+    if (columns.has(column)) payload[column] = value;
+  };
+
+  setColumn("fullName", normalizedFullName);
+  setColumn("name", normalizedFullName);
+  setColumn("cpf", data.cpf ?? existing.cpf ?? null);
+  setColumn("birthDate", data.birthDate ?? existing.birthDate ?? null);
+  setColumn("gender", data.gender ?? existing.gender ?? "nao_informado");
+  setColumn("phone", data.phone ?? existing.phone ?? null);
+  setColumn("email", nullableOrNull(normalizedEmail));
+  setColumn("address", addressJson);
+  setColumn("addressNumber", nullableOrNull(normalizedAddress.number));
+  setColumn("neighborhood", nullableOrNull(normalizedAddress.neighborhood));
+  setColumn("city", nullableOrNull(normalizedAddress.city));
+  setColumn("state", nullableOrNull(normalizedAddress.state));
+  setColumn("zipCode", nullableOrNull(normalizedAddress.zip));
+  setColumn("rg", data.rg ?? existing.rg ?? null);
+  setColumn("bloodType", data.bloodType ?? existing.bloodType ?? "desconhecido");
+  setColumn("allergies", data.allergies ?? existing.allergies ?? null);
+  setColumn("chronicConditions", data.chronicConditions ?? existing.chronicConditions ?? null);
+
+  const insuranceName = data.insuranceName ?? existing.insuranceName ?? existing.healthInsurance ?? null;
+  const insuranceNumber = data.insuranceNumber ?? existing.insuranceNumber ?? existing.healthInsuranceNumber ?? null;
+  setColumn("insuranceName", insuranceName);
+  setColumn("insuranceNumber", insuranceNumber);
+  setColumn("healthInsurance", insuranceName);
+  setColumn("healthInsuranceNumber", insuranceNumber);
+  setColumn("emergencyContactName", nullableOrNull(normalizedEmergencyContactName));
+  setColumn("emergencyContactPhone", data.emergencyContactPhone ?? existing.emergencyContactPhone ?? null);
+
+  const setClauses = Object.entries(payload).map(([key, value]) => sql`${sql.raw(`\`${key}\``)} = ${value}`);
+  if (columns.has("updatedAt")) {
+    setClauses.push(sql`${sql.raw("`updatedAt`")} = NOW()`);
+  }
+
+  if (setClauses.length === 0) {
+    return { id, fullName: normalizedFullName };
+  }
+
   await db.execute(sql`
-    UPDATE patients SET
-      fullName = ${normalizedFullName},
-      cpf = ${data.cpf ?? existing.cpf ?? null},
-      birthDate = ${data.birthDate ?? existing.birthDate ?? null},
-      gender = ${data.gender ?? existing.gender ?? "nao_informado"},
-      phone = ${data.phone ?? existing.phone ?? null},
-      email = ${nullableOrNull(normalizedEmail)},
-      address = ${addressJson},
-      city = ${nullableOrNull(normalizedAddress.city)},
-      state = ${nullableOrNull(normalizedAddress.state)},
-      zipCode = ${nullableOrNull(normalizedAddress.zip)},
-      rg = ${data.rg ?? existing.rg ?? null},
-      bloodType = ${data.bloodType ?? existing.bloodType ?? "desconhecido"},
-      allergies = ${data.allergies ?? existing.allergies ?? null},
-      chronicConditions = ${data.chronicConditions ?? existing.chronicConditions ?? null},
-      insuranceName = ${data.insuranceName ?? existing.insuranceName ?? null},
-      insuranceNumber = ${data.insuranceNumber ?? existing.insuranceNumber ?? null},
-      emergencyContactName = ${nullableOrNull(normalizedEmergencyContactName)},
-      emergencyContactPhone = ${data.emergencyContactPhone ?? existing.emergencyContactPhone ?? null},
-      updatedAt = NOW()
+    UPDATE patients
+    SET ${sql.join(setClauses, sql`, `)}
     WHERE id = ${id}
   `);
 
@@ -931,6 +1043,69 @@ function buildAppointmentCancellationReason(
     : `${label} em ${happenedAt}.`;
 }
 
+function normalizeAppointmentDedupeText(value: unknown) {
+  return String(value ?? "")
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)))
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase("pt-BR");
+}
+
+function appointmentDedupeKey(row: any) {
+  const date = new Date(row?.scheduledAt);
+  const scheduledKey = Number.isNaN(date.getTime())
+    ? normalizeAppointmentDedupeText(row?.scheduledAt)
+    : date.toISOString();
+
+  return [
+    row?.patientId ?? normalizeAppointmentDedupeText(row?.patientName),
+    row?.doctorId ?? normalizeAppointmentDedupeText(row?.doctorName),
+    scheduledKey,
+    normalizeAppointmentDedupeText(row?.status),
+    normalizeAppointmentDedupeText(row?.type),
+    normalizeAppointmentDedupeText(row?.room),
+    normalizeAppointmentDedupeText(row?.notes),
+    normalizeAppointmentDedupeText(row?.cancelReason),
+  ].join("|");
+}
+
+function appointmentMetadataScore(row: any) {
+  return [row?.patientName, row?.patientPhone, row?.patientEmail, row?.doctorName, row?.notes, row?.cancelReason]
+    .reduce((score, value) => score + String(value ?? "").trim().length, 0);
+}
+
+function dedupeAppointmentsForDisplay(rows: any[]) {
+  const byKey = new Map<string, any>();
+
+  for (const row of rows) {
+    const key = appointmentDedupeKey(row);
+    const current = byKey.get(key);
+    if (!current) {
+      byKey.set(key, row);
+      continue;
+    }
+
+    const candidateScore = appointmentMetadataScore(row);
+    const currentScore = appointmentMetadataScore(current);
+    const candidateId = Number(row?.id ?? Number.MAX_SAFE_INTEGER);
+    const currentId = Number(current?.id ?? Number.MAX_SAFE_INTEGER);
+    if (candidateScore > currentScore || (candidateScore === currentScore && candidateId < currentId)) {
+      byKey.set(key, row);
+    }
+  }
+
+  return Array.from(byKey.values());
+}
 // --- APPOINTMENTS ------------------------------------------------------------
 export async function createAppointment(data: any, userId: number) {
   const db = await getDb();
@@ -1103,7 +1278,7 @@ export async function getAppointmentsByDateRange(from: string, to: string) {
   const db = await getDb();
   if (!db) return [];
 
-  return unwrapRows<any>(await db.execute(sql`
+  const rows = unwrapRows<any>(await db.execute(sql`
     select
       a.*,
       p.fullName as patientName,
@@ -1119,6 +1294,8 @@ export async function getAppointmentsByDateRange(from: string, to: string) {
       and a.scheduledAt <= ${to}
     order by a.scheduledAt asc
   `));
+
+  return dedupeAppointmentsForDisplay(rows);
 }
 
 export async function updateAppointmentStatus(
@@ -2010,7 +2187,7 @@ export async function createAnamnesisShareLink(
     values (
       ${data.patientId},
       ${token},
-      ${data.title ?? "Preencher anamnese da Cl?nica Glut?e"},
+      ${data.title ?? "Preencher anamnese da Clínica Glutée"},
       ${data.templateName ?? null},
       ${data.anamnesisDate ? new Date(data.anamnesisDate) : new Date()},
       ${JSON.stringify(data.questions ?? [])},
@@ -2084,13 +2261,13 @@ export async function getAnamnesisShareLinkByToken(token: string) {
 }
 
 /**
- * Retorna APENAS anamneses reais (questionários preenchidos pelo paciente ou
+ * Retorna APENAS anamneses reais (question?rios preenchidos pelo paciente ou
  * pela clínica) a partir de `anamnesis_share_links`.
  *
- * Fichas de atendimento importadas do Prontuário Verde / OneDoctor que
- * possuem o campo `anamnesis` preenchido SÃO evoluções, não anamneses, e
+ * Fichas de atendimento importadas do Prontu?rio Verde / OneDoctor que
+ * possuem o campo `anamnesis` preenchido S?O evolu??es, não anamneses, e
  * aparecem em `getClinicalEvolutionsByPatient` (que mescla legacy). Portanto
- * não são mais retornadas aqui (antes eram, o que misturava as duas coisas).
+ * não s?o mais retornadas aqui (antes eram, o que misturava as duas coisas).
  */
 export async function listPatientAnamneses(patientId: number, viewerRole?: string | null) {
   const db = await getDb();
@@ -2136,9 +2313,9 @@ export async function patientHasAnyAnamnesis(patientId: number) {
   const db = await getDb();
   if (!db) return false;
 
-  // Apenas questionários reais (anamnesis_share_links). Os registros antigos
-  // de `medical_records.anamnesis` eram, em sua maior parte, evoluções
-  // importadas e agora são expostos como evolução clínica legada.
+  // Apenas question?rios reais (anamnesis_share_links). Os registros antigos
+  // de `medical_records.anamnesis` eram, em sua maior parte, evolu??es
+  // importadas e agora s?o expostos como evolu??o clínica legada.
   const submittedRows = unwrapRows<any>(await db.execute(sql`
     select count(*) as count
     from anamnesis_share_links
@@ -2503,14 +2680,22 @@ export async function listContractDocuments(query?: string, limit: number = 500)
 
 export async function getPatientHistory(patientId: number) {
   const db = await getDb();
-  if (!db) return { appointments: [], records: [], prescriptions: [], documents: [], photos: [] };
+  if (!db) return { appointments: [], evolutions: [], records: [], prescriptions: [], documents: [], photos: [] };
 
-  const appointments = unwrapRows<any>(await db.execute(sql`
+  const appointments = dedupeAppointmentsForDisplay(unwrapRows<any>(await db.execute(sql`
     select a.*, u.name as doctorName
     from appointments a
     left join users u on u.id = a.doctorId
     where a.patientId = ${patientId}
     order by a.scheduledAt desc, a.id desc
+  `)));
+
+  const evolutions = unwrapRows<any>(await db.execute(sql`
+    select ce.*, u.name as doctorName
+    from clinical_evolutions ce
+    left join users u on u.id = ce.doctorId
+    where ce.patientId = ${patientId}
+    order by coalesce(ce.startedAt, ce.createdAt) desc, ce.id desc
   `));
 
   const records = unwrapRows<any>(await db.execute(sql`
@@ -2534,6 +2719,7 @@ export async function getPatientHistory(patientId: number) {
 
   return {
     appointments,
+    evolutions,
     records,
     prescriptions,
     documents,
@@ -2753,7 +2939,7 @@ async function logNfseEvent(
   params: {
     status?: string | null;
     message?: string | null;
-    xmlRequest?: string | null;
+    xmlRequestá: string | null;
     xmlResponse?: string | null;
     userId?: number | null;
   } = {},
@@ -3614,10 +3800,11 @@ export async function createTemplateNormalized(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
+  const group = normalizeTemplateGroup(data.group ?? data.specialty ?? data.name);
   const sections = Array.isArray(data.sections) ? data.sections : [];
   const result = await db.insert(sql`medical_record_templates`).values({
     name: data.name,
-    specialty: data.specialty ?? null,
+    specialty: data.specialty ?? getTemplateGroupLabel(group),
     description: data.description ?? null,
     sections: JSON.stringify(sections),
     createdBy: userId,
@@ -3626,8 +3813,26 @@ export async function createTemplateNormalized(data: any, userId: number) {
   return result[0];
 }
 
+export async function updateTemplateNormalized(id: number, data: any, _userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const group = normalizeTemplateGroup(data.group ?? data.specialty ?? data.name);
+  const sections = Array.isArray(data.sections) ? data.sections : [];
+  await db.execute(sql`
+    UPDATE medical_record_templates
+       SET name = ${data.name},
+           specialty = ${data.specialty ?? getTemplateGroupLabel(group)},
+           description = ${data.description ?? null},
+           sections = ${JSON.stringify(sections)},
+           updatedAt = NOW()
+     WHERE id = ${id}
+  `);
+  return { ok: true, id };
+}
+
 /**
- * Soft delete de modelo (prescrição / exames / evolução / etc.).
+ * Soft delete de modelo (prescri??o / exames / evolu??o / etc.).
  * Usa active=0 para preservar documentos já gerados a partir do modelo.
  */
 export async function deleteTemplateNormalized(id: number) {
@@ -3662,35 +3867,26 @@ export async function listPrescriptionTemplatesNormalized() {
     select *
     from medical_record_templates
     where active = 1
-      and specialty in ('Prescrição', 'Prescricao')
     order by name asc
   `));
 
-  return rows.map((row: any) => ({
-    ...normalizeTemplateRow(row),
-    type: row.description || "simples",
-  }));
+  return rows
+    .map((row: any) => normalizeTemplateRow(row))
+    .filter((row: any) => row.group === "prescricao")
+    .map((row: any) => ({
+      ...row,
+      type: row.description || "simples",
+    }));
 }
 
 export async function createPrescriptionTemplateNormalized(data: any, userId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("DB unavailable");
-
-  const result = await db.insert(sql`medical_record_templates`).values({
+  return createTemplateNormalized({
     name: data.name,
+    group: "prescricao",
     specialty: "Prescrição",
     description: data.type || "simples",
-    sections: JSON.stringify([
-      {
-        title: data.name,
-        type: "richtext",
-        content: data.content ?? "",
-      },
-    ]),
-    active: true,
-    createdBy: userId,
-  });
-  return result[0];
+    sections: [{ title: data.name, type: "richtext", content: data.content ?? "", fields: [] }],
+  }, userId);
 }
 
 export async function listExamTemplatesNormalized() {
@@ -3701,32 +3897,22 @@ export async function listExamTemplatesNormalized() {
     select *
     from medical_record_templates
     where active = 1
-      and specialty in ('Exame', 'Exames', 'Pedido de Exames')
     order by name asc
   `));
 
-  return rows.map((row: any) => normalizeTemplateRow(row));
+  return rows
+    .map((row: any) => normalizeTemplateRow(row))
+    .filter((row: any) => row.group === "solicitacao_exames");
 }
 
 export async function createExamTemplateNormalized(data: any, userId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("DB unavailable");
-
-  const result = await db.insert(sql`medical_record_templates`).values({
+  return createTemplateNormalized({
     name: data.name,
-    specialty: "Exame",
+    group: "solicitacao_exames",
+    specialty: "Solicitação de exames",
     description: data.specialty ?? null,
-    sections: JSON.stringify([
-      {
-        title: data.name,
-        type: "richtext",
-        content: data.content ?? "",
-      },
-    ]),
-    active: true,
-    createdBy: userId,
-  });
-  return result[0];
+    sections: [{ title: data.name, type: "richtext", content: data.content ?? "", fields: [] }],
+  }, userId);
 }
 
 // --- WHATSAPP -----------------------------------------------------------------
@@ -3747,7 +3933,7 @@ export async function sendWhatsAppMessage(phoneNumber: string, message: string) 
 
 // --- AI -----------------------------------------------------------------------
 export async function invokeAI(messages: any[]) {
-  // Implementação com LLM
+  // Implementa??o com LLM
   return { role: 'assistant', content: 'Resposta da IA' };
 }
 
@@ -3901,7 +4087,7 @@ export async function updateUserRole(userId: number, role: string) {
   return { success: true };
 }
 
-// ─── CLOUD SIGNATURE (VIDaaS / BirdID) ───────────────────────────────────────
+// ??? CLOUD SIGNATURE (VIDaaS / BirdID) ???????????????????????????????????????
 
 export async function getCloudSignatureConfig(userId: number) {
   const db = await getDb();
@@ -4067,16 +4253,50 @@ export async function applyDocumentSignature(data: {
       where id = ${data.documentId}
     `);
   } else if (data.documentType === "atestado") {
-    await db.execute(sql`
-      update attestations set
-        signatureProvider = ${data.provider},
-        signedByName = ${data.signedByName},
-        signatureCms = ${data.signatureCms},
-        signatureValidationCode = ${data.validationCode},
-        signedAt = ${now},
-        signatureSessionId = ${data.sessionId}
+    const patientDocumentRows = unwrapRows<any>(await db.execute(sql`
+      select *
+      from patient_documents
       where id = ${data.documentId}
-    `);
+      limit 1
+    `));
+
+    if (patientDocumentRows[0]) {
+      const current = patientDocumentRows[0];
+      const metadata = parseClinicalDocumentMetadata(current.description) ?? {};
+      const content = typeof metadata?.content === "string" && metadata.content.trim()
+        ? metadata.content
+        : resolveStoredTextDocumentContent(current);
+      const summary = metadata?.summary || summarizeClinicalDocumentContent(content) || current.description || "";
+      const nextDescription = serializeClinicalDocumentMetadata({
+        ...metadata,
+        summary,
+        content,
+        templateGroup: metadata?.templateGroup ?? null,
+        signedAt: now,
+        signedByName: data.signedByName,
+        signatureProvider: data.provider,
+        signatureValidationCode: data.validationCode,
+        signatureSessionId: data.sessionId,
+        signatureCms: data.signatureCms,
+      });
+
+      await db.execute(sql`
+        update patient_documents set
+          description = ${nextDescription}
+        where id = ${data.documentId}
+      `);
+    } else {
+      await db.execute(sql`
+        update attestations set
+          signatureProvider = ${data.provider},
+          signedByName = ${data.signedByName},
+          signatureCms = ${data.signatureCms},
+          signatureValidationCode = ${data.validationCode},
+          signedAt = ${now},
+          signatureSessionId = ${data.sessionId}
+        where id = ${data.documentId}
+      `);
+    }
   } else if (data.documentType === "prescricao") {
     await db.execute(sql`
       update prescriptions set
@@ -4104,7 +4324,7 @@ export async function applyDocumentSignature(data: {
   return { success: true };
 }
 
-// ─── CERTILLION (agregador VIDAAS / BirdID / CERTILLION_SIGNER) ───────────────
+// ??? CERTILLION (agregador VIDAAS / BirdID / CERTILLION_SIGNER) ???????????????
 
 export async function getCertillionConfig() {
   const db = await getDb();
@@ -4240,7 +4460,7 @@ export async function updateCertillionSession(
   `);
 }
 
-// ─── CERTIFICADO A1 PF POR USUÁRIO ────────────────────────────────────────────
+// ??? CERTIFICADO A1 PF POR USU?RIO ????????????????????????????????????????????
 
 export async function saveUserA1Certificate(
   userId: number,

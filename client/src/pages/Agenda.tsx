@@ -173,6 +173,64 @@ function getCancellationSummary(appointment: any) {
   return summary || "Agendamento cancelado.";
 }
 
+function normalizeAppointmentDedupeKeyPart(value: unknown) {
+  return formatImportedText(String(value ?? ""))
+    .toLocaleLowerCase("pt-BR")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function appointmentDedupeKey(appointment: any) {
+  const date = new Date(appointment?.scheduledAt);
+  const scheduledKey = Number.isNaN(date.getTime())
+    ? normalizeAppointmentDedupeKeyPart(appointment?.scheduledAt)
+    : date.toISOString();
+
+  return [
+    appointment?.patientId ?? normalizeAppointmentDedupeKeyPart(appointment?.patientName),
+    appointment?.doctorId ?? normalizeAppointmentDedupeKeyPart(appointment?.doctorName),
+    scheduledKey,
+    normalizeAppointmentDedupeKeyPart(appointment?.status),
+    normalizeAppointmentDedupeKeyPart(appointment?.type),
+    normalizeAppointmentDedupeKeyPart(appointment?.room),
+    normalizeAppointmentDedupeKeyPart(appointment?.notes),
+    normalizeAppointmentDedupeKeyPart(appointment?.cancelReason),
+  ].join("|");
+}
+
+function appointmentMetadataScore(appointment: any) {
+  return [
+    appointment?.patientName,
+    appointment?.patientPhone,
+    appointment?.patientEmail,
+    appointment?.doctorName,
+    appointment?.notes,
+    appointment?.cancelReason,
+  ].reduce((score, value) => score + String(value ?? "").trim().length, 0);
+}
+
+function dedupeAppointments(items: any[] = []) {
+  const byKey = new Map<string, any>();
+
+  for (const appointment of items) {
+    const key = appointmentDedupeKey(appointment);
+    const current = byKey.get(key);
+    if (!current) {
+      byKey.set(key, appointment);
+      continue;
+    }
+
+    const candidateScore = appointmentMetadataScore(appointment);
+    const currentScore = appointmentMetadataScore(current);
+    const candidateId = Number(appointment?.id ?? Number.MAX_SAFE_INTEGER);
+    const currentId = Number(current?.id ?? Number.MAX_SAFE_INTEGER);
+    if (candidateScore > currentScore || (candidateScore === currentScore && candidateId < currentId)) {
+      byKey.set(key, appointment);
+    }
+  }
+
+  return Array.from(byKey.values());
+}
 function buildDateTimeForSlot(baseDate: Date, slot: string) {
   const [hours, minutes] = slot.split(":").map(Number);
   const date = new Date(baseDate);
@@ -281,7 +339,7 @@ export default function Agenda() {
   const isSavingAppointment = createAppointmentMutation.isPending || updateAppointmentMutation.isPending;
 
   const filteredAppointments = useMemo(() => {
-    return (appointments ?? [])
+    return dedupeAppointments(appointments ?? [])
       .filter((appointment) => selectedDoctor === "all" || String(appointment.doctorId) === selectedDoctor)
       .sort((left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime());
   }, [appointments, selectedDoctor]);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { AlertCircle, ArrowRight, CheckCircle2, Download, Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -82,8 +82,8 @@ export default function Configurar2FASafe() {
         <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-[#C9A55B]/20 bg-white/90 shadow-2xl backdrop-blur-sm">
           <div className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#8A6526] px-8 py-7 text-center">
             <ShieldCheck className="mx-auto mb-2 h-10 w-10 text-white" />
-            <h1 className="text-xl font-bold text-white">Configurar autentica\u00E7\u00E3o em 2 fatores</h1>
-            <p className="mt-1 text-sm text-white/80">Seu acesso s\u00F3 ser\u00E1 liberado ap\u00F3s concluir esta etapa</p>
+            <h1 className="text-xl font-bold text-white">Configurar autenticação em 2 fatores</h1>
+            <p className="mt-1 text-sm text-white/80">Seu acesso só será liberado após concluir esta etapa</p>
           </div>
 
           <div className="flex justify-center gap-2 bg-[#FAF8F4] py-4">
@@ -114,7 +114,7 @@ export default function Configurar2FASafe() {
                 <ShieldCheck className="mx-auto mb-4 h-16 w-16 text-[#C9A55B]" />
                 <h2 className="mb-3 text-xl font-bold text-[#050505]">Ative o 2FA</h2>
                 <p className="mx-auto mb-6 max-w-sm text-sm text-[#6B6B6B]">
-                  A autentica\u00E7\u00E3o em dois fatores protege sua conta e os dados dos pacientes. Voc\u00EA vai
+                  A autenticação em dois fatores protege sua conta e os dados dos pacientes. Você vai
                   precisar de um aplicativo autenticador, como:
                 </p>
                 <div className="mb-6 grid grid-cols-3 gap-3 text-xs text-[#6B6B6B]">
@@ -148,7 +148,7 @@ export default function Configurar2FASafe() {
               <div className="text-center">
                 <h2 className="mb-2 text-lg font-bold text-[#050505]">Escaneie o QR Code</h2>
                 <p className="mb-5 text-sm text-[#6B6B6B]">
-                  Abra seu aplicativo autenticador, toque em "+" e escaneie o c\u00F3digo abaixo.
+                  Abra seu aplicativo autenticador, toque em "+" e escaneie o código abaixo.
                 </p>
                 {qrCode ? (
                   <div className="mb-4 inline-block rounded-xl border-2 border-[#C9A55B]/30 bg-white p-3 shadow">
@@ -156,7 +156,7 @@ export default function Configurar2FASafe() {
                   </div>
                 ) : null}
                 <details className="mb-5 text-left">
-                  <summary className="cursor-pointer text-xs text-[#8A6526]">N\u00E3o consegue escanear? Inserir chave manualmente</summary>
+                  <summary className="cursor-pointer text-xs text-[#8A6526]">Não consegue escanear? Inserir chave manualmente</summary>
                   <div className="mt-2 rounded-lg bg-[#F7F4EE] px-3 py-2">
                     <p className="mb-1 text-xs text-[#6B6B6B]">Chave secreta:</p>
                     <code className="break-all font-mono text-xs text-[#050505]">{secret}</code>
@@ -167,16 +167,16 @@ export default function Configurar2FASafe() {
                   className="h-11 w-full border-none font-semibold text-white"
                   style={{ background: "linear-gradient(135deg, #8A6526 0%, #C9A55B 50%, #8A6526 100%)" }}
                 >
-                  J\u00E1 escaneei - continuar
+                  Já escaneei - continuar
                 </Button>
               </div>
             ) : null}
 
             {step === "verify" ? (
               <div>
-                <h2 className="mb-2 text-lg font-bold text-[#050505]">Confirme o c\u00F3digo</h2>
+                <h2 className="mb-2 text-lg font-bold text-[#050505]">Confirme o código</h2>
                 <p className="mb-6 text-sm text-[#6B6B6B]">
-                  Digite o c\u00F3digo de 6 d\u00EDgitos gerado pelo aplicativo autenticador para concluir a ativa\u00E7\u00E3o.
+                  Digite o código de 6 dígitos gerado pelo aplicativo autenticador para concluir a ativação.
                 </p>
                 <form onSubmit={handleVerify} className="flex flex-col items-center gap-4">
                   <Input
@@ -187,7 +187,7 @@ export default function Configurar2FASafe() {
                     value={code}
                     onChange={e => handleCodeChange(e.target.value)}
                     placeholder="000000"
-                    className="h-16 w-48 text-center font-mono text-3xl tracking-[0.5em] border-[#E0D8CC] focus:border-[#C9A55B]"
+                    className="h-16 w-48 border-[#E0D8CC] text-center font-mono text-3xl tracking-[0.5em] focus:border-[#C9A55B]"
                     disabled={confirmMutation.isPending}
                     autoComplete="one-time-code"
                     autoFocus
@@ -221,9 +221,9 @@ export default function Configurar2FASafe() {
                   <h2 className="text-lg font-bold text-[#050505]">2FA ativado</h2>
                 </div>
                 <p className="mb-4 text-sm text-[#6B6B6B]">
-                  Salve seus <strong>c\u00F3digos de backup</strong> em local seguro. Voc\u00EA poder\u00E1 us\u00E1-los
+                  Salve seus <strong>códigos de backup</strong> em local seguro. Você poderá usá-los
                   se perder o acesso ao aplicativo autenticador.
-                  <span className="font-medium text-[#6B6B6B]"> Cada c\u00F3digo funciona apenas uma vez.</span>
+                  <span className="font-medium text-[#6B6B6B]"> Cada código funciona apenas uma vez.</span>
                 </p>
                 <div className="mb-5 grid grid-cols-2 gap-2">
                   {backupCodes.map((backupCode, index) => (
@@ -242,7 +242,7 @@ export default function Configurar2FASafe() {
                     className="h-11 w-full border-[#C9A55B] text-[#8A6526] hover:bg-[#F7F4EE]"
                   >
                     <Download className="mr-2 h-4 w-4" />
-                    {backupSaved ? "Arquivo baixado" : "Baixar c\u00F3digos (.txt)"}
+                    {backupSaved ? "Arquivo baixado" : "Baixar códigos (.txt)"}
                   </Button>
                   <Button
                     onClick={() => {
@@ -254,7 +254,7 @@ export default function Configurar2FASafe() {
                       background: backupSaved ? "linear-gradient(135deg, #8A6526 0%, #C9A55B 50%, #8A6526 100%)" : undefined,
                     }}
                   >
-                    {backupSaved ? "Entrar no sistema" : "Baixe os c\u00F3digos antes de continuar"}
+                    {backupSaved ? "Entrar no sistema" : "Baixe os códigos antes de continuar"}
                   </Button>
                 </div>
               </div>

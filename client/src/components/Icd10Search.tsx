@@ -14,6 +14,38 @@ interface Icd10SearchProps {
   showFavorites?: boolean;
 }
 
+type Icd10Item = {
+  id: number;
+  code: string;
+  description: string;
+  descriptionAbbrev?: string | null;
+};
+
+function dedupeIcd10Items(items: Icd10Item[] = []) {
+  const byCode = new Map<string, Icd10Item>();
+
+  for (const item of items) {
+    const codeKey = String(item?.code ?? "").trim().toUpperCase();
+    const descriptionKey = String(item?.description ?? "").trim().toLocaleLowerCase("pt-BR");
+    const key = codeKey || `${item?.id ?? ""}-${descriptionKey}`;
+    if (!key) continue;
+
+    const current = byCode.get(key);
+    if (!current) {
+      byCode.set(key, item);
+      continue;
+    }
+
+    const currentDescription = String(current.description ?? "");
+    const nextDescription = String(item.description ?? "");
+    if (nextDescription.length > currentDescription.length || (current.id < 0 && item.id > 0)) {
+      byCode.set(key, item);
+    }
+  }
+
+  return Array.from(byCode.values());
+}
+
 export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Icd10SearchProps) {
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -96,7 +128,7 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
       return;
     }
 
-    const items = query.length > 0 ? searchResults || [] : favorites || [];
+    const items = displayItems;
 
     switch (e.key) {
       case "ArrowDown":
@@ -129,7 +161,7 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
     setSelectedIndex(-1);
   };
 
-  const displayItems = query.length > 0 ? searchResults || [] : favorites || [];
+  const displayItems = dedupeIcd10Items(query.length > 0 ? searchResults || [] : favorites || []);
 
   return (
     <div className="relative w-full">
@@ -201,7 +233,7 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
       {isOpen && (
         <div
           ref={dropdownRef}
-          className="absolute top-full left-0 right-0 mt-1 bg-background border border-border rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto"
+          className="absolute inset-x-0 top-full z-[90] mt-2 max-h-72 overflow-y-auto overscroll-contain rounded-xl border border-border bg-background pr-1 shadow-2xl ring-1 ring-black/5"
         >
           {isSearching && (
             <div className="flex items-center justify-center py-8">
@@ -223,7 +255,7 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
 
           {displayItems.map((item, index) => (
             <button
-              key={item.id}
+              key={`${item.code}-${item.id}-${index}`}
               onClick={() => handleSelect(item)}
               className={cn(
                 "w-full text-left px-4 py-3 border-b border-border last:border-b-0 transition-colors",

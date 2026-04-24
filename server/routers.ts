@@ -156,7 +156,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ AUDIO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ AUDIO Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   audio: router({
     createTranscription: protectedProcedure
       .input(z.object({ audioUrl: z.string(), audioKey: z.string(), medicalRecordId: z.number().optional() }))
@@ -186,10 +186,10 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ CLINICAL EVOLUTION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ CLINICAL EVOLUTION Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   clinicalEvolution: clinicalEvolutionRouter,
 
-  // â”€â”€â”€ ADMIN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ ADMIN Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   admin: router({
     getUsers: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
@@ -239,7 +239,7 @@ export const appRouter = router({
         const user = await db.getUserById(ctx.user.id);
         const storedPasswordHash = (user as any)?.passwordHash ?? (user as any)?.password;
         if (!user || !storedPasswordHash) {
-          throw new TRPCError({ code: "UNAUTHORIZED", message: "Usuário inválido." });
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "UsuÃ¡rio invÃ¡lido." });
         }
 
         const passwordOk = await verifyPassword(input.currentPassword, storedPasswordHash);
@@ -251,7 +251,7 @@ export const appRouter = router({
           if (!input.securityCode || !user.twoFactorSecret || !verifyTotpCode(input.securityCode, user.twoFactorSecret)) {
             throw new TRPCError({
               code: "UNAUTHORIZED",
-              message: "Informe um código válido do autenticador para exportar os dados.",
+              message: "Informe um cÃ³digo vÃ¡lido do autenticador para exportar os dados.",
             });
           }
         }
@@ -272,7 +272,7 @@ export const appRouter = router({
           action: "system_export_generated",
           entityType: "system_export",
           entityId: 0,
-          details: `Exportação completa do sistema gerada. Tabelas: ${exported.tableCount}, registros: ${exported.rowCount}, arquivos: ${exported.fileCount}. Motivo: ${input.reason || "não informado"}.`,
+          details: `ExportaÃ§Ã£o completa do sistema gerada. Tabelas: ${exported.tableCount}, registros: ${exported.rowCount}, arquivos: ${exported.fileCount}. Motivo: ${input.reason || "nÃ£o informado"}.`,
           ipAddress: ctx.req.ip || null,
         });
 
@@ -304,7 +304,7 @@ export const appRouter = router({
         const normalizedEmail = input.email.toLowerCase().trim();
         const existingUser = await db.getUserByEmail(normalizedEmail);
         if (existingUser && existingUser.status === 'active' && ((existingUser as any).passwordHash || (existingUser as any).password)) {
-          throw new TRPCError({ code: 'CONFLICT', message: 'Já existe um usuário ativo com este e-mail.' });
+          throw new TRPCError({ code: 'CONFLICT', message: 'JÃ¡ existe um usuÃ¡rio ativo com este e-mail.' });
         }
 
         await db.inviteUser({
@@ -314,12 +314,12 @@ export const appRouter = router({
           permissions: JSON.stringify(input.permissions),
           profession: input.jobTitles
             .map((jobTitle) => ({
-              medico: 'Médica(o)',
+              medico: 'MÃ©dica(o)',
               gerente: 'Gerente',
               massoterapeuta: 'Massoterapeuta',
-              tecnico_enfermagem: 'Técnica(o) de enfermagem',
+              tecnico_enfermagem: 'TÃ©cnica(o) de enfermagem',
               enfermeiro: 'Enfermeira(o)',
-              secretaria: 'Secretária(o)',
+              secretaria: 'SecretÃ¡ria(o)',
               apoio: 'Apoio',
             }[jobTitle] || jobTitle))
             .join(', '),
@@ -351,7 +351,7 @@ export const appRouter = router({
           success: true,
           emailSent: emailResult.success,
           manualLink: emailResult.success ? null : acceptUrl,
-          warning: emailResult.success ? null : `E-mail não enviado: ${emailResult.error}`,
+          warning: emailResult.success ? null : `E-mail nÃ£o enviado: ${emailResult.error}`,
         };
       }),
 
@@ -382,7 +382,7 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const isSuperAdmin = ctx.user.role === 'admin' && String(ctx.user.email || "").toLowerCase() === SUPER_ADMIN_EMAIL;
         if (!isSuperAdmin) {
-          throw new TRPCError({ code: 'FORBIDDEN', message: 'A exclusão de cadastros só pode ser feita por Wésley Câmara.' });
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'A exclusÃ£o de cadastros sÃ³ pode ser feita por WÃ©sley CÃ¢mara.' });
         }
         await db.deleteUser(input.userId);
         return { success: true };
@@ -438,7 +438,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ PATIENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ PATIENTS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   patients: router({
     list: protectedProcedure
       .input(
@@ -522,7 +522,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ APPOINTMENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ APPOINTMENTS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   appointments: router({
     create: protectedProcedure
       .input(z.object({
@@ -622,7 +622,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ PRESCRIPTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ PRESCRIPTIONS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   prescriptions: router({
     create: protectedProcedure
       .input(z.object({
@@ -663,7 +663,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ EXAM REQUESTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ EXAM REQUESTS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   exams: router({
     create: protectedProcedure
       .input(z.object({
@@ -738,7 +738,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ FINANCIAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ FINANCIAL Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   financial: router({
     create: protectedProcedure
       .input(z.object({
@@ -768,7 +768,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ CATALOG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ CATALOG Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   catalog: router({
     searchTuss: protectedProcedure
       .input(z.object({
@@ -856,7 +856,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ INVENTORY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ INVENTORY Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   inventory: router({
     listProducts: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listInventoryProducts();
@@ -898,7 +898,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ PHOTOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ PHOTOS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   photos: router({
     getByPatient: protectedProcedure
       .input(z.object({
@@ -932,7 +932,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ CHAT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ CHAT Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   chat: router({
     getMessages: protectedProcedure
       .input(z.object({
@@ -953,7 +953,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ CLINIC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ CLINIC Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   clinic: router({
     get: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.getClinicSettings();
@@ -987,7 +987,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ FISCAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ FISCAL Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   fiscal: router({
     get: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.getFiscalSettings();
@@ -1064,7 +1064,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ NFSE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ NFSE Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   nfse: router({
     list: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listNfse();
@@ -1116,7 +1116,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ BUDGETS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ BUDGETS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   budgets: router({
     list: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listBudgets();
@@ -1168,7 +1168,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ CRM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ CRM Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   crm: router({
     list: protectedProcedure
       .input(z.object({ limit: z.number().optional() }))
@@ -1199,7 +1199,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ SIGNATURES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ SIGNATURES Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   signatures: router({
     getIntegrationStatus: protectedProcedure.query(async ({ ctx }) => {
       return getD4SignIntegrationStatus();
@@ -1223,7 +1223,7 @@ export const appRouter = router({
       if (!service) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
-          message: "Credenciais D4Sign não configuradas no ambiente da clínica.",
+          message: "Credenciais D4Sign nÃ£o configuradas no ambiente da clÃ­nica.",
         });
       }
 
@@ -1239,7 +1239,7 @@ export const appRouter = router({
       if (!service) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
-          message: "Credenciais D4Sign não configuradas no ambiente da clínica.",
+          message: "Credenciais D4Sign nÃ£o configuradas no ambiente da clÃ­nica.",
         });
       }
 
@@ -1256,14 +1256,14 @@ export const appRouter = router({
         if (!service) {
           throw new TRPCError({
             code: "PRECONDITION_FAILED",
-            message: "Credenciais D4Sign não configuradas para envio.",
+            message: "Credenciais D4Sign nÃ£o configuradas para envio.",
           });
         }
 
         if (!ctx.user.email) {
           throw new TRPCError({
             code: "PRECONDITION_FAILED",
-            message: "O usuário logado precisa ter um e-mail válido para assinar via D4Sign.",
+            message: "O usuÃ¡rio logado precisa ter um e-mail vÃ¡lido para assinar via D4Sign.",
           });
         }
 
@@ -1273,20 +1273,20 @@ export const appRouter = router({
 
         if (input.documentType === "prescription") {
           const prescription = await dbComplete.getPrescriptionById(input.documentId);
-          if (!prescription) throw new TRPCError({ code: "NOT_FOUND", message: "Prescrição não encontrada." });
+          if (!prescription) throw new TRPCError({ code: "NOT_FOUND", message: "PrescriÃ§Ã£o nÃ£o encontrada." });
           patientId = Number(prescription.patientId);
-          title = "Prescrição médica";
-          body = `${stripHtmlForSignature(prescription.content)}\n\nObservações: ${prescription.observations || "Não informadas."}`;
+          title = "PrescriÃ§Ã£o mÃ©dica";
+          body = `${stripHtmlForSignature(prescription.content)}\n\nObservaÃ§Ãµes: ${prescription.observations || "NÃ£o informadas."}`;
         } else if (input.documentType === "exam_request") {
           const examRequest = await dbComplete.getExamRequestById(input.documentId);
-          if (!examRequest) throw new TRPCError({ code: "NOT_FOUND", message: "Pedido de exames não encontrado." });
+          if (!examRequest) throw new TRPCError({ code: "NOT_FOUND", message: "Pedido de exames nÃ£o encontrado." });
           patientId = Number(examRequest.patientId);
           title = "Pedido de exames";
-          body = `${stripHtmlForSignature(examRequest.content)}\n\nObservações: ${examRequest.observations || "Não informadas."}`;
+          body = `${stripHtmlForSignature(examRequest.content)}\n\nObservaÃ§Ãµes: ${examRequest.observations || "NÃ£o informadas."}`;
         } else {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: "Este tipo de documento ainda não está habilitado para envio à D4Sign.",
+            message: "Este tipo de documento ainda nÃ£o estÃ¡ habilitado para envio Ã  D4Sign.",
           });
         }
 
@@ -1307,7 +1307,7 @@ export const appRouter = router({
           fileName,
           signerEmail: ctx.user.email,
           signerName: ctx.user.name || ctx.user.email,
-          message: `Documento ${title} disponível para assinatura em ${patientName}.`,
+          message: `Documento ${title} disponÃ­vel para assinatura em ${patientName}.`,
           useIcpBrasil: false,
         });
 
@@ -1325,8 +1325,8 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ TEMPLATES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  // ─── CLOUD SIGNATURE (VIDaaS / BirdID) ──────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ TEMPLATES Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // â”€â”€â”€ CLOUD SIGNATURE (VIDaaS / BirdID) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   cloudSignature: router({
 
     getConfig: protectedProcedure.query(async ({ ctx }) => {
@@ -1357,7 +1357,7 @@ export const appRouter = router({
         if (!config?.clientId || !config?.cpf) {
           throw new TRPCError({
             code: "PRECONDITION_FAILED",
-            message: "Configure sua assinatura digital A3 em Perfil → Assinatura Digital.",
+            message: "Configure sua assinatura digital A3 em Perfil â†’ Assinatura Digital.",
           });
         }
 
@@ -1394,7 +1394,7 @@ export const appRouter = router({
       .input(z.object({ sessionId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         const session = await dbComplete.getSignatureSession(input.sessionId);
-        if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Sessão não encontrada." });
+        if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "SessÃ£o nÃ£o encontrada." });
         if (session.userId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
         if (session.status === "assinado") return { status: "assinado", sessionId: input.sessionId };
         if (session.status === "expirado" || session.status === "erro") {
@@ -1406,7 +1406,7 @@ export const appRouter = router({
         }
 
         const config = await dbComplete.getCloudSignatureConfig(ctx.user.id);
-        if (!config) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configuração não encontrada." });
+        if (!config) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "ConfiguraÃ§Ã£o nÃ£o encontrada." });
 
         const client = createCloudSignatureClient(
           config.provider as CloudSignatureProvider,
@@ -1452,8 +1452,8 @@ export const appRouter = router({
       }),
 
     /**
-     * Gera QR code com a URL de autorização OAuth2+PKCE.
-     * O médico escaneia com o app VIDaaS ou BirdID no celular.
+     * Gera QR code com a URL de autorizaÃ§Ã£o OAuth2+PKCE.
+     * O mÃ©dico escaneia com o app VIDaaS ou BirdID no celular.
      * O callback em /api/cloud-signature/callback completa a assinatura.
      */
     generateQrCode: protectedProcedure
@@ -1468,7 +1468,7 @@ export const appRouter = router({
         if (!config?.clientId || !config?.cpf) {
           throw new TRPCError({
             code: "PRECONDITION_FAILED",
-            message: "Configure sua assinatura digital A3 em Perfil → Assinatura Digital.",
+            message: "Configure sua assinatura digital A3 em Perfil â†’ Assinatura Digital.",
           });
         }
 
@@ -1484,7 +1484,7 @@ export const appRouter = router({
           (config.ambiente as "producao" | "homologacao") ?? "homologacao",
         );
 
-        // Cria a sessão antes de gerar a URL para ter o sessionId como state
+        // Cria a sessÃ£o antes de gerar a URL para ter o sessionId como state
         const sessionId = await dbComplete.createSignatureSession({
           userId: ctx.user.id,
           provider: config.provider as CloudSignatureProvider,
@@ -1497,7 +1497,7 @@ export const appRouter = router({
           expiresInSeconds: 300,
         });
 
-        // Gera URL com state=sessionId para o callback recuperar a sessão
+        // Gera URL com state=sessionId para o callback recuperar a sessÃ£o
         const { authorizeUrl, codeVerifier } = client.buildAuthorizeUrl(
           [{ documentId: `doc-${input.documentId}`, alias: input.documentAlias, hashBase64: input.documentHashBase64 }],
           "multi_signature",
@@ -1505,7 +1505,7 @@ export const appRouter = router({
           String(sessionId),
         );
 
-        // Salva o codeVerifier na sessão (necessário para trocar o code)
+        // Salva o codeVerifier na sessÃ£o (necessÃ¡rio para trocar o code)
         await dbComplete.updateSignatureSession(sessionId, { codeVerifier });
 
         // Gera o QR code como data URL (PNG base64)
@@ -1532,7 +1532,7 @@ export const appRouter = router({
     }),
   }),
 
-  // ─── Certillion (agregador VIDAAS / BirdID / CERTILLION_SIGNER) ───────────
+  // â”€â”€â”€ Certillion (agregador VIDAAS / BirdID / CERTILLION_SIGNER) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   certillion: router({
     getConfig: protectedProcedure.query(async () => {
       const cfg = await dbComplete.getCertillionConfig();
@@ -1542,7 +1542,7 @@ export const appRouter = router({
         clientId: cfg.clientId,
         // nunca devolve o secret em claro
         clientSecretMasked: cfg.clientSecret
-          ? "•••••••••••••" + cfg.clientSecret.slice(-4)
+          ? "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" + cfg.clientSecret.slice(-4)
           : "",
         redirectUri: cfg.redirectUri,
         baseUrl: cfg.baseUrl,
@@ -1564,14 +1564,14 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const appUrl = process.env.APP_URL || "https://sistema.drwesleycamara.com.br";
-        // Se o usuário não enviou um novo secret, preserva o atual
+        // Se o usuÃ¡rio nÃ£o enviou um novo secret, preserva o atual
         let finalSecret = input.clientSecret;
         if (!finalSecret) {
           const existing = await dbComplete.getCertillionConfig();
           if (!existing?.clientSecret) {
             throw new TRPCError({
               code: "BAD_REQUEST",
-              message: "Client Secret é obrigatório no primeiro cadastro.",
+              message: "Client Secret Ã© obrigatÃ³rio no primeiro cadastro.",
             });
           }
           finalSecret = existing.clientSecret;
@@ -1586,7 +1586,7 @@ export const appRouter = router({
 
     testConnection: protectedProcedure.mutation(async () => {
       const cfg = await dbComplete.getCertillionConfig();
-      if (!cfg) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Certillion não configurado." });
+      if (!cfg) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Certillion nÃ£o configurado." });
       const { createCertillionClient } = await import("./lib/certillion");
       const client = createCertillionClient({
         clientId: cfg.clientId,
@@ -1602,7 +1602,7 @@ export const appRouter = router({
       .input(z.object({ cpfOrCnpj: z.string().min(11) }))
       .mutation(async ({ input }) => {
         const cfg = await dbComplete.getCertillionConfig();
-        if (!cfg) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Certillion não configurado." });
+        if (!cfg) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Certillion nÃ£o configurado." });
         const { createCertillionClient } = await import("./lib/certillion");
         const client = createCertillionClient({
           clientId: cfg.clientId,
@@ -1619,7 +1619,7 @@ export const appRouter = router({
         documentType: z.enum(["evolucao", "prescricao", "exame", "atestado", "outro"]),
         documentId: z.number().int().positive(),
         documentAlias: z.string().min(1).max(120),
-        /** SHA-256 do conteúdo em base64 */
+        /** SHA-256 do conteÃºdo em base64 */
         documentHashBase64: z.string().min(20),
         psc: z.enum([
           "VIDAAS", "BIRDID", "CERTILLION_SIGNER", "SERPRO", "SAFEID", "SOLUTI",
@@ -1628,7 +1628,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const cfg = await dbComplete.getCertillionConfig();
-        if (!cfg) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Certillion não configurado. Vá em Configurações → Assinaturas." });
+        if (!cfg) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Certillion nÃ£o configurado. VÃ¡ em ConfiguraÃ§Ãµes â†’ Assinaturas." });
 
         const { createCertillionClient } = await import("./lib/certillion");
         const appUrl = process.env.APP_URL || "https://sistema.drwesleycamara.com.br";
@@ -1700,7 +1700,7 @@ export const appRouter = router({
   }),
 
   templates: router({
-    list: protectedProcedure.query(async ({ ctx }) => {
+    list: protectedProcedure.query(async () => {
       return dbComplete.listTemplatesNormalized();
     }),
 
@@ -1708,14 +1708,35 @@ export const appRouter = router({
       .input(z.object({
         name: z.string(),
         specialty: z.string().optional(),
+        group: z.string().optional(),
         description: z.string().optional(),
         sections: z.array(z.object({
           title: z.string(),
-          fields: z.array(z.any()),
+          type: z.string().optional(),
+          content: z.string().optional(),
+          fields: z.array(z.any()).optional(),
         })),
       }))
       .mutation(async ({ ctx, input }) => {
         return dbComplete.createTemplateNormalized(input, ctx.user.id);
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string(),
+        specialty: z.string().optional(),
+        group: z.string().optional(),
+        description: z.string().optional(),
+        sections: z.array(z.object({
+          title: z.string(),
+          type: z.string().optional(),
+          content: z.string().optional(),
+          fields: z.array(z.any()).optional(),
+        })),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return dbComplete.updateTemplateNormalized(input.id, input, ctx.user.id);
       }),
 
     remove: protectedProcedure
@@ -1724,8 +1745,7 @@ export const appRouter = router({
         return dbComplete.deleteTemplateNormalized(input.id);
       }),
   }),
-
-  // â”€â”€â”€ MEDICAL RECORDS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ MEDICAL RECORDS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   medicalRecords: router({
     listTemplates: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.listMedicalRecordTemplatesNormalized();
@@ -1761,7 +1781,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ WHATSAPP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ WHATSAPP Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   whatsapp: router({
     sendMessage: protectedProcedure
       .input(z.object({
@@ -1807,7 +1827,7 @@ export const appRouter = router({
         return dbComplete.sendTomorrowAppointmentReminders(ctx.user.id, getAppBaseUrl(ctx.req));
       }),
 
-    // ─── Envio de documentos em PDF via WhatsApp ─────────────────────────────
+    // â”€â”€â”€ Envio de documentos em PDF via WhatsApp â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     sendDocumentToPatient: protectedProcedure
       .input(z.object({
         documentType: z.enum(["prescricao", "exame", "orcamento", "atestado", "nfse"]),
@@ -1816,7 +1836,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const wa = await createWhatsAppService();
-        if (!wa) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "WhatsApp não configurado. Configure o Access Token e Phone Number ID nas configurações da clínica." });
+        if (!wa) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "WhatsApp nÃ£o configurado. Configure o Access Token e Phone Number ID nas configuraÃ§Ãµes da clÃ­nica." });
 
         const { documentType, documentId } = input;
         let phone = input.phone ?? "";
@@ -1824,14 +1844,14 @@ export const appRouter = router({
         let filename: string;
         let caption: string;
 
-        // ── Prescrição ────────────────────────────────────────────────────────
+        // â”€â”€ PrescriÃ§Ã£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (documentType === "prescricao") {
           const rx = await dbComplete.getPrescriptionById(documentId);
-          if (!rx) throw new TRPCError({ code: "NOT_FOUND", message: "Prescrição não encontrada." });
+          if (!rx) throw new TRPCError({ code: "NOT_FOUND", message: "PrescriÃ§Ã£o nÃ£o encontrada." });
           if (!phone) phone = rx.patientPhone ?? rx.phone ?? "";
 
           const content = stripHtmlForSignature(rx.content ?? rx.medicamentos ?? "");
-          pdfBuffer = buildSimplePdfBuffer("PRESCRIÇÃO MÉDICA", [
+          pdfBuffer = buildSimplePdfBuffer("PRESCRIÃ‡ÃƒO MÃ‰DICA", [
             `Paciente: ${rx.patientName ?? ""}`,
             `Data: ${new Date(rx.date ?? rx.createdAt).toLocaleDateString("pt-BR")}`,
             `CRM: ${rx.doctorCrm ?? ""}`,
@@ -1841,13 +1861,13 @@ export const appRouter = router({
             `Dr(a). ${rx.doctorName ?? ctx.user.name}`,
           ]);
           filename = `prescricao_${documentId}.pdf`;
-          caption = `Prescrição médica — Clínica Glutée`;
+          caption = `PrescriÃ§Ã£o mÃ©dica â€” ClÃ­nica GlutÃ©e`;
         }
 
-        // ── Pedido de Exames ──────────────────────────────────────────────────
+        // â”€â”€ Pedido de Exames â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         else if (documentType === "exame") {
           const exam = await dbComplete.getExamRequestById(documentId);
-          if (!exam) throw new TRPCError({ code: "NOT_FOUND", message: "Pedido de exames não encontrado." });
+          if (!exam) throw new TRPCError({ code: "NOT_FOUND", message: "Pedido de exames nÃ£o encontrado." });
           if (!phone) phone = exam.patientPhone ?? exam.phone ?? "";
 
           const exams = Array.isArray(exam.exams) ? exam.exams.join(", ") : String(exam.exams ?? exam.content ?? "");
@@ -1857,25 +1877,25 @@ export const appRouter = router({
             "",
             "Exames solicitados:",
             exams,
-            exam.clinicalIndication ? `\nIndicação clínica: ${exam.clinicalIndication}` : "",
+            exam.clinicalIndication ? `\nIndicaÃ§Ã£o clÃ­nica: ${exam.clinicalIndication}` : "",
             "",
             `Dr(a). ${exam.doctorName ?? ctx.user.name}`,
           ]);
           filename = `pedido_exames_${documentId}.pdf`;
-          caption = `Pedido de exames — Clínica Glutée`;
+          caption = `Pedido de exames â€” ClÃ­nica GlutÃ©e`;
         }
 
-        // ── Orçamento ─────────────────────────────────────────────────────────
+        // â”€â”€ OrÃ§amento â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         else if (documentType === "orcamento") {
           const budget = await dbComplete.getBudgetById(documentId);
-          if (!budget) throw new TRPCError({ code: "NOT_FOUND", message: "Orçamento não encontrado." });
+          if (!budget) throw new TRPCError({ code: "NOT_FOUND", message: "OrÃ§amento nÃ£o encontrado." });
           if (!phone) phone = budget.patientPhone ?? "";
 
           const total = (budget.totalInCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
           const itemLines = (budget.items ?? []).map((item: any) =>
             `- ${item.procedureName ?? item.areaName ?? "Item"}: R$ ${((item.unitPriceInCents ?? 0) / 100 * (item.quantity ?? 1)).toFixed(2).replace(".", ",")}`,
           );
-          pdfBuffer = buildSimplePdfBuffer("ORÇAMENTO", [
+          pdfBuffer = buildSimplePdfBuffer("ORÃ‡AMENTO", [
             `Paciente: ${budget.patientName}`,
             `Data: ${new Date(budget.createdAt).toLocaleDateString("pt-BR")}`,
             "",
@@ -1885,20 +1905,20 @@ export const appRouter = router({
             `Total: ${total}`,
             budget.validUntil ? `Validade: ${new Date(budget.validUntil).toLocaleDateString("pt-BR")}` : "",
             "",
-            "Clínica Glutée",
+            "ClÃ­nica GlutÃ©e",
           ]);
           filename = `orcamento_${documentId}.pdf`;
-          caption = `Orçamento — Clínica Glutée`;
+          caption = `OrÃ§amento â€” ClÃ­nica GlutÃ©e`;
         }
 
-        // ── Atestado / Documento do Paciente ──────────────────────────────────
+        // â”€â”€ Atestado / Documento do Paciente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         else if (documentType === "atestado") {
           const doc = await dbComplete.getPatientDocumentById(documentId);
-          if (!doc) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado." });
+          if (!doc) throw new TRPCError({ code: "NOT_FOUND", message: "Documento nÃ£o encontrado." });
           if (!phone) phone = (doc as any).patientPhone ?? "";
 
           const docContent = stripHtmlForSignature((doc as any).content ?? (doc as any).text ?? "");
-          pdfBuffer = buildSimplePdfBuffer(((doc as any).title ?? "ATESTADO MÉDICO").toUpperCase(), [
+          pdfBuffer = buildSimplePdfBuffer(((doc as any).title ?? "ATESTADO MÃ‰DICO").toUpperCase(), [
             `Paciente: ${(doc as any).patientName ?? ""}`,
             `Data: ${new Date((doc as any).date ?? (doc as any).createdAt).toLocaleDateString("pt-BR")}`,
             "",
@@ -1907,33 +1927,33 @@ export const appRouter = router({
             `Dr(a). ${(doc as any).doctorName ?? ctx.user.name}`,
           ]);
           filename = `atestado_${documentId}.pdf`;
-          caption = `${(doc as any).title ?? "Atestado"} — Clínica Glutée`;
+          caption = `${(doc as any).title ?? "Atestado"} â€” ClÃ­nica GlutÃ©e`;
         }
 
-        // ── NFSe ─────────────────────────────────────────────────────────────
+        // â”€â”€ NFSe â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         else if (documentType === "nfse") {
           const nfse = await dbComplete.getNfseById(documentId);
-          if (!nfse) throw new TRPCError({ code: "NOT_FOUND", message: "Nota Fiscal não encontrada." });
+          if (!nfse) throw new TRPCError({ code: "NOT_FOUND", message: "Nota Fiscal nÃ£o encontrada." });
           if (!phone) phone = (nfse as any).patientPhone ?? "";
 
           const valor = ((nfse as any).valorServicos ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-          pdfBuffer = buildSimplePdfBuffer("NOTA FISCAL DE SERVIÇO ELETRÔNICA (NFS-e)", [
-            `Número: ${(nfse as any).numero ?? (nfse as any).rpsNumero ?? ""}`,
+          pdfBuffer = buildSimplePdfBuffer("NOTA FISCAL DE SERVIÃ‡O ELETRÃ”NICA (NFS-e)", [
+            `NÃºmero: ${(nfse as any).numero ?? (nfse as any).rpsNumero ?? ""}`,
             `Data: ${new Date((nfse as any).dataEmissao ?? (nfse as any).createdAt).toLocaleDateString("pt-BR")}`,
             `Tomador: ${(nfse as any).tomadorNome ?? (nfse as any).patientName ?? ""}`,
             `Valor: ${valor}`,
             "",
-            `Descrição: ${(nfse as any).descricaoServico ?? ""}`,
+            `DescriÃ§Ã£o: ${(nfse as any).descricaoServico ?? ""}`,
             "",
-            "Clínica Glutée — CNPJ 37.249.024/0001-40",
+            "ClÃ­nica GlutÃ©e â€” CNPJ 37.249.024/0001-40",
           ]);
           filename = `nfse_${documentId}.pdf`;
-          caption = `NFS-e nº ${(nfse as any).numero ?? documentId} — Clínica Glutée`;
+          caption = `NFS-e nÂº ${(nfse as any).numero ?? documentId} â€” ClÃ­nica GlutÃ©e`;
         } else {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Tipo de documento inválido." });
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Tipo de documento invÃ¡lido." });
         }
 
-        if (!phone) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Telefone do paciente não encontrado. Informe o número antes de enviar." });
+        if (!phone) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Telefone do paciente nÃ£o encontrado. Informe o nÃºmero antes de enviar." });
 
         // Upload do PDF e envio
         const mediaId = await wa.uploadMedia(pdfBuffer!, filename!, "application/pdf");
@@ -1943,7 +1963,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ AI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ AI Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   ai: router({
     chat: protectedProcedure
       .input(z.object({
@@ -1957,7 +1977,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ RETROACTIVE APPOINTMENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ RETROACTIVE APPOINTMENTS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   retroactiveAppointments: router({
     create: protectedProcedure
       .input(z.object({
@@ -1967,7 +1987,7 @@ export const appRouter = router({
         durationMinutes: z.number(),
         type: z.string(),
         notes: z.string().optional(),
-        retroactiveJustification: z.string().min(10, "Justificativa deve ter no mínimo 10 caracteres"),
+        retroactiveJustification: z.string().min(10, "Justificativa deve ter no mÃ­nimo 10 caracteres"),
         originalAppointmentDate: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -1983,7 +2003,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ ADVANCED PHOTO GALLERY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ ADVANCED PHOTO GALLERY Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   photoGallery: router({
     createFolder: protectedProcedure
       .input(z.object({
@@ -2160,7 +2180,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ INTELLIGENT PATIENT SEARCH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ INTELLIGENT PATIENT SEARCH Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   patientSearch: router({
     autocomplete: protectedProcedure
       .input(z.object({
@@ -2173,7 +2193,7 @@ export const appRouter = router({
       }),
   }),
 
-  // â”€â”€â”€ CUSTOMIZABLE PERMISSIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ CUSTOMIZABLE PERMISSIONS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   permissions: router({
     checkPermission: protectedProcedure
       .input(z.object({
@@ -2250,7 +2270,7 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── CERTIFICADO A1 PF (assinatura de documentos) ──────────────────────────
+  // â”€â”€â”€ CERTIFICADO A1 PF (assinatura de documentos) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   a1Certificate: router({
     getStatus: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.getUserA1CertificateStatus(ctx.user.id);
@@ -2280,7 +2300,7 @@ export const appRouter = router({
         if (!certRaw?.fileBase64) {
           throw new TRPCError({
             code: "PRECONDITION_FAILED",
-            message: "Certificado A1 PF não configurado. Faça o upload em Perfil → Certificado Digital.",
+            message: "Certificado A1 PF nÃ£o configurado. FaÃ§a o upload em Perfil â†’ Certificado Digital.",
           });
         }
         const { signPdfWithA1 } = await import("./lib/a1-pdf-signer");
@@ -2296,7 +2316,3 @@ export const appRouter = router({
 });
 
 export type AppRouter = typeof appRouter;
-
-
-
-

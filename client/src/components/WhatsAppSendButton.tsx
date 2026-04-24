@@ -32,6 +32,8 @@ interface WhatsAppSendButtonProps {
   defaultPhone?: string | null;
   /** Label personalizado (padrão: "Enviar via WhatsApp") */
   label?: string;
+  /** Nome do documento exibido no diálogo */
+  documentLabel?: string;
   /** Variante do botão */
   variant?: "default" | "outline" | "ghost" | "secondary";
   size?: "default" | "sm" | "lg" | "icon";
@@ -43,6 +45,7 @@ export function WhatsAppSendButton({
   documentId,
   defaultPhone,
   label = "Enviar via WhatsApp",
+  documentLabel,
   variant = "outline",
   size = "sm",
   className,
@@ -61,19 +64,20 @@ export function WhatsAppSendButton({
   });
 
   function formatPhone(raw: string) {
-    const d = raw.replace(/\D/g, "");
-    if (d.length === 13) return `+${d.slice(0,2)} (${d.slice(2,4)}) ${d.slice(4,9)}-${d.slice(9)}`;
-    if (d.length === 12) return `+${d.slice(0,2)} (${d.slice(2,4)}) ${d.slice(4,8)}-${d.slice(8)}`;
+    const digits = raw.replace(/\D/g, "");
+    if (digits.length === 13) return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
+    if (digits.length === 12) return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 8)}-${digits.slice(8)}`;
     return raw;
   }
 
   const docLabels: Record<WhatsAppDocumentType, string> = {
-    prescricao: "Prescrição Médica",
-    exame: "Pedido de Exames",
+    prescricao: "Prescrição médica",
+    exame: "Pedido de exames",
     orcamento: "Orçamento",
     atestado: "Atestado",
-    nfse: "Nota Fiscal (NFS-e)",
+    nfse: "Nota fiscal (NFS-e)",
   };
+  const resolvedDocumentLabel = documentLabel || docLabels[documentType];
 
   function handleSend() {
     const cleanPhone = phone.replace(/\D/g, "");
@@ -108,8 +112,7 @@ export function WhatsAppSendButton({
               Enviar via WhatsApp
             </DialogTitle>
             <DialogDescription>
-              O arquivo <strong>{docLabels[documentType]}</strong> será gerado em PDF e
-              enviado diretamente para o WhatsApp do paciente.
+              O arquivo <strong>{resolvedDocumentLabel}</strong> será gerado em PDF e enviado diretamente para o WhatsApp do paciente.
             </DialogDescription>
           </DialogHeader>
 
@@ -136,7 +139,7 @@ export function WhatsAppSendButton({
             <Button
               onClick={handleSend}
               disabled={sendMutation.isPending}
-              className="bg-green-600 hover:bg-green-700 text-white gap-2"
+              className="gap-2 bg-green-600 text-white hover:bg-green-700"
             >
               {sendMutation.isPending ? (
                 <>

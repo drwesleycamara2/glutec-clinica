@@ -1,370 +1,505 @@
-import { useAuth } from "@/_core/hooks/useAuth";
+
+import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import { trpc } from "@/lib/trpc";
-import { FileStack, Plus, Trash2, GripVertical, Copy, Eye } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, FileStack, FolderOpen, PencilLine, Plus, Save, ScrollText, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-type FieldType = "text" | "textarea" | "radio" | "select" | "multi_select" | "checkbox" | "number" | "date";
+type TemplateGroup = "anamnese" | "evolucao" | "atestado" | "declaracao" | "prescricao" | "solicitacao_exames";
 
-interface TemplateField {
-  label: string;
-  type: FieldType;
-  options?: string[];
-  required?: boolean;
-  placeholder?: string;
-  defaultValue?: string;
+const TEMPLATE_GROUPS: Array<{ value: TemplateGroup; label: string; description: string }> = [
+  { value: "anamnese", label: "Anamnese", description: "Modelos de anamnese e formulários clínicos." },
+  { value: "evolucao", label: "Evolução", description: "Modelos para consultas, retornos e evolução clínica." },
+  { value: "atestado", label: "Atestado médico", description: "Atestados médicos e documentos semelhantes." },
+  { value: "declaracao", label: "Declaração", description: "Declarações de comparecimento e documentos administrativos." },
+  { value: "prescricao", label: "Prescrição", description: "Modelos de receituário simples, antimicrobiano e controle especial." },
+  { value: "solicitacao_exames", label: "Solicitação de exames", description: "Pedidos de exames e guias de solicitação." },
+];
+
+const GROUP_LABELS = Object.fromEntries(TEMPLATE_GROUPS.map(group => [group.value, group.label])) as Record<TemplateGroup, string>;
+
+function repairMojibake(value?: string | null) {
+  let text = String(value ?? "");
+  if (!text) return "";
+  if (!(/[\u00c3\u00c2\uFFFD]/.test(text) || /\u00e2[\u0080-\u00bf]/.test(text))) return text;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const bytes = Uint8Array.from(Array.from(text).map(char => char.charCodeAt(0) & 0xff));
+      const decoded = new TextDecoder("utf-8").decode(bytes);
+      if (!decoded || decoded === text) break;
+      text = decoded;
+    } catch {
+      break;
+    }
+  }
+
+  return text.replace(/\uFFFD/g, "").trim();
 }
 
-interface TemplateSection {
-  title: string;
-  fields: TemplateField[];
+function normalizeGroup(value?: string | null): TemplateGroup {
+  const normalized = repairMojibake(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+
+  if (normalized.includes("anamn")) return "anamnese";
+  if (normalized.includes("evolu") || normalized.includes("consulta") || normalized.includes("prontuario")) return "evolucao";
+  if (normalized.includes("declar")) return "declaracao";
+  if (normalized.includes("prescr")) return "prescricao";
+  if (normalized.includes("solicitacao") || normalized.includes("pedido de exame") || normalized.includes("exame")) return "solicitacao_exames";
+  return "atestado";
 }
 
-const FIELD_TYPE_LABELS: Record<FieldType, string> = {
-  text: "Texto curto",
-  textarea: "Texto longo",
-  radio: "Seleção única (radio)",
-  select: "Dropdown (select)",
-  multi_select: "Seleção múltipla",
-  checkbox: "Checkbox (sim/não)",
-  number: "Número",
-  date: "Data",
-};
+function stripHtml(value?: string | null) {
+  return String(value ?? "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractTemplateContent(template: any) {
+  const sections = Array.isArray(template?.sections) ? template.sections : [];
+  const content = sections
+    .map((section: any) => {
+      if (typeof section?.content === "string" && section.content.trim()) return section.content;
+      if (typeof section?.text === "string" && section.text.trim()) return section.text;
+      const fields = Array.isArray(section?.fields) ? section.fields : [];
+      return fields.map((field: any) => field?.label).filter(Boolean).join("\n");
+    })
+    .filter(Boolean)
+    .join("\n\n");
+
+  return content || String(template?.content ?? "");
+}
+
+function buildSections(group: TemplateGroup, content: string) {
+  return [
+    {
+      title: GROUP_LABELS[group],
+      type: "richtext",
+      content,
+      fields: [],
+    },
+  ];
+}
+
+function buildDefaultContent(group: TemplateGroup) {
+  switch (group) {
+    case "anamnese":
+      return [
+        "<p><strong>Queixa principal:</strong></p>",
+        "<p></p>",
+        "<p><strong>História atual:</strong></p>",
+        "<p></p>",
+        "<p><strong>Antecedentes:</strong></p>",
+        "<p></p>",
+      ].join("");
+    case "evolucao":
+      return [
+        "<p><strong>Queixa principal:</strong></p>",
+        "<p></p>",
+        "<p><strong>Exame físico:</strong></p>",
+        "<p></p>",
+        "<p><strong>Conduta:</strong></p>",
+        "<p></p>",
+      ].join("");
+    case "declaracao":
+      return [
+        "<p><strong>DECLARAÇÃO</strong></p>",
+        "<p></p>",
+        "<p>Declaro, para os devidos fins, que [PACIENTE] esteve em atendimento nesta data.</p>",
+      ].join("");
+    case "prescricao":
+      return [
+        "<p><strong>USO ORAL</strong></p>",
+        "<p></p>",
+        "<p>1. Medicamento / dose / posologia</p>",
+      ].join("");
+    case "solicitacao_exames":
+      return [
+        "<p><strong>SOLICITAÇÃO DE EXAMES</strong></p>",
+        "<p></p>",
+        "<p>Solicito a realização dos seguintes exames:</p>",
+        "<p></p>",
+      ].join("");
+    case "atestado":
+    default:
+      return [
+        "<p><strong>ATESTADO MÉDICO</strong></p>",
+        "<p></p>",
+        "<p>Atesto, para os devidos fins, que [PACIENTE] esteve em atendimento nesta data.</p>",
+      ].join("");
+  }
+}
 
 export default function Templates() {
-  const { data: templates, isLoading, refetch } = trpc.templates.list.useQuery();
+  const [, setLocation] = useLocation();
+  const utils = trpc.useUtils();
+  const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  const initialGroup = normalizeGroup(searchParams.get("group") || "atestado");
+  const returnTo = searchParams.get("returnTo") || "";
+
+  const { data: templates, isLoading } = trpc.templates.list.useQuery();
   const createMutation = trpc.templates.create.useMutation({
-    onSuccess: () => { toast.success("Template criado com sucesso!"); refetch(); setShowCreate(false); resetForm(); },
-    onError: (err) => toast.error(err.message),
+    onSuccess: async () => {
+      toast.success("Modelo salvo com sucesso.");
+      await utils.templates.list.invalidate();
+    },
+    onError: err => toast.error(err.message || "Não foi possível salvar o modelo."),
+  });
+  const updateMutation = trpc.templates.update.useMutation({
+    onSuccess: async () => {
+      toast.success("Modelo atualizado com sucesso.");
+      await utils.templates.list.invalidate();
+    },
+    onError: err => toast.error(err.message || "Não foi possível atualizar o modelo."),
   });
   const deleteMutation = trpc.templates.remove.useMutation({
-    onSuccess: () => { toast.success("Modelo excluído."); refetch(); setPreviewTemplate(null); },
-    onError: (err) => toast.error(err.message || "Não foi possível excluir o modelo."),
+    onSuccess: async () => {
+      toast.success("Modelo excluído.");
+      await utils.templates.list.invalidate();
+    },
+    onError: err => toast.error(err.message || "Não foi possível excluir o modelo."),
   });
 
-  const [showCreate, setShowCreate] = useState(false);
-  const [previewTemplate, setPreviewTemplate] = useState<any>(null);
-  const [form, setForm] = useState({ name: "", specialty: "", description: "" });
-  const [sections, setSections] = useState<TemplateSection[]>([
-    { title: "Anamnese", fields: [] },
-  ]);
+  const [selectedGroup, setSelectedGroup] = useState<TemplateGroup>(initialGroup);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+  const [form, setForm] = useState({
+    name: "",
+    group: initialGroup,
+    description: "",
+    content: buildDefaultContent(initialGroup),
+  });
 
-  const resetForm = () => {
-    setForm({ name: "", specialty: "", description: "" });
-    setSections([{ title: "Anamnese", fields: [] }]);
+  const filteredTemplates = useMemo(() => {
+    const normalizedSearch = search
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase("pt-BR");
+
+    return (templates ?? [])
+      .map((template: any) => ({
+        ...template,
+        group: normalizeGroup(template?.group || template?.specialty || template?.name),
+      }))
+      .filter((template: any) => template.group === selectedGroup)
+      .filter((template: any) => {
+        if (!normalizedSearch) return true;
+        const haystack = [template?.name, template?.description, template?.content]
+          .map(value => stripHtml(repairMojibake(value)))
+          .join(" ")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLocaleLowerCase("pt-BR");
+        return haystack.includes(normalizedSearch);
+      })
+      .sort((a: any, b: any) => repairMojibake(a.name).localeCompare(repairMojibake(b.name), "pt-BR"));
+  }, [search, selectedGroup, templates]);
+
+  useEffect(() => {
+    setForm(current => {
+      if (current.group === selectedGroup && current.name && selectedTemplateId !== null) return current;
+      return {
+        name: current.group === selectedGroup && current.name ? current.name : "",
+        group: selectedGroup,
+        description: current.group === selectedGroup && current.description ? current.description : "",
+        content: current.group === selectedGroup && current.content ? current.content : buildDefaultContent(selectedGroup),
+      };
+    });
+
+    if (selectedTemplateId !== null) {
+      const selected = (templates ?? []).find((template: any) => Number(template.id) === selectedTemplateId);
+      if (selected && normalizeGroup(selected?.group || selected?.specialty || selected?.name) !== selectedGroup) {
+        setSelectedTemplateId(null);
+      }
+    }
+  }, [selectedGroup, selectedTemplateId, templates]);
+
+  const startNewTemplate = (group: TemplateGroup = selectedGroup) => {
+    setSelectedTemplateId(null);
+    setSelectedGroup(group);
+    setForm({
+      name: "",
+      group,
+      description: "",
+      content: buildDefaultContent(group),
+    });
   };
 
-  const addSection = () => {
-    setSections([...sections, { title: `Seção ${sections.length + 1}`, fields: [] }]);
+  const handleSelectTemplate = (template: any) => {
+    const group = normalizeGroup(template?.group || template?.specialty || template?.name);
+    setSelectedTemplateId(Number(template.id));
+    setSelectedGroup(group);
+    setForm({
+      name: repairMojibake(template?.name),
+      group,
+      description: repairMojibake(template?.description),
+      content: extractTemplateContent(template) || buildDefaultContent(group),
+    });
   };
 
-  const removeSection = (idx: number) => {
-    setSections(sections.filter((_, i) => i !== idx));
+  const handleSave = () => {
+    const name = form.name.trim();
+    const content = form.content.trim();
+    if (!name) {
+      toast.error("Informe um nome para o modelo.");
+      return;
+    }
+    if (!stripHtml(content)) {
+      toast.error("Digite o conteúdo do modelo antes de salvar.");
+      return;
+    }
+
+    const payload = {
+      name,
+      group: form.group,
+      specialty: GROUP_LABELS[form.group],
+      description: form.description.trim() || undefined,
+      sections: buildSections(form.group, content),
+    };
+
+    if (selectedTemplateId) {
+      updateMutation.mutate({ id: selectedTemplateId, ...payload });
+      return;
+    }
+
+    createMutation.mutate(payload);
   };
 
-  const updateSectionTitle = (idx: number, title: string) => {
-    const s = [...sections];
-    s[idx] = { ...s[idx], title };
-    setSections(s);
-  };
-
-  const addField = (sectionIdx: number) => {
-    const s = [...sections];
-    s[sectionIdx].fields.push({ label: "", type: "text", options: [], required: false });
-    setSections(s);
-  };
-
-  const removeField = (sectionIdx: number, fieldIdx: number) => {
-    const s = [...sections];
-    s[sectionIdx].fields = s[sectionIdx].fields.filter((_, i) => i !== fieldIdx);
-    setSections(s);
-  };
-
-  const updateField = (sectionIdx: number, fieldIdx: number, updates: Partial<TemplateField>) => {
-    const s = [...sections];
-    s[sectionIdx].fields[fieldIdx] = { ...s[sectionIdx].fields[fieldIdx], ...updates };
-    setSections(s);
-  };
-
-  const handleCreate = () => {
-    if (!form.name.trim()) { toast.error("Nome do template é obrigatório."); return; }
-    if (sections.some(s => s.fields.length === 0)) { toast.error("Todas as seções devem ter pelo menos um campo."); return; }
-    createMutation.mutate({ ...form, sections });
-  };
-
-  // Pré-carregar template de exemplo: Exame Físico Genital Feminino (CFM)
-  const loadExampleTemplate = () => {
-    setForm({ name: "Exame Físico Genital Feminino", specialty: "Estética Íntima", description: "Template para exame físico genital feminino conforme protocolo CFM. Requer chaperone obrigatório." });
-    setSections([
-      {
-        title: "Anamnese",
-        fields: [
-          { label: "Queixa Principal", type: "textarea", required: true, placeholder: "Descreva a queixa principal da paciente" },
-          { label: "Histórico de Procedimentos Anteriores", type: "textarea", required: false, placeholder: "Procedimentos estéticos anteriores na região" },
-          { label: "Uso de Medicamentos", type: "textarea", required: false, placeholder: "Medicamentos em uso" },
-          { label: "Alergias", type: "text", required: true, placeholder: "Alergias conhecidas" },
-        ],
+  const handleDelete = () => {
+    if (!selectedTemplateId) return;
+    if (!window.confirm(`Excluir o modelo \"${form.name || "sem nome"}\"? Esta ação não poderá ser desfeita.`)) {
+      return;
+    }
+    deleteMutation.mutate({ id: selectedTemplateId }, {
+      onSuccess: () => {
+        startNewTemplate(form.group);
       },
-      {
-        title: "Exame Físico",
-        fields: [
-          { label: "Hipercromia", type: "radio", options: ["Severa", "Moderada", "Leve", "Sem hipercromia"], required: true },
-          { label: "Flacidez", type: "radio", options: ["Severa", "Moderada", "Leve", "Sem flacidez"], required: true },
-          { label: "Assimetria Labial", type: "radio", options: ["Severa", "Moderada", "Leve", "Sem assimetria"], required: true },
-          { label: "Ressecamento", type: "radio", options: ["Severo", "Moderado", "Leve", "Sem ressecamento"], required: true },
-          { label: "Áreas Afetadas", type: "multi_select", options: ["Grandes lábios", "Pequenos lábios", "Monte de Vênus", "Região perianal", "Virilha"], required: true },
-          { label: "Observações Adicionais", type: "textarea", required: false, placeholder: "Observações do exame físico" },
-        ],
-      },
-      {
-        title: "Conduta",
-        fields: [
-          { label: "Procedimento Indicado", type: "select", options: ["Peeling íntimo", "Laser CO2", "Radiofrequência", "Preenchimento", "Ninfoplastia", "Outro"], required: true },
-          { label: "Número de Sessões Estimado", type: "number", required: false, placeholder: "Ex: 3" },
-          { label: "Intervalo entre Sessões (dias)", type: "number", required: false, placeholder: "Ex: 30" },
-          { label: "Plano de Tratamento", type: "textarea", required: true, placeholder: "Descreva o plano de tratamento completo" },
-        ],
-      },
-    ]);
-    toast.success("Template de exemplo carregado! Ajuste conforme necessário.");
+    });
   };
+
+  const isSaving = createMutation.isPending || updateMutation.isPending;
+  const selectedGroupMeta = TEMPLATE_GROUPS.find(group => group.value === selectedGroup) ?? TEMPLATE_GROUPS[0];
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
+          <h1 className="flex items-center gap-2 text-2xl font-semibold">
             <FileStack className="h-6 w-6 text-primary" />
-            Templates de Prontuário
+            Modelos clínicos
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Modelos pré-prontos para preenchimento rápido (radio buttons, dropdowns, seleção múltipla)
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+            Organize modelos de anamnese, evolução, atestados, declarações, prescrições e solicitações de exames em um só lugar.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={loadExampleTemplate}>
-            <Copy className="h-4 w-4 mr-2" />
-            Carregar Exemplo CFM
+        <div className="flex flex-wrap gap-2">
+          {returnTo ? (
+            <Button variant="outline" onClick={() => setLocation(returnTo)}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Voltar
+            </Button>
+          ) : null}
+          <Button variant="outline" onClick={() => startNewTemplate(selectedGroup)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Novo modelo
           </Button>
-          <Dialog open={showCreate} onOpenChange={setShowCreate}>
-            <DialogTrigger asChild>
-              <Button><Plus className="h-4 w-4 mr-2" />Novo Template</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Criar Template de Prontuário</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <Label>Nome do Template *</Label>
-                    <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ex: Exame Físico Genital Feminino" />
-                  </div>
-                  <div>
-                    <Label>Especialidade</Label>
-                    <Input value={form.specialty} onChange={e => setForm({ ...form, specialty: e.target.value })} placeholder="Ex: Estética Íntima" />
-                  </div>
-                  <div>
-                    <Label>Descrição</Label>
-                    <Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Descrição breve" />
-                  </div>
-                </div>
-
-                {/* Seções */}
-                {sections.map((section, sIdx) => (
-                  <Card key={sIdx} className="border-l-4 border-l-primary">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between">
-                        <Input value={section.title} onChange={e => updateSectionTitle(sIdx, e.target.value)} className="font-semibold text-base border-0 p-0 h-auto focus-visible:ring-0" />
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => addField(sIdx)}><Plus className="h-3 w-3" /></Button>
-                          {sections.length > 1 && <Button variant="ghost" size="sm" onClick={() => removeSection(sIdx)}><Trash2 className="h-3 w-3 text-destructive" /></Button>}
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {section.fields.map((field, fIdx) => (
-                        <div key={fIdx} className="flex items-start gap-2 p-3 rounded-lg bg-muted/40">
-                          <GripVertical className="h-4 w-4 text-muted-foreground mt-2 shrink-0" />
-                          <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-2">
-                            <Input value={field.label} onChange={e => updateField(sIdx, fIdx, { label: e.target.value })} placeholder="Nome do campo" />
-                            <Select value={field.type} onValueChange={(v: FieldType) => updateField(sIdx, fIdx, { type: v })}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {Object.entries(FIELD_TYPE_LABELS).map(([k, v]) => (
-                                  <SelectItem key={k} value={k}>{v}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            {["radio", "select", "multi_select"].includes(field.type) && (
-                              <Input
-                                value={(field.options ?? []).join(", ")}
-                                onChange={e => updateField(sIdx, fIdx, { options: e.target.value.split(",").map(o => o.trim()).filter(Boolean) })}
-                                placeholder="Opções (separadas por vírgula)"
-                                className="md:col-span-2"
-                              />
-                            )}
-                            {!["radio", "select", "multi_select"].includes(field.type) && (
-                              <Input value={field.placeholder ?? ""} onChange={e => updateField(sIdx, fIdx, { placeholder: e.target.value })} placeholder="Placeholder" />
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1 mt-1">
-                            <label className="text-xs text-muted-foreground flex items-center gap-1">
-                              <input type="checkbox" checked={field.required ?? false} onChange={e => updateField(sIdx, fIdx, { required: e.target.checked })} className="rounded" />
-                              Obrig.
-                            </label>
-                            <Button variant="ghost" size="sm" onClick={() => removeField(sIdx, fIdx)}><Trash2 className="h-3 w-3 text-destructive" /></Button>
-                          </div>
-                        </div>
-                      ))}
-                      {section.fields.length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-4">Clique em + para adicionar campos a esta seção.</p>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={addSection}><Plus className="h-4 w-4 mr-2" />Adicionar Seção</Button>
-                  <div className="flex-1" />
-                  <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
-                  <Button onClick={handleCreate} disabled={createMutation.isPending}>
-                    {createMutation.isPending ? "Criando..." : "Criar Template"}
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
         </div>
       </div>
 
-      {/* Lista de Templates */}
-      {isLoading ? (
-        <div className="flex items-center justify-center h-32"><p className="text-muted-foreground">Carregando templates...</p></div>
-      ) : !templates || templates.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <FileStack className="h-12 w-12 text-muted-foreground/30 mb-3" />
-            <p className="text-muted-foreground">Nenhum template criado ainda.</p>
-            <p className="text-sm text-muted-foreground mt-1">Crie templates para agilizar o preenchimento de prontuários.</p>
+      <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <Card className="border-border/60">
+          <CardHeader className="space-y-4">
+            <div className="space-y-1">
+              <CardTitle className="text-base">Biblioteca de modelos</CardTitle>
+              <p className="text-sm text-muted-foreground">{selectedGroupMeta.description}</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Grupo</Label>
+              <Select value={selectedGroup} onValueChange={(value: TemplateGroup) => setSelectedGroup(value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TEMPLATE_GROUPS.map(group => (
+                    <SelectItem key={group.value} value={group.value}>
+                      {group.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Buscar</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={event => setSearch(event.target.value)}
+                  className="pl-9"
+                  placeholder="Pesquisar modelo"
+                />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">Carregando modelos...</div>
+            ) : filteredTemplates.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border/70 px-4 py-8 text-center">
+                <FolderOpen className="mx-auto mb-3 h-8 w-8 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">Nenhum modelo salvo neste grupo.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredTemplates.map((template: any) => {
+                  const preview = stripHtml(extractTemplateContent(template));
+                  const isSelected = Number(template.id) === selectedTemplateId;
+                  return (
+                    <button
+                      key={template.id}
+                      type="button"
+                      onClick={() => handleSelectTemplate(template)}
+                      className={`w-full rounded-lg border p-4 text-left transition ${
+                        isSelected
+                          ? "border-[#C9A55B] bg-[#C9A55B]/10 shadow-sm"
+                          : "border-border/60 bg-background hover:border-[#C9A55B]/50 hover:bg-[#C9A55B]/5"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold">{repairMojibake(template.name) || "Modelo sem nome"}</p>
+                          <Badge variant="outline" className="mt-2 text-[10px]">
+                            {GROUP_LABELS[normalizeGroup(template?.group || template?.specialty || template?.name)]}
+                          </Badge>
+                        </div>
+                        {template.isDefault ? <Badge variant="secondary">Padrão</Badge> : null}
+                      </div>
+                      {template.description ? (
+                        <p className="mt-3 text-xs text-muted-foreground">{repairMojibake(template.description)}</p>
+                      ) : null}
+                      {preview ? (
+                        <p className="mt-3 line-clamp-3 text-xs text-muted-foreground">{preview}</p>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {templates.map((t: any) => (
-            <Card key={t.id} className="hover:shadow-md transition-shadow cursor-pointer relative group" onClick={() => setPreviewTemplate(t)}>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between gap-2">
-                  <CardTitle className="text-sm font-semibold">{t.name}</CardTitle>
-                  <div className="flex items-center gap-1">
-                    {t.isDefault && <Badge variant="secondary" className="text-xs">Padrão</Badge>}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (window.confirm(`Excluir o modelo "${t.name}"? Esta ação não poderá ser desfeita.`)) {
-                          deleteMutation.mutate({ id: Number(t.id) });
-                        }
-                      }}
-                      disabled={deleteMutation.isPending}
-                      title="Excluir modelo"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-600"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-                {t.specialty && <p className="text-xs text-muted-foreground">{t.specialty}</p>}
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-muted-foreground">{t.description ?? "Sem descrição"}</p>
-                <div className="flex items-center gap-2 mt-3">
-                  <Badge variant="outline" className="text-xs">{(t.sections as any[])?.length ?? 0} seções</Badge>
-                  <Badge variant="outline" className="text-xs">
-                    {(t.sections as any[])?.reduce((acc: number, s: any) => acc + (s.fields?.length ?? 0), 0) ?? 0} campos
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
 
-      {/* Preview Dialog */}
-      {previewTemplate && (
-        <Dialog open={!!previewTemplate} onOpenChange={() => setPreviewTemplate(null)}>
-          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Eye className="h-5 w-5 text-primary" />
-                Preview: {previewTemplate.name}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              {(previewTemplate.sections as TemplateSection[])?.map((section, sIdx) => (
-                <Card key={sIdx}>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">{section.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {section.fields.map((field, fIdx) => (
-                      <div key={fIdx}>
-                        <Label className="text-sm">{field.label} {field.required && <span className="text-destructive">*</span>}</Label>
-                        {field.type === "text" && <Input placeholder={field.placeholder} disabled />}
-                        {field.type === "textarea" && <Textarea placeholder={field.placeholder} disabled />}
-                        {field.type === "number" && <Input type="number" placeholder={field.placeholder} disabled />}
-                        {field.type === "date" && <Input type="date" disabled />}
-                        {field.type === "checkbox" && (
-                          <div className="flex items-center gap-2 mt-1">
-                            <input type="checkbox" disabled className="rounded" />
-                            <span className="text-sm text-muted-foreground">{field.label}</span>
-                          </div>
-                        )}
-                        {field.type === "radio" && (
-                          <div className="flex flex-wrap gap-3 mt-1">
-                            {field.options?.map(opt => (
-                              <label key={opt} className="flex items-center gap-1.5 text-sm">
-                                <input type="radio" name={`preview-${sIdx}-${fIdx}`} disabled className="accent-primary" />
-                                {opt}
-                              </label>
-                            ))}
-                          </div>
-                        )}
-                        {field.type === "select" && (
-                          <Select disabled>
-                            <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                            <SelectContent>
-                              {field.options?.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        )}
-                        {field.type === "multi_select" && (
-                          <div className="flex flex-wrap gap-2 mt-1">
-                            {field.options?.map(opt => (
-                              <label key={opt} className="flex items-center gap-1.5 text-sm">
-                                <input type="checkbox" disabled className="rounded" />
-                                {opt}
-                              </label>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              ))}
+        <Card className="border-border/60">
+          <CardHeader className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ScrollText className="h-4 w-4 text-[#C9A55B]" />
+                  {selectedTemplateId ? "Editar modelo" : "Criar modelo"}
+                </CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Monte o texto do modelo, ajuste quando quiser e salve no grupo correto.
+                </p>
+              </div>
+              <Badge variant="outline">{GROUP_LABELS[form.group]}</Badge>
             </div>
-          </DialogContent>
-        </Dialog>
-      )}
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Nome do modelo</Label>
+                <Input
+                  value={form.name}
+                  onChange={event => setForm(current => ({ ...current, name: event.target.value }))}
+                  placeholder="Ex.: Atestado de comparecimento"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Grupo do modelo</Label>
+                <Select
+                  value={form.group}
+                  onValueChange={(value: TemplateGroup) => {
+                    setSelectedGroup(value);
+                    setForm(current => ({
+                      ...current,
+                      group: value,
+                      content: selectedTemplateId ? current.content : buildDefaultContent(value),
+                    }));
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TEMPLATE_GROUPS.map(group => (
+                      <SelectItem key={group.value} value={group.value}>
+                        {group.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Observação interna</Label>
+              <Input
+                value={form.description}
+                onChange={event => setForm(current => ({ ...current, description: event.target.value }))}
+                placeholder="Ex.: usar em consulta de retorno"
+              />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <RichTextEditor
+              value={form.content}
+              onChange={content => setForm(current => ({ ...current, content }))}
+              placeholder="Digite o conteúdo do modelo..."
+              minHeight="420px"
+            />
+
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/50 bg-muted/10 px-4 py-3 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-2">
+                <PencilLine className="h-3.5 w-3.5" />
+                {selectedTemplateId ? "Você está editando um modelo já salvo." : "Este conteúdo será salvo como um novo modelo."}
+              </div>
+              <div>{stripHtml(form.content).length} caracteres no texto</div>
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-2">
+              {selectedTemplateId ? (
+                <Button type="button" variant="outline" onClick={() => startNewTemplate(form.group)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Novo modelo
+                </Button>
+              ) : null}
+              {selectedTemplateId ? (
+                <Button type="button" variant="outline" onClick={handleDelete} disabled={deleteMutation.isPending}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Excluir
+                </Button>
+              ) : null}
+              <Button type="button" className="btn-glossy-gold" onClick={handleSave} disabled={isSaving}>
+                <Save className="mr-2 h-4 w-4" />
+                {isSaving ? "Salvando..." : selectedTemplateId ? "Atualizar modelo" : "Salvar modelo"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

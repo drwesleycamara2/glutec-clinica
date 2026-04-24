@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import {
   CheckCircle2,
   Clock3,
+  Eye,
   FileDown,
   History,
   Loader2,
@@ -134,10 +135,152 @@ function formatElapsed(startedAt?: string, endedAt?: string) {
   return `${hours}:${minutes}:${seconds}`;
 }
 
-function stripHtml(value: string) {
-  return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+function decodeHtmlEntities(value: string) {
+  let content = String(value ?? "");
+  if (!content) return "";
+
+  if (typeof document !== "undefined") {
+    const textarea = document.createElement("textarea");
+    textarea.innerHTML = content;
+    content = textarea.value;
+  } else {
+    const entities: Record<string, string> = {
+      nbsp: " ",
+      amp: "&",
+      lt: "<",
+      gt: ">",
+      quot: '"',
+      apos: "'",
+      ndash: "-",
+      mdash: "-",
+      hellip: "...",
+    };
+    content = content
+      .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+      .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)))
+      .replace(/&([a-zA-Z]+);/g, (match, entity) => entities[entity] ?? match);
+  }
+
+  return content;
 }
 
+function repairTextArtifacts(value?: string | null) {
+  let content = String(value ?? "");
+  if (!content) return "";
+
+  if (/[\u00c3\u00c2\uFFFD]/.test(content) || /\u00e2[\u0080-\u00bf]/.test(content)) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const bytes = Uint8Array.from(Array.from(content).map((char) => char.charCodeAt(0) & 0xff));
+        const decoded = new TextDecoder("utf-8").decode(bytes);
+        if (!decoded || decoded === content) break;
+        content = decoded;
+      } catch {
+        break;
+      }
+    }
+  }
+
+  return content.replace(/\uFFFD/g, "");
+}
+
+function clinicalTextFromHtml(value?: string | null) {
+  const content = repairTextArtifacts(decodeHtmlEntities(String(value ?? "")));
+  if (!content) return "";
+
+  return content
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "- ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\u00a0/g, " ")
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function stripHtml(value: string) {
+  return clinicalTextFromHtml(value).replace(/\s+/g, " ").trim();
+}
+
+function escapeHtml(value?: string | null) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatDateTime(value?: string | Date | null) {
+  if (!value) return "-";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return repairTextArtifacts(String(value));
+  return date.toLocaleString("pt-BR");
+}
+
+function getEvolutionRecordKey(record: any) {
+  return `${record?.isLegacy ? "legacy" : "ev"}-${record?.id ?? "unknown"}`;
+}
+
+const SIGNATURE_PROVIDER_LABELS: Record<string, string> = {
+  certificado_local_a1: "A1 local / arquivo",
+  d4sign_icp: "D4Sign ICP-Brasil",
+  vidaas: "VIDaaS",
+  bird: "Bird ID",
+  gov: "gov.br",
+};
+
+function getSignatureMethodLabel(record: any) {
+  const method = String(record?.signatureMethod ?? "");
+  if (method === "icp_brasil_a3") return "ICP-Brasil A3";
+  if (method === "icp_brasil_a1") return "ICP-Brasil A1";
+  if (method === "eletronica") return "Assinatura eletrônica";
+
+  const provider = String(record?.signatureProvider ?? "").toLowerCase();
+  if (["vidaas", "bird", "gov"].includes(provider)) return "ICP-Brasil A3";
+  if (provider.includes("a1") || provider.includes("d4sign") || provider.includes("certificado")) return "ICP-Brasil A1";
+  return "Certificado digital";
+}
+
+function getSignatureDetails(record: any, fallbackSigner: string) {
+  const isSigned = String(record?.status ?? "") === "assinado" || Boolean(record?.signedAt || record?.signatureValidationCode || record?.signatureHash);
+  if (!isSigned) return null;
+
+  const provider = String(record?.signatureProvider ?? "").trim();
+  const providerLabel = SIGNATURE_PROVIDER_LABELS[provider] || provider || "Não informado";
+  const certificateLabel = repairTextArtifacts(record?.signatureCertificateLabel || record?.certificateLabel || "").trim();
+
+  return {
+    signedAt: formatDateTime(record?.signedAt),
+    signerName: repairTextArtifacts(record?.signedByDoctorName || record?.signedByName || record?.doctorName || fallbackSigner || "Profissional não identificado"),
+    method: getSignatureMethodLabel(record),
+    provider: providerLabel,
+    certificateLabel: certificateLabel || "Certificado não informado",
+    validationCode: repairTextArtifacts(record?.signatureValidationCode || record?.signatureHash || "").trim(),
+    sessionId: repairTextArtifacts(record?.signatureSessionId || record?.d4signDocumentKey || "").trim(),
+  };
+}
+
+function buildSignatureDetailsHtml(signature: NonNullable<ReturnType<typeof getSignatureDetails>>) {
+  return `
+    <div style="margin-top:20px;padding:12px;border:1px solid #16a34a;border-radius:8px;background:#f0fdf4;font-size:11px;color:#14532d;">
+      <h3 style="font-size:13px;margin:0 0 8px 0;color:#166534;">Assinatura digital</h3>
+      <p style="margin:0 0 4px 0;"><strong>Assinado em:</strong> ${escapeHtml(signature.signedAt)}</p>
+      <p style="margin:0 0 4px 0;"><strong>Assinante:</strong> ${escapeHtml(signature.signerName)}</p>
+      <p style="margin:0 0 4px 0;"><strong>Método:</strong> ${escapeHtml(signature.method)}</p>
+      <p style="margin:0 0 4px 0;"><strong>Provedor:</strong> ${escapeHtml(signature.provider)}</p>
+      <p style="margin:0 0 4px 0;"><strong>Certificado:</strong> ${escapeHtml(signature.certificateLabel)}</p>
+      ${signature.validationCode ? `<p style="margin:0 0 4px 0;word-break:break-all;"><strong>Código de validação:</strong> ${escapeHtml(signature.validationCode)}</p>` : ""}
+      ${signature.sessionId ? `<p style="margin:0;word-break:break-all;"><strong>Sessão/documento:</strong> ${escapeHtml(signature.sessionId)}</p>` : ""}
+    </div>
+  `;
+}
 function buildValidationCode(id?: number) {
   return `GLUTEC-${id ?? "DOC"}-${Date.now().toString(36).toUpperCase()}`;
 }
@@ -188,6 +331,8 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
   const [editJustificationText, setEditJustificationText] = useState("");
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [historyForEvolutionId, setHistoryForEvolutionId] = useState<number | null>(null);
+  const [expandedEvolutionKey, setExpandedEvolutionKey] = useState<string | null>(null);
+  const [signatureDetailsKey, setSignatureDetailsKey] = useState<string | null>(null);
 
   const evolutionQuery = trpc.clinicalEvolution.getByPatient.useQuery({ patientId });
   const assistantsQuery = trpc.clinicalEvolution.listAssistants.useQuery();
@@ -646,29 +791,29 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
   const handleExport = async () => {
     if (!selectedEvolution) return;
 
-    const signatureLogs: D4SignatureLog[] =
-      selectedEvolution.status === "assinado"
-        ? [
-            {
-              uuid: `evolucao-${selectedEvolution.id}`,
-              signerName: selectedEvolution.signedByDoctorName || selectedEvolution.doctorName || professionalName,
-              signerEmail: (user as any)?.email || "contato@drwesleycamara.com.br",
-              signedAt: selectedEvolution.signedAt
-                ? new Date(selectedEvolution.signedAt).toLocaleString("pt-BR")
-                : new Date().toLocaleString("pt-BR"),
-              status: "assinado",
-              signatureMethod:
-                selectedEvolution.signatureMethod === "icp_brasil_a3"
-                  ? "icp_brasil_a3"
-                  : "icp_brasil_a1",
-              signatureHash: selectedEvolution.signatureValidationCode || buildValidationCode(selectedEvolution.id),
-              certificateInfo: {
-                subject: selectedEvolution.signedByDoctorName || selectedEvolution.doctorName || professionalName,
-                issuer: selectedEvolution.signatureProvider || "ICP-Brasil",
-              },
+    const signatureDetails = getSignatureDetails(selectedEvolution, professionalName);
+    const signatureMethodForPdf: D4SignatureLog["signatureMethod"] = signatureDetails?.method.includes("A3")
+      ? "icp_brasil_a3"
+      : signatureDetails?.method.includes("A1")
+        ? "icp_brasil_a1"
+        : "eletronica";
+    const signatureLogs: D4SignatureLog[] = signatureDetails
+      ? [
+          {
+            uuid: `evolucao-${selectedEvolution.id}`,
+            signerName: signatureDetails.signerName,
+            signerEmail: (user as any)?.email || "contato@drwesleycamara.com.br",
+            signedAt: signatureDetails.signedAt,
+            status: "assinado",
+            signatureMethod: signatureMethodForPdf,
+            signatureHash: signatureDetails.validationCode || undefined,
+            certificateInfo: {
+              subject: signatureDetails.certificateLabel !== "Certificado não informado" ? signatureDetails.certificateLabel : signatureDetails.signerName,
+              issuer: signatureDetails.provider,
             },
-          ]
-        : [];
+          },
+        ]
+      : [];
 
     const auditLogs: AuditLog[] = (auditQuery.data ?? []).map((log: any) => ({
       id: String(log.id),
@@ -677,41 +822,52 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
       userId: String(log.doctorId),
       userName: log.doctorName,
       ipAddress: log.ipAddress || undefined,
-      details: typeof log.details === "string" ? log.details : undefined,
+      details: typeof log.details === "string" ? repairTextArtifacts(log.details) : undefined,
     }));
+
+    const clinicalNotesText = clinicalTextFromHtml(selectedEvolution.clinicalNotes || "") || "Sem evolução clínica registrada.";
+    const secretaryNotesText = clinicalTextFromHtml(selectedEvolution.secretaryNotes || "");
+    const audioTranscriptionText = clinicalTextFromHtml(selectedEvolution.audioTranscription || "");
+    const relatedExams = Array.isArray(selectedEvolution.relatedExams) ? selectedEvolution.relatedExams : [];
+    const relatedPrescriptions = Array.isArray(selectedEvolution.relatedPrescriptions) ? selectedEvolution.relatedPrescriptions : [];
+    const relatedDocuments = Array.isArray(selectedEvolution.relatedDocuments) ? selectedEvolution.relatedDocuments : [];
 
     const content = `
       <div style="font-family: Montserrat, sans-serif;">
         <div style="margin-bottom: 18px;">
-          <p style="margin: 0 0 8px 0; font-size: 14px;"><strong>Paciente:</strong> ${patientName}</p>
-          <p style="margin: 0 0 8px 0; font-size: 14px;"><strong>Profissional:</strong> ${selectedEvolution.signedByDoctorName || selectedEvolution.doctorName || professionalName}</p>
-          <p style="margin: 0 0 8px 0; font-size: 14px;"><strong>Acompanhou no atendimento:</strong> ${selectedEvolution.assistantName || "Ninguém"}</p>
-          <p style="margin: 0 0 8px 0; font-size: 14px;"><strong>Período:</strong> ${selectedEvolution.startedAt ? new Date(selectedEvolution.startedAt).toLocaleString("pt-BR") : "-"} até ${selectedEvolution.endedAt ? new Date(selectedEvolution.endedAt).toLocaleString("pt-BR") : "-"}</p>
-          <p style="margin: 0; font-size: 14px;"><strong>CID-10:</strong> ${selectedEvolution.icdCode || "-"} - ${selectedEvolution.icdDescription || ""}</p>
+          <p style="margin: 0 0 8px 0; font-size: 14px;"><strong>Paciente:</strong> ${escapeHtml(patientName)}</p>
+          <p style="margin: 0 0 8px 0; font-size: 14px;"><strong>Profissional:</strong> ${escapeHtml(selectedEvolution.signedByDoctorName || selectedEvolution.doctorName || professionalName)}</p>
+          <p style="margin: 0 0 8px 0; font-size: 14px;"><strong>Acompanhou no atendimento:</strong> ${escapeHtml(selectedEvolution.assistantName || "Ninguém")}</p>
+          <p style="margin: 0 0 8px 0; font-size: 14px;"><strong>Período:</strong> ${escapeHtml(formatDateTime(selectedEvolution.startedAt))} até ${escapeHtml(formatDateTime(selectedEvolution.endedAt))}</p>
+          <p style="margin: 0; font-size: 14px;"><strong>CID-10:</strong> ${escapeHtml(selectedEvolution.icdCode || "-")} - ${escapeHtml(selectedEvolution.icdDescription || "")}</p>
         </div>
         ${selectedEvolution.retroactiveJustification ? `
           <div style="margin-bottom: 16px; padding: 12px; border: 1px solid #d4a853; border-radius: 8px;">
-            <strong>Atendimento retroativo:</strong> ${selectedEvolution.retroactiveJustification}
+            <strong>Atendimento retroativo:</strong> ${escapeHtml(clinicalTextFromHtml(selectedEvolution.retroactiveJustification))}
           </div>
         ` : ""}
-        <div>${selectedEvolution.clinicalNotes || "<p>Sem evolução clínica registrada.</p>"}</div>
-        ${selectedEvolution.secretaryNotes ? `
+        <div style="white-space: pre-wrap; font-size: 12px; line-height: 1.65;">${escapeHtml(clinicalNotesText)}</div>
+        ${secretaryNotesText ? `
           <div style="margin-top: 20px;">
             <h3 style="font-size: 14px; margin: 0 0 8px 0;">Observações da secretaria</h3>
-            <p style="white-space: pre-wrap; font-size: 12px; margin: 0;">${selectedEvolution.secretaryNotes}</p>
+            <p style="white-space: pre-wrap; font-size: 12px; margin: 0;">${escapeHtml(secretaryNotesText)}</p>
           </div>
         ` : ""}
-        ${selectedEvolution.audioTranscription ? `
+        ${audioTranscriptionText ? `
           <div style="margin-top: 20px;">
             <h3 style="font-size: 14px; margin: 0 0 8px 0;">Transcrição de áudio</h3>
-            <p style="white-space: pre-wrap; font-size: 12px; margin: 0;">${selectedEvolution.audioTranscription}</p>
+            <p style="white-space: pre-wrap; font-size: 12px; margin: 0;">${escapeHtml(audioTranscriptionText)}</p>
           </div>
         ` : ""}
-        ${signatureLogs.length > 0 ? `
-          <div style="margin-top: 20px; font-size: 11px; color: #555;">
-            Documento assinado digitalmente com metadados de validação registrados no sistema.
+        ${(relatedExams.length || relatedPrescriptions.length || relatedDocuments.length) ? `
+          <div style="margin-top: 20px;">
+            <h3 style="font-size: 14px; margin: 0 0 8px 0;">Registros vinculados ao atendimento</h3>
+            ${relatedExams.map((item: any) => `<p style="margin:0 0 6px 0;"><strong>Exame solicitado:</strong> ${escapeHtml(clinicalTextFromHtml(item.content || item.exams || "Solicitação registrada."))}</p>`).join("")}
+            ${relatedPrescriptions.map((item: any) => `<p style="margin:0 0 6px 0;"><strong>Prescrição:</strong> ${escapeHtml(clinicalTextFromHtml(item.content || "Prescrição registrada."))}</p>`).join("")}
+            ${relatedDocuments.map((item: any) => `<p style="margin:0 0 6px 0;"><strong>${escapeHtml(item.type || "Documento")}:</strong> ${escapeHtml(clinicalTextFromHtml(item.name || item.description || "Documento registrado."))}</p>`).join("")}
           </div>
         ` : ""}
+        ${signatureDetails ? buildSignatureDetailsHtml(signatureDetails) : ""}
       </div>
     `;
 
@@ -1208,16 +1364,30 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
             <p className="text-sm text-muted-foreground">Nenhum atendimento salvo ainda para este paciente.</p>
           ) : (
             visibleSavedEvolutions.map((record: any) => {
-                const isLegacy = record.isLegacy === true;
-                const displayId = isLegacy ? (record.legacyRecordId ?? Math.abs(record.id)) : record.id;
-                return (
-                <div key={`${isLegacy ? "legacy" : "ev"}-${record.id}`} className="rounded-2xl border border-border/60 p-4">
+              const isLegacy = record.isLegacy === true;
+              const displayId = isLegacy ? (record.legacyRecordId ?? Math.abs(record.id)) : record.id;
+              const recordKey = getEvolutionRecordKey(record);
+              const isExpanded = expandedEvolutionKey === recordKey;
+              const signatureDetails = getSignatureDetails(record, professionalName);
+              const showSignatureDetails = signatureDetailsKey === recordKey;
+              const clinicalSummary = stripHtml(record.clinicalNotes || "").slice(0, 260) || "Sem resumo clínico.";
+              const clinicalFullText = clinicalTextFromHtml(record.clinicalNotes || "") || "Sem evolução clínica registrada.";
+              const secretaryNotesText = clinicalTextFromHtml(record.secretaryNotes || "");
+              const audioTranscriptionText = clinicalTextFromHtml(record.audioTranscription || "");
+              const relatedExams = Array.isArray(record.relatedExams) ? record.relatedExams : [];
+              const relatedPrescriptions = Array.isArray(record.relatedPrescriptions) ? record.relatedPrescriptions : [];
+              const relatedDocuments = Array.isArray(record.relatedDocuments) ? record.relatedDocuments : [];
+
+              return (
+                <div key={recordKey} className="rounded-2xl border border-border/60 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-1">
+                    <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="outline">{record.icdCode || "Sem CID"}</Badge>
-                        <Badge variant="outline">{record.status}</Badge>
-                        {record.signatureProvider && <Badge variant="outline">{record.signatureProvider}</Badge>}
+                        <Badge variant="outline">{record.status || "finalizado"}</Badge>
+                        {record.signatureProvider && (
+                          <Badge variant="outline">{SIGNATURE_PROVIDER_LABELS[String(record.signatureProvider)] || record.signatureProvider}</Badge>
+                        )}
                         {isLegacy && (
                           <Badge variant="secondary">
                             {record.legacySourceLabel || "Importado"}
@@ -1225,12 +1395,12 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
                         )}
                       </div>
                       <p className="text-sm font-medium">
-                        #{displayId} — {record.startedAt ? new Date(record.startedAt).toLocaleString("pt-BR") : (record.createdAt ? new Date(record.createdAt).toLocaleString("pt-BR") : "—")}
+                        #{displayId} - {formatDateTime(record.startedAt || record.createdAt)}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Atendido por {record.doctorName || professionalName} • Acompanhamento: {record.assistantName || "Ninguém"}
+                        Atendido por {repairTextArtifacts(record.doctorName || professionalName)} - Acompanhamento: {repairTextArtifacts(record.assistantName || "Ninguém")}
                       </p>
-                      <p className="text-xs text-muted-foreground">{stripHtml(record.clinicalNotes || "").slice(0, 220) || "Sem resumo clínico."}</p>
+                      <p className="text-xs text-muted-foreground">{clinicalSummary}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {!isLegacy && (
@@ -1255,23 +1425,128 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
                         <FileDown className="mr-1.5 h-3.5 w-3.5" />
                         Exportar
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setExpandedEvolutionKey(isExpanded ? null : recordKey);
+                          if (!isExpanded) setSignatureDetailsKey(null);
+                        }}
+                      >
+                        <Eye className="mr-1.5 h-3.5 w-3.5" />
+                        {isExpanded ? "Ocultar" : "Visualizar"}
+                      </Button>
                       {!isLegacy && record.status !== "assinado" && (
                         <Button size="sm" onClick={() => handleOpenSignature(record)}>
                           <PenTool className="mr-1.5 h-3.5 w-3.5" />
                           Assinar
                         </Button>
                       )}
-                      {!isLegacy && record.status === "assinado" && (
-                        <Badge className="bg-emerald-100 text-emerald-700">
+                      {!isLegacy && record.status === "assinado" && signatureDetails && (
+                        <button
+                          type="button"
+                          onClick={() => setSignatureDetailsKey(showSignatureDetails ? null : recordKey)}
+                          className="inline-flex h-8 items-center rounded-md bg-emerald-100 px-2.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-200"
+                        >
                           <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
                           Assinado
-                        </Badge>
+                        </button>
                       )}
                     </div>
                   </div>
+
+                  {signatureDetails && showSignatureDetails && (
+                    <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs leading-5 text-emerald-950">
+                      <p className="font-semibold text-emerald-800">Detalhes da assinatura digital</p>
+                      <p>Assinado em: {signatureDetails.signedAt}</p>
+                      <p>Assinante: {signatureDetails.signerName}</p>
+                      <p>Método: {signatureDetails.method}</p>
+                      <p>Provedor: {signatureDetails.provider}</p>
+                      <p>Certificado: {signatureDetails.certificateLabel}</p>
+                      {signatureDetails.validationCode ? <p className="break-all">Código de validação: {signatureDetails.validationCode}</p> : null}
+                      {signatureDetails.sessionId ? <p className="break-all">Sessão/documento: {signatureDetails.sessionId}</p> : null}
+                    </div>
+                  )}
+
+                  {isExpanded && (
+                    <div className="mt-4 space-y-4 border-t border-border/50 pt-4">
+                      <div className="grid gap-3 text-xs text-muted-foreground md:grid-cols-2 xl:grid-cols-4">
+                        <div>
+                          <span className="block font-medium text-foreground">Período</span>
+                          {formatDateTime(record.startedAt || record.createdAt)} até {formatDateTime(record.endedAt)}
+                        </div>
+                        <div>
+                          <span className="block font-medium text-foreground">Profissional</span>
+                          {repairTextArtifacts(record.doctorName || professionalName)}
+                        </div>
+                        <div>
+                          <span className="block font-medium text-foreground">Tipo</span>
+                          {repairTextArtifacts(record.attendanceType || "Não informado")}
+                        </div>
+                        <div>
+                          <span className="block font-medium text-foreground">CID-10</span>
+                          {record.icdCode || "Sem CID"} {record.icdDescription ? `- ${repairTextArtifacts(record.icdDescription)}` : ""}
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="mb-2 text-sm font-semibold text-foreground">Ficha de atendimento completa</h4>
+                        <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-sm leading-6 whitespace-pre-wrap text-foreground">
+                          {clinicalFullText}
+                        </div>
+                      </div>
+
+                      {secretaryNotesText && (
+                        <div>
+                          <h4 className="mb-2 text-sm font-semibold text-foreground">Observações da secretaria</h4>
+                          <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-sm leading-6 whitespace-pre-wrap text-foreground">
+                            {secretaryNotesText}
+                          </div>
+                        </div>
+                      )}
+
+                      {audioTranscriptionText && (
+                        <div>
+                          <h4 className="mb-2 text-sm font-semibold text-foreground">Transcrição de áudio</h4>
+                          <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-sm leading-6 whitespace-pre-wrap text-foreground">
+                            {audioTranscriptionText}
+                          </div>
+                        </div>
+                      )}
+
+                      {(relatedExams.length > 0 || relatedPrescriptions.length > 0 || relatedDocuments.length > 0) && (
+                        <div className="rounded-xl border border-border/50 bg-background/60 p-3">
+                          <h4 className="mb-2 text-sm font-semibold text-foreground">Registros vinculados</h4>
+                          <div className="space-y-2 text-sm text-muted-foreground">
+                            {relatedExams.map((item: any) => (
+                              <p key={`exam-${item.id}`}><span className="font-medium text-foreground">Exame solicitado:</span> {clinicalTextFromHtml(item.content || item.exams || "Solicitação registrada.")}</p>
+                            ))}
+                            {relatedPrescriptions.map((item: any) => (
+                              <p key={`prescription-${item.id}`}><span className="font-medium text-foreground">Prescrição:</span> {clinicalTextFromHtml(item.content || "Prescrição registrada.")}</p>
+                            ))}
+                            {relatedDocuments.map((item: any) => (
+                              <p key={`document-${item.id}`}><span className="font-medium text-foreground">{repairTextArtifacts(item.type || "Documento")}:</span> {clinicalTextFromHtml(item.name || item.description || "Documento registrado.")}</p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {signatureDetails && (
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs leading-5 text-emerald-950">
+                          <p className="font-semibold text-emerald-800">Assinatura digital</p>
+                          <p>Assinado em: {signatureDetails.signedAt}</p>
+                          <p>Assinante: {signatureDetails.signerName}</p>
+                          <p>Método: {signatureDetails.method}</p>
+                          <p>Provedor: {signatureDetails.provider}</p>
+                          <p>Certificado: {signatureDetails.certificateLabel}</p>
+                          {signatureDetails.validationCode ? <p className="break-all">Código de validação: {signatureDetails.validationCode}</p> : null}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                );
-              })
+              );
+            })
           )}
         </CardContent>
       </Card>
@@ -1387,7 +1662,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
           </DialogHeader>
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>Confirme para encerrar este atendimento.</p>
-            <p>Depois disso ele ficara registrado como concluido no historico do paciente.</p>
+            <p>Depois disso ele ficará registrado como concluído no histórico do paciente.</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setFinalizeConfirmOpen(false)}>
@@ -1402,7 +1677,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
               className="border-emerald-600/30 bg-emerald-600 text-white hover:bg-emerald-700"
             >
               {(createMutation.isPending || updateMutation.isPending) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Confirmar finalizacao
+              Confirmar finalização
             </Button>
           </DialogFooter>
         </DialogContent>

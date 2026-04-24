@@ -44,6 +44,7 @@ const pathModuleMap: Array<{ prefix: string; moduleId: string }> = [
   { prefix: "/chat", moduleId: "chat" },
   { prefix: "/perfil", moduleId: "perfil" },
   { prefix: "/configuracoes", moduleId: "configuracoes" },
+  { prefix: "/templates", moduleId: "templates" },
   { prefix: "/usuarios", moduleId: "usuarios" },
   { prefix: "/fiscal", moduleId: "fiscal" },
   { prefix: "/nfse", moduleId: "fiscal" },
