@@ -29,6 +29,12 @@ function unwrapRows<T = any>(result: any): T[] {
   return (result ?? []) as T[];
 }
 
+function normalizeStoredBloodType(value: unknown) {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  const validBloodTypes = new Set(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]);
+  return validBloodTypes.has(normalized) ? normalized : null;
+}
+
 const tableColumnCache = new Map<string, Promise<Map<string, string>>>();
 let ensurePrescriptionSchemaPromise: Promise<void> | null = null;
 
@@ -867,7 +873,7 @@ export async function createPatient(data: any, userId: number) {
       ${nullableOrNull(normalizedAddress.state)},
       ${nullableOrNull(normalizedAddress.zip)},
       ${data.rg || null},
-      ${data.bloodType || "desconhecido"},
+      ${normalizeStoredBloodType(data.bloodType)},
       ${data.allergies || null},
       ${data.chronicConditions || null},
       ${data.insuranceName || null},
@@ -976,7 +982,7 @@ export async function updatePatient(id: number, data: any) {
   setColumn("state", nullableOrNull(normalizedAddress.state));
   setColumn("zipCode", nullableOrNull(normalizedAddress.zip));
   setColumn("rg", data.rg ?? existing.rg ?? null);
-  setColumn("bloodType", data.bloodType ?? existing.bloodType ?? "desconhecido");
+  setColumn("bloodType", normalizeStoredBloodType(data.bloodType ?? existing.bloodType));
   setColumn("allergies", data.allergies ?? existing.allergies ?? null);
   setColumn("chronicConditions", data.chronicConditions ?? existing.chronicConditions ?? null);
 
