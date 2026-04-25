@@ -31,7 +31,7 @@ export default function ResetPasswordSafe() {
     if (!token) {
       setChecking(false);
       setValidToken(false);
-      setError("Link de recupera\u00E7\u00E3o inv\u00E1lido.");
+      setError("Link de recuperação inválido.");
       return;
     }
 
@@ -42,7 +42,7 @@ export default function ResetPasswordSafe() {
       .then(async response => {
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
-          throw new Error(data.error || "Link inv\u00E1lido ou expirado.");
+          throw new Error(data.error || "Link inválido ou expirado.");
         }
 
         if (!cancelled) {
@@ -53,7 +53,7 @@ export default function ResetPasswordSafe() {
       .catch((err: Error) => {
         if (!cancelled) {
           setValidToken(false);
-          setError(err.message || "Link inv\u00E1lido ou expirado.");
+          setError(err.message || "Link inválido ou expirado.");
         }
       })
       .finally(() => {
@@ -73,12 +73,12 @@ export default function ResetPasswordSafe() {
     setSuccess("");
 
     if (newPassword !== confirmPassword) {
-      setError("As senhas n\u00E3o coincidem.");
+      setError("As senhas não coincidem.");
       return;
     }
 
     if (!isStrongPassword(newPassword)) {
-      setError("Use no m\u00EDnimo 8 caracteres com letra mai\u00FAscula, n\u00FAmero e caractere especial.");
+      setError("Use no mínimo 8 caracteres com letra maiúscula, número e caractere especial.");
       return;
     }
 
@@ -92,15 +92,15 @@ export default function ResetPasswordSafe() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setError(data.error || "N\u00E3o foi poss\u00EDvel redefinir a senha.");
+        setError(data.error || "Não foi possível redefinir a senha.");
         return;
       }
 
-      setSuccess(data.message || "Senha redefinida com sucesso. Voc\u00EA j\u00E1 pode entrar no sistema.");
+      setSuccess(data.message || "Senha redefinida com sucesso. Você já pode entrar no sistema.");
       setValidToken(false);
       setTimeout(() => setLocation("/login"), 2000);
     } catch {
-      setError("Erro de conex\u00E3o. Tente novamente.");
+      setError("Erro de conexão. Tente novamente.");
     } finally {
       setLoading(false);
     }
@@ -116,7 +116,7 @@ export default function ResetPasswordSafe() {
           <div className="relative mx-auto flex max-w-sm flex-col items-center gap-5">
             <img
               src="/logo-glutee-white.png"
-              alt="Cl\u00EDnica Glut\u00E9e"
+              alt="Clínica Glutée"
               className="h-24 w-auto object-contain drop-shadow-[0_0_24px_rgba(214,178,90,0.28)]"
             />
             <div className="w-full rounded-[1.4rem] border border-[#d7ba78]/28 bg-[linear-gradient(135deg,rgba(255,214,120,0.12),rgba(255,255,255,0.02),rgba(255,214,120,0.08))] px-6 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] backdrop-blur-md">

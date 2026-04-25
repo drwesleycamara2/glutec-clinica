@@ -30,20 +30,20 @@ export default function ForgotPasswordSafe() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setError(data.error || "N\u00E3o foi poss\u00EDvel iniciar a recupera\u00E7\u00E3o de senha.");
+        setError(data.error || "Não foi possível iniciar a recuperação de senha.");
         return;
       }
 
       setSuccess(
         data.message ||
-          "Se houver uma conta compat\u00EDvel com esse e-mail, voc\u00EA receber\u00E1 um link seguro para redefinir a senha.",
+          "Se houver uma conta compatível com esse e-mail, você receberá um link seguro para redefinir a senha.",
       );
 
       if (data.warning) {
         setWarning(data.warning);
       }
     } catch {
-      setError("Erro de conex\u00E3o. Tente novamente em instantes.");
+      setError("Erro de conexão. Tente novamente em instantes.");
     } finally {
       setLoading(false);
     }
@@ -59,7 +59,7 @@ export default function ForgotPasswordSafe() {
           <div className="relative mx-auto flex max-w-sm flex-col items-center gap-5">
             <img
               src="/logo-glutee-white.png"
-              alt="Cl\u00EDnica Glut\u00E9e"
+              alt="Clínica Glutée"
               className="h-24 w-auto object-contain drop-shadow-[0_0_24px_rgba(214,178,90,0.28)]"
             />
             <div className="w-full rounded-[1.4rem] border border-[#d7ba78]/28 bg-[linear-gradient(135deg,rgba(255,214,120,0.12),rgba(255,255,255,0.02),rgba(255,214,120,0.08))] px-6 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] backdrop-blur-md">
@@ -74,7 +74,7 @@ export default function ForgotPasswordSafe() {
         <div className="px-8 py-8 sm:px-10">
           <h2 className="text-3xl font-semibold tracking-tight text-[#fffaf0]">Esqueci minha senha</h2>
           <p className="mt-2 text-sm text-[#d3c6a4]">
-            Informe seu e-mail de acesso. Se a conta existir, voc\u00EA receber\u00E1 um link tempor\u00E1rio para criar uma nova senha.
+            Informe seu e-mail de acesso. Se a conta existir, você receberá um link temporário para criar uma nova senha.
           </p>
 
           {error ? (
@@ -129,7 +129,7 @@ export default function ForgotPasswordSafe() {
                   Enviando...
                 </span>
               ) : (
-                "Enviar link de recupera\u00E7\u00E3o"
+                "Enviar link de recuperação"
               )}
             </Button>
           </form>

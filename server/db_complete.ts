@@ -34,6 +34,30 @@ function unwrapInsertId(result: any): number {
   return Number(header?.insertId ?? 0);
 }
 
+
+async function ensureOptionalModuleTables(db: any) {
+  if (!ensureOptionalModuleTablesPromise) {
+    ensureOptionalModuleTablesPromise = (async () => {
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS budget_procedure_catalog (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(256) NOT NULL, category VARCHAR(128) NULL, description TEXT NULL, estimatedSessionsMin INT DEFAULT 1, estimatedSessionsMax INT DEFAULT 1, sessionIntervalDays INT DEFAULT 30, active TINYINT(1) NOT NULL DEFAULT 1, createdBy INT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, KEY idx_budget_procedure_catalog_active (active), KEY idx_budget_procedure_catalog_name (name)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS budget_procedure_areas (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, procedureId INT NOT NULL, areaName VARCHAR(128) NOT NULL, sortOrder INT DEFAULT 0, active TINYINT(1) NOT NULL DEFAULT 1, KEY idx_budget_procedure_areas_procedure (procedureId), KEY idx_budget_procedure_areas_active (active)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS budget_procedure_pricing (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, procedureId INT NOT NULL, areaId INT NOT NULL, complexity ENUM('P','M','G') NOT NULL, priceInCents INT NOT NULL, active TINYINT(1) NOT NULL DEFAULT 1, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uniq_budget_procedure_price (procedureId, areaId, complexity), KEY idx_budget_procedure_pricing_active (active)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS budget_payment_plans (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(128) NOT NULL, type ENUM('a_vista','parcelado_sem_juros','parcelado_com_juros','financiamento','pagamento_programado') NOT NULL, discountPercent DECIMAL(5,2) DEFAULT 0, maxInstallments INT DEFAULT 1, interestRatePercent DECIMAL(5,2) DEFAULT 0, description TEXT NULL, active TINYINT(1) NOT NULL DEFAULT 1, sortOrder INT DEFAULT 0, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, KEY idx_budget_payment_plans_active (active)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS financial_transactions (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, type ENUM('receita','despesa') NOT NULL, category VARCHAR(128) NOT NULL, description VARCHAR(512) NOT NULL, amountInCents INT NOT NULL, paymentMethod ENUM('pix','dinheiro','cartao_credito','cartao_debito','transferencia','boleto','outro') NULL, patientId INT NULL, budgetId INT NULL, appointmentId INT NULL, dueDate DATE NULL, paidAt TIMESTAMP NULL, status ENUM('pendente','pago','atrasado','cancelado') NOT NULL DEFAULT 'pendente', createdBy INT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, KEY idx_financial_transactions_createdAt (createdAt), KEY idx_financial_transactions_type (type), KEY idx_financial_transactions_status (status)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS inventory_products (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(256) NOT NULL, sku VARCHAR(64) NULL, category VARCHAR(128) NULL, description TEXT NULL, unit VARCHAR(32) DEFAULT 'un', currentStock INT NOT NULL DEFAULT 0, minimumStock INT DEFAULT 5, costPriceInCents INT NULL, supplierName VARCHAR(256) NULL, supplierContact VARCHAR(128) NULL, active TINYINT(1) NOT NULL DEFAULT 1, createdBy INT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uniq_inventory_products_sku (sku), KEY idx_inventory_products_active (active), KEY idx_inventory_products_stock (currentStock, minimumStock)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS inventory_movements (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, productId INT NOT NULL, type ENUM('entrada','saida','ajuste') NOT NULL, quantity INT NOT NULL, reason VARCHAR(256) NULL, patientId INT NULL, appointmentId INT NULL, createdBy INT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, KEY idx_inventory_movements_product (productId), KEY idx_inventory_movements_createdAt (createdAt)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS crm_indications (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, patientId INT NOT NULL, procedureName VARCHAR(256) NOT NULL, notes TEXT NULL, status ENUM('indicado','agendado','realizado','cancelado') NOT NULL DEFAULT 'indicado', indicatedBy INT NULL, convertedAt TIMESTAMP NULL, appointmentId INT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, KEY idx_crm_indications_patient (patientId), KEY idx_crm_indications_status (status), KEY idx_crm_indications_createdAt (createdAt)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS chat_messages (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, channelId VARCHAR(64) NOT NULL DEFAULT 'geral', senderId INT NULL, content TEXT NOT NULL, messageType ENUM('text','file','system') NOT NULL DEFAULT 'text', fileUrl TEXT NULL, fileKey VARCHAR(256) NULL, mentions JSON NULL, readBy JSON NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, KEY idx_chat_messages_channel (channelId), KEY idx_chat_messages_createdAt (createdAt)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+    })();
+  }
+
+  try {
+    await ensureOptionalModuleTablesPromise;
+  } catch (error) {
+    ensureOptionalModuleTablesPromise = null;
+    throw error;
+  }
+}
+
 function normalizeStoredBloodType(value: unknown) {
   const normalized = String(value ?? "").trim().toUpperCase();
   const validBloodTypes = new Set(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]);
@@ -43,6 +67,7 @@ function normalizeStoredBloodType(value: unknown) {
 const tableColumnCache = new Map<string, Promise<Map<string, string>>>();
 let ensurePrescriptionSchemaPromise: Promise<void> | null = null;
 let ensureCloudSignatureUserColumnsPromise: Promise<void> | null = null;
+let ensureOptionalModuleTablesPromise: Promise<void> | null = null;
 
 function clearTableColumnCache(tableName: string) {
   tableColumnCache.delete(tableName);
@@ -1707,6 +1732,8 @@ export async function createFinancialTransaction(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
+  await ensureOptionalModuleTables(db);
+
   const result = await db.execute(sql`
     insert into financial_transactions
       (type, category, description, amountInCents, paymentMethod, patientId, budgetId, appointmentId, dueDate, paidAt, status, createdBy)
@@ -1725,6 +1752,8 @@ export async function listFinancialTransactions() {
   const db = await getDb();
   if (!db) return [];
 
+  await ensureOptionalModuleTables(db);
+
   return unwrapRows<any>(await db.execute(sql`
     select *
     from financial_transactions
@@ -1735,6 +1764,8 @@ export async function listFinancialTransactions() {
 export async function getFinancialSummary(from?: string, to?: string) {
   const db = await getDb();
   if (!db) return { totalReceita: 0, totalDespesa: 0, saldo: 0 };
+
+  await ensureOptionalModuleTables(db);
 
   const rows = unwrapRows<any>(await db.execute(
     from && to
@@ -1769,6 +1800,8 @@ export async function listProcedures() {
   const db = await getDb();
   if (!db) return [];
 
+  await ensureOptionalModuleTables(db);
+
   return unwrapRows<any>(await db.execute(sql`
     select *
     from budget_procedure_catalog
@@ -1780,6 +1813,8 @@ export async function listProcedures() {
 export async function createProcedure(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+
+  await ensureOptionalModuleTables(db);
 
   const result = await db.execute(sql`
     insert into budget_procedure_catalog
@@ -1795,6 +1830,8 @@ export async function createProcedure(data: any, userId: number) {
 export async function createProcedureArea(data: any) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+
+  await ensureOptionalModuleTables(db);
 
   const result = await db.execute(sql`
     insert into budget_procedure_areas
@@ -1814,6 +1851,8 @@ export async function getProcedureAreas(procedureId: number) {
   const db = await getDb();
   if (!db) return [];
 
+  await ensureOptionalModuleTables(db);
+
   return unwrapRows<any>(await db.execute(sql`
     select *
     from budget_procedure_areas
@@ -1827,6 +1866,8 @@ export async function getProcedureById(id: number) {
   const db = await getDb();
   if (!db) return null;
 
+  await ensureOptionalModuleTables(db);
+
   const rows = unwrapRows<any>(await db.execute(sql`
     select *
     from budget_procedure_catalog
@@ -1839,6 +1880,8 @@ export async function getProcedureById(id: number) {
 export async function getProcedurePrice(procedureId: number, areaId: number, complexity: string) {
   const db = await getDb();
   if (!db) return null;
+
+  await ensureOptionalModuleTables(db);
 
   const rows = unwrapRows<any>(await db.execute(sql`
     select *
@@ -1857,6 +1900,8 @@ export async function listPaymentPlans() {
   const db = await getDb();
   if (!db) return [];
 
+  await ensureOptionalModuleTables(db);
+
   return unwrapRows<any>(await db.execute(sql`
     select *
     from budget_payment_plans
@@ -1868,6 +1913,8 @@ export async function listPaymentPlans() {
 export async function createPaymentPlan(data: any) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+
+  await ensureOptionalModuleTables(db);
 
   const result = await db.execute(sql`
     insert into budget_payment_plans
@@ -1886,6 +1933,8 @@ export async function createPaymentPlan(data: any) {
 export async function upsertProcedurePrice(data: any) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+
+  await ensureOptionalModuleTables(db);
 
   const existing = await getProcedurePrice(data.procedureId, data.areaId, data.complexity);
 
@@ -1912,6 +1961,8 @@ export async function listInventoryProducts() {
   const db = await getDb();
   if (!db) return [];
 
+  await ensureOptionalModuleTables(db);
+
   return unwrapRows<any>(await db.execute(sql`
     select *
     from inventory_products
@@ -1923,6 +1974,8 @@ export async function listInventoryProducts() {
 export async function createInventoryProduct(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+
+  await ensureOptionalModuleTables(db);
 
   const result = await db.execute(sql`
     insert into inventory_products
@@ -1942,6 +1995,8 @@ export async function getLowStockItems() {
   const db = await getDb();
   if (!db) return [];
 
+  await ensureOptionalModuleTables(db);
+
   return unwrapRows<any>(await db.execute(sql`
     select *
     from inventory_products
@@ -1954,6 +2009,8 @@ export async function getLowStockItems() {
 export async function createInventoryMovement(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+
+  await ensureOptionalModuleTables(db);
 
   const result = await db.execute(sql`
     insert into inventory_movements
@@ -2910,6 +2967,8 @@ export async function getChatMessages(channelId: string, limit: number = 100) {
   const db = await getDb();
   if (!db) return [];
 
+  await ensureOptionalModuleTables(db);
+
   const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 500));
   return unwrapRows<any>(await db.execute(sql`
     select *
@@ -2923,6 +2982,8 @@ export async function getChatMessages(channelId: string, limit: number = 100) {
 export async function createChatMessage(channelId: string, userId: number, content: string) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+
+  await ensureOptionalModuleTables(db);
 
   const result = await db.execute(sql`
     insert into chat_messages
@@ -3870,6 +3931,8 @@ export async function listCrmIndications(limit: number = 100) {
   const db = await getDb();
   if (!db) return [];
 
+  await ensureOptionalModuleTables(db);
+
   const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 500));
   return unwrapRows<any>(await db.execute(sql`
     select *
@@ -3882,6 +3945,8 @@ export async function listCrmIndications(limit: number = 100) {
 export async function createCrmIndication(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+
+  await ensureOptionalModuleTables(db);
 
   const result = await db.execute(sql`
     insert into crm_indications
@@ -3900,6 +3965,8 @@ export async function createCrmIndication(data: any, userId: number) {
 export async function updateCrmIndication(id: number, data: any) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+
+  await ensureOptionalModuleTables(db);
 
   await db.execute(sql`
     update crm_indications

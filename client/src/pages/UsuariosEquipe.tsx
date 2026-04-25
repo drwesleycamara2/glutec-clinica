@@ -52,20 +52,20 @@ const TEAM_JOB_OPTIONS: Array<{
   label: string;
   icon: typeof Stethoscope;
 }> = [
-  { id: "medico", label: "M\u00E9dica(o)", icon: Stethoscope },
+  { id: "medico", label: "Médica(o)", icon: Stethoscope },
   { id: "gerente", label: "Gerente", icon: Crown },
   { id: "massoterapeuta", label: "Massoterapeuta", icon: BriefcaseBusiness },
-  { id: "tecnico_enfermagem", label: "T\u00E9cnica(o) de enfermagem", icon: UserCheck },
+  { id: "tecnico_enfermagem", label: "Técnica(o) de enfermagem", icon: UserCheck },
   { id: "enfermeiro", label: "Enfermeira(o)", icon: UserCheck },
-  { id: "secretaria", label: "Secret\u00E1ria(o)", icon: ClipboardList },
+  { id: "secretaria", label: "Secretária(o)", icon: ClipboardList },
   { id: "apoio", label: "Apoio", icon: Users },
 ];
 
 const LEGACY_ROLE_LABELS: Record<string, string> = {
   admin: "Administrador",
-  medico: "M\u00E9dica(o)",
+  medico: "Médica(o)",
   enfermeiro: "Enfermeira(o)",
-  recepcionista: "Secret\u00E1ria(o)",
+  recepcionista: "Secretária(o)",
   gerente: "Gerente",
   user: "Apoio",
 };
@@ -75,15 +75,15 @@ const MODULE_META = AVAILABLE_MODULES.map((module) => {
     return {
       ...module,
       label: "Documentos e termos",
-      description: "Documentos de identifica\u00E7\u00E3o, comprovantes, contratos e termos de consentimento.",
+      description: "Documentos de identificação, comprovantes, contratos e termos de consentimento.",
     };
   }
 
   if (module.id === "templates") {
     return {
       ...module,
-      label: "Modelos cl\u00EDnicos",
-      description: "Modelos de evolu\u00E7\u00E3o, prescri\u00E7\u00F5es, pedidos de exames, atestados e outros modelos cl\u00EDnicos.",
+      label: "Modelos clínicos",
+      description: "Modelos de evolução, prescrições, pedidos de exames, atestados e outros modelos clínicos.",
     };
   }
 
@@ -145,19 +145,19 @@ const ACCESS_STAGE_CONFIG: Record<
   },
   awaiting_2fa: {
     label: "Aguardando Google Authenticator",
-    detail: "Senha criada. Falta concluir a configura\u00E7\u00E3o obrigat\u00F3ria do 2 fatores.",
+    detail: "Senha criada. Falta concluir a configuração obrigatória do 2 fatores.",
     className: "text-blue-800 bg-blue-100/90 border-blue-300/60",
     icon: Shield,
   },
   active: {
     label: "Acesso liberado",
-    detail: "Conta ativa, senha definida e autentica\u00E7\u00E3o em dois fatores conclu\u00EDda.",
+    detail: "Conta ativa, senha definida e autenticação em dois fatores concluída.",
     className: "text-emerald-800 bg-emerald-100/90 border-emerald-300/60",
     icon: BadgeCheck,
   },
   inactive: {
     label: "Acesso bloqueado",
-    detail: "Usu\u00E1rio existente, por\u00E9m sem acesso ativo ao sistema no momento.",
+    detail: "Usuário existente, porém sem acesso ativo ao sistema no momento.",
     className: "text-slate-700 bg-slate-100 border-slate-300/60",
     icon: Lock,
   },
@@ -189,7 +189,7 @@ export default function UsuariosEquipe() {
       toast.success(result.emailSent ? "Convite enviado com sucesso." : "Convite criado com link manual.");
       if (result.manualLink) {
         navigator.clipboard?.writeText(result.manualLink);
-        toast.info("O link do convite foi copiado para a \u00E1rea de transfer\u00EAncia.");
+        toast.info("O link do convite foi copiado para a área de transferência.");
       }
       if (result.warning) {
         toast.warning(result.warning);
@@ -229,14 +229,14 @@ export default function UsuariosEquipe() {
       for (const user of users as UserRow[]) {
         const previousStage = previousStagesRef.current[user.id];
         const currentStage = currentStages[user.id];
-        const userName = user.name || user.email || `Usu\u00E1rio #${user.id}`;
+        const userName = user.name || user.email || `Usuário #${user.id}`;
 
         if (previousStage === "invite_pending" && currentStage === "awaiting_2fa") {
-          toast.info(`${userName} aceitou o convite e est\u00E1 configurando o Google Authenticator.`);
+          toast.info(`${userName} aceitou o convite e está configurando o Google Authenticator.`);
         }
 
         if (previousStage === "awaiting_2fa" && currentStage === "active") {
-          toast.success(`${userName} concluiu a ativa\u00E7\u00E3o e j\u00E1 est\u00E1 com acesso liberado.`);
+          toast.success(`${userName} concluiu a ativação e já está com acesso liberado.`);
         }
       }
     }
@@ -321,15 +321,15 @@ export default function UsuariosEquipe() {
       <div className="flex flex-col items-start justify-between gap-6 border-b border-gold pb-6 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-4xl font-light tracking-tight text-text-primary">
-            Gest\u00E3o de <span className="font-semibold text-accent">acessos</span>
+            Gestão de <span className="font-semibold text-accent">acessos</span>
           </h1>
           <p className="mt-2 text-sm font-medium uppercase tracking-widest text-text-tertiary">
-            Convites, cargos, permiss\u00F5es e autentica\u00E7\u00E3o obrigat\u00F3ria em 2 fatores
+            Convites, cargos, permissões e autenticação obrigatória em 2 fatores
           </p>
         </div>
         {isSuperAdmin ? (
           <PremiumButton variant="primary" icon={<UserPlus size={18} />} onClick={() => setIsInviteModalOpen(true)}>
-            Convidar novo usu\u00E1rio
+            Convidar novo usuário
           </PremiumButton>
         ) : null}
       </div>
@@ -339,7 +339,7 @@ export default function UsuariosEquipe() {
           <p className="text-xs font-semibold uppercase tracking-[0.28em] text-text-tertiary">Equipe com acesso liberado</p>
           <p className="mt-3 text-3xl font-semibold text-text-primary">{activeUsers.length}</p>
           <p className="mt-2 text-sm text-text-secondary">
-            Profissionais que j\u00E1 criaram senha e conclu\u00EDram o Google Authenticator.
+            Profissionais que já criaram senha e concluíram o Google Authenticator.
           </p>
         </PremiumCard>
 
@@ -347,7 +347,7 @@ export default function UsuariosEquipe() {
           <p className="text-xs font-semibold uppercase tracking-[0.28em] text-text-tertiary">Convites em andamento</p>
           <p className="mt-3 text-3xl font-semibold text-text-primary">{pendingFlowUsers.length}</p>
           <p className="mt-2 text-sm text-text-secondary">
-            Convites enviados ou contas aguardando a configura\u00E7\u00E3o final do 2 fatores.
+            Convites enviados ou contas aguardando a configuração final do 2 fatores.
           </p>
         </PremiumCard>
 
@@ -357,7 +357,7 @@ export default function UsuariosEquipe() {
             <p>1. Recebe o convite por e-mail.</p>
             <p>2. Cria a senha.</p>
             <p>3. Configura o Google Authenticator.</p>
-            <p>4. Se esquecer a senha, usa {"\u201CEsqueci minha senha\u201D"} na tela inicial.</p>
+            <p>4. Se esquecer a senha, usa {"“Esqueci minha senha”"} na tela inicial.</p>
           </div>
         </PremiumCard>
       </div>
@@ -367,7 +367,7 @@ export default function UsuariosEquipe() {
           <div>
             <h2 className="text-lg font-semibold text-text-primary">Acompanhamento de convites e acessos</h2>
             <p className="mt-1 text-sm text-text-secondary">
-              O sistema avisa automaticamente aqui quando o colaborador aceita o convite e quando termina a ativa\u00E7\u00E3o com 2 fatores.
+              O sistema avisa automaticamente aqui quando o colaborador aceita o convite e quando termina a ativação com 2 fatores.
             </p>
           </div>
         </div>
@@ -401,7 +401,7 @@ export default function UsuariosEquipe() {
                             <h3 className="font-semibold text-text-primary">{user.name || "Sem nome"}</h3>
                             {isSelf ? (
                               <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-bold uppercase text-accent">
-                                Voc\u00EA
+                                Você
                               </span>
                             ) : null}
                             {isTargetSuperAdmin ? <Shield size={14} className="text-accent" /> : null}
@@ -430,7 +430,7 @@ export default function UsuariosEquipe() {
 
                     <div className="flex flex-col items-stretch gap-2 md:items-end">
                       <div className="rounded-full border border-gold/15 bg-background/70 px-3 py-1 text-xs font-medium text-text-tertiary">
-                        Perfil t\u00E9cnico do sistema: {LEGACY_ROLE_LABELS[String(user.role ?? "")] || "Apoio"}
+                        Perfil técnico do sistema: {LEGACY_ROLE_LABELS[String(user.role ?? "")] || "Apoio"}
                       </div>
 
                       {isSuperAdmin && !isTargetSuperAdmin ? (
@@ -454,7 +454,7 @@ export default function UsuariosEquipe() {
                             className="border-[#6B6B6B]/30 text-[#6B6B6B] hover:bg-[#6B6B6B]/10"
                             icon={<Trash2 size={14} />}
                             onClick={() => {
-                              if (confirm("Tem certeza que deseja remover este usu\u00E1rio permanentemente?")) {
+                              if (confirm("Tem certeza que deseja remover este usuário permanentemente?")) {
                                 deleteMutation.mutate({ userId: user.id });
                               }
                             }}
@@ -484,16 +484,16 @@ export default function UsuariosEquipe() {
                             </span>
                           ))
                         ) : (
-                          <span className="text-xs italic text-text-tertiary">Nenhum m\u00F3dulo liberado.</span>
+                          <span className="text-xs italic text-text-tertiary">Nenhum módulo liberado.</span>
                         )}
                       </div>
                     </div>
 
                     <div className="rounded-2xl border border-gold/10 bg-background/55 p-3">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-text-tertiary">Recupera\u00E7\u00E3o de senha</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-text-tertiary">Recuperação de senha</p>
                       <p className="mt-2 text-xs leading-6 text-text-secondary">
                         Se esse colaborador esquecer a senha, ele deve acessar a tela inicial do sistema, clicar em{" "}
-                        <strong>{"\u201CEsqueci minha senha\u201D"}</strong> e seguir o link enviado por e-mail. Depois disso, o login continua exigindo o Google Authenticator.
+                        <strong>{"“Esqueci minha senha”"}</strong> e seguir o link enviado por e-mail. Depois disso, o login continua exigindo o Google Authenticator.
                       </p>
                     </div>
                   </div>
@@ -511,10 +511,10 @@ export default function UsuariosEquipe() {
               <div>
                 <h2 className="flex items-center gap-3 text-xl font-semibold text-text-primary">
                   <UserPlus className="text-accent" />
-                  Convidar novo usu\u00E1rio
+                  Convidar novo usuário
                 </h2>
                 <p className="mt-1 text-sm text-text-secondary">
-                  Convite por e-mail com cria\u00E7\u00E3o de senha e configura\u00E7\u00E3o obrigat\u00F3ria do Google Authenticator.
+                  Convite por e-mail com criação de senha e configuração obrigatória do Google Authenticator.
                 </p>
               </div>
               <button onClick={() => setIsInviteModalOpen(false)} className="text-text-tertiary hover:text-accent">
@@ -545,7 +545,7 @@ export default function UsuariosEquipe() {
                 <div>
                   <label className="mb-2 block text-sm font-medium text-text-primary">Cargo(s) na equipe</label>
                   <p className="mb-3 text-xs leading-6 text-text-secondary">
-                    Voc\u00EA pode marcar mais de um cargo para a mesma pessoa. O sistema usa isso para exibir a fun\u00E7\u00E3o correta da equipe, enquanto o acesso real continua sendo controlado pelos m\u00F3dulos abaixo.
+                    Você pode marcar mais de um cargo para a mesma pessoa. O sistema usa isso para exibir a função correta da equipe, enquanto o acesso real continua sendo controlado pelos módulos abaixo.
                   </p>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {TEAM_JOB_OPTIONS.map((job) => (
@@ -574,9 +574,9 @@ export default function UsuariosEquipe() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-text-primary">Partes do sistema que esse colaborador poder\u00E1 acessar</label>
+                  <label className="mb-2 block text-sm font-medium text-text-primary">Partes do sistema que esse colaborador poderá acessar</label>
                   <p className="mb-3 text-xs leading-6 text-text-secondary">
-                    O acesso \u00E9 liberado somente ao que voc\u00EA marcar aqui. O grupo <strong>Documentos e termos</strong> cobre documentos de identifica\u00E7\u00E3o, comprovantes, contratos e termos de consentimento. Os <strong>modelos de evolu\u00E7\u00E3o, prescri\u00E7\u00F5es e pedidos de exames</strong> ficam em <strong>Modelos cl\u00EDnicos</strong>, separados.
+                    O acesso é liberado somente ao que você marcar aqui. O grupo <strong>Documentos e termos</strong> cobre documentos de identificação, comprovantes, contratos e termos de consentimento. Os <strong>modelos de evolução, prescrições e pedidos de exames</strong> ficam em <strong>Modelos clínicos</strong>, separados.
                   </p>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {MODULE_META.filter(module => module.id !== "usuarios").map(module => (
@@ -613,7 +613,7 @@ export default function UsuariosEquipe() {
 
               <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-gold/10 bg-background/80 pt-5">
                 <p className="text-xs leading-5 text-text-secondary">
-                  Depois do envio, o colaborador receber\u00E1 um link para criar a senha. O acesso s\u00F3 fica liberado ap\u00F3s concluir o Google Authenticator.
+                  Depois do envio, o colaborador receberá um link para criar a senha. O acesso só fica liberado após concluir o Google Authenticator.
                 </p>
                 <div className="flex gap-3">
                   <PremiumButton variant="outline" type="button" onClick={() => setIsInviteModalOpen(false)}>

@@ -7,28 +7,28 @@ import { Label } from "@/components/ui/label";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Administrador",
-  medico: "M\u00E9dica(o)",
-  recepcionista: "Secret\u00E1ria(o) / apoio",
+  medico: "Médica(o)",
+  recepcionista: "Secretária(o) / apoio",
   enfermeiro: "Enfermeira(o)",
   gerente: "Gerente",
   user: "Apoio",
 };
 
 const JOB_TITLE_LABELS: Record<string, string> = {
-  medico: "M\u00E9dica(o)",
+  medico: "Médica(o)",
   gerente: "Gerente",
   massoterapeuta: "Massoterapeuta",
-  tecnico_enfermagem: "T\u00E9cnica(o) de enfermagem",
+  tecnico_enfermagem: "Técnica(o) de enfermagem",
   enfermeiro: "Enfermeira(o)",
-  secretaria: "Secret\u00E1ria(o)",
+  secretaria: "Secretária(o)",
   apoio: "Apoio",
 };
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
-    { label: "M\u00EDnimo de 8 caracteres", ok: password.length >= 8 },
-    { label: "Letra mai\u00FAscula", ok: /[A-Z]/.test(password) },
-    { label: "N\u00FAmero", ok: /[0-9]/.test(password) },
+    { label: "Mínimo de 8 caracteres", ok: password.length >= 8 },
+    { label: "Letra maiúscula", ok: /[A-Z]/.test(password) },
+    { label: "Número", ok: /[0-9]/.test(password) },
     { label: "Caractere especial", ok: /[^A-Za-z0-9]/.test(password) },
   ];
   const score = checks.filter(check => check.ok).length;
@@ -49,7 +49,7 @@ function PasswordStrength({ password }: { password: string }) {
         ))}
       </div>
       <p className={`text-xs ${score === 4 ? "text-[#8A6526]" : "text-[#8B8B8B]"}`}>
-        For\u00E7a: <span className="font-medium">{labels[score - 1] || "Muito fraca"}</span>
+        Força: <span className="font-medium">{labels[score - 1] || "Muito fraca"}</span>
       </p>
       <div className="space-y-1">
         {checks.map(check => (
@@ -98,7 +98,7 @@ export default function AceitarConviteSafe() {
       const res = await fetch(`/api/auth/invite/${token}`);
       const data = await res.json();
       if (!res.ok) {
-        setInviteError(data.error || "Convite inv\u00E1lido.");
+        setInviteError(data.error || "Convite inválido.");
         return;
       }
       setInvitation(data);
@@ -114,10 +114,10 @@ export default function AceitarConviteSafe() {
     setError("");
 
     if (password.length < 8) return setError("A senha deve ter pelo menos 8 caracteres.");
-    if (!/[A-Z]/.test(password)) return setError("A senha deve conter pelo menos uma letra mai\u00FAscula.");
-    if (!/[0-9]/.test(password)) return setError("A senha deve conter pelo menos um n\u00FAmero.");
+    if (!/[A-Z]/.test(password)) return setError("A senha deve conter pelo menos uma letra maiúscula.");
+    if (!/[0-9]/.test(password)) return setError("A senha deve conter pelo menos um número.");
     if (!/[^A-Za-z0-9]/.test(password)) return setError("A senha deve conter pelo menos um caractere especial.");
-    if (password !== confirmPassword) return setError("As senhas n\u00E3o coincidem.");
+    if (password !== confirmPassword) return setError("As senhas não coincidem.");
 
     setLoading(true);
     try {
@@ -135,7 +135,7 @@ export default function AceitarConviteSafe() {
 
       window.location.href = "/configurar-2fa";
     } catch {
-      setError("Erro de conex\u00E3o. Tente novamente.");
+      setError("Erro de conexão. Tente novamente.");
     } finally {
       setLoading(false);
     }
@@ -151,7 +151,7 @@ export default function AceitarConviteSafe() {
           <div className="bg-[linear-gradient(135deg,#6F4D17_0%,#B8863B_26%,#F1D791_50%,#C89D49_72%,#6F4D17_100%)] px-8 py-7 text-center">
             <img src="/logo-glutee.svg" alt="Glutec" className="mx-auto mb-2 h-12" />
             <h1 className="text-xl font-bold text-white">Ativar conta</h1>
-            <p className="mt-1 text-sm text-white/80">Glutec Cl\u00EDnica</p>
+            <p className="mt-1 text-sm text-white/80">Glutec Clínica</p>
           </div>
 
           <div className="px-8 py-8">
@@ -162,7 +162,7 @@ export default function AceitarConviteSafe() {
             ) : inviteError ? (
               <div className="py-6 text-center">
                 <AlertCircle className="mx-auto mb-3 h-12 w-12 text-[#6B6B6B]" />
-                <h2 className="mb-2 font-semibold text-[#050505]">Convite inv\u00E1lido</h2>
+                <h2 className="mb-2 font-semibold text-[#050505]">Convite inválido</h2>
                 <p className="mb-5 text-sm text-[#6B6B6B]">{inviteError}</p>
                 <Button onClick={() => setLocation("/login")} variant="outline">
                   Ir para o login
@@ -197,7 +197,7 @@ export default function AceitarConviteSafe() {
                 <h2 className="mb-1 text-lg font-semibold text-[#050505]">Crie sua senha</h2>
                 <p className="mb-5 text-sm text-[#6B6B6B]">
                   Sua senha deve ser forte para proteger os dados dos pacientes. Depois disso, o sistema vai levar
-                  voc\u00EA para configurar o Google Authenticator, etapa obrigat\u00F3ria para liberar o acesso.
+                  você para configurar o Google Authenticator, etapa obrigatória para liberar o acesso.
                 </p>
 
                 {error ? (
@@ -219,7 +219,7 @@ export default function AceitarConviteSafe() {
                         type={showPassword ? "text" : "password"}
                         value={password}
                         onChange={e => setPassword(e.target.value)}
-                        placeholder="M\u00EDnimo de 8 caracteres"
+                        placeholder="Mínimo de 8 caracteres"
                         className="h-11 border-[#E0D8CC] pl-10 pr-10 focus:border-[#C9A55B]"
                         required
                         disabled={loading}
@@ -258,7 +258,7 @@ export default function AceitarConviteSafe() {
                       />
                     </div>
                     {confirmPassword && password !== confirmPassword ? (
-                      <p className="text-xs text-[#6B6B6B]">As senhas n\u00E3o coincidem.</p>
+                      <p className="text-xs text-[#6B6B6B]">As senhas não coincidem.</p>
                     ) : null}
                   </div>
 

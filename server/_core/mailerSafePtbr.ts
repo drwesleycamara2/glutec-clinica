@@ -3,12 +3,12 @@ import type { Transporter } from "nodemailer";
 import * as db from "../db";
 
 const JOB_TITLE_LABELS: Record<string, string> = {
-  medico: "M\u00E9dica(o)",
+  medico: "Médica(o)",
   gerente: "Gerente",
   massoterapeuta: "Massoterapeuta",
-  tecnico_enfermagem: "T\u00E9cnica(o) de enfermagem",
+  tecnico_enfermagem: "Técnica(o) de enfermagem",
   enfermeiro: "Enfermeira(o)",
-  secretaria: "Secret\u00E1ria(o)",
+  secretaria: "Secretária(o)",
   apoio: "Apoio",
 };
 
@@ -54,8 +54,8 @@ function baseTemplate(content: string): string {
 function mapRoleLabel(role: string) {
   const roleLabels: Record<string, string> = {
     admin: "Administrador",
-    medico: "M\u00E9dica(o)",
-    recepcionista: "Secret\u00E1ria(o) / apoio operacional",
+    medico: "Médica(o)",
+    recepcionista: "Secretária(o) / apoio operacional",
     enfermeiro: "Enfermeira(o)",
     gerente: "Gerente",
     user: "Apoio",
@@ -119,7 +119,7 @@ export function inviteEmailTemplate(params: {
   `);
 
   return {
-    subject: "Convite para acessar o Glutec Cl\u00EDnica",
+    subject: "Convite para acessar o Glutec Clínica",
     html,
   };
 }
@@ -129,7 +129,7 @@ export function passwordResetEmailTemplate(params: {
   resetUrl: string;
   expiresIn: string;
 }): { subject: string; html: string } {
-  const recipientName = params.name?.trim() || "Ol\u00E1";
+  const recipientName = params.name?.trim() || "Olá";
 
   const html = baseTemplate(`
     <h2 style="margin:0 0 8px;color:#050505;font-size:22px;">Redefini&ccedil;&atilde;o de senha</h2>
@@ -159,7 +159,7 @@ export function passwordResetEmailTemplate(params: {
   `);
 
   return {
-    subject: "Recupera\u00E7\u00E3o de senha do Glutec",
+    subject: "Recuperação de senha do Glutec",
     html,
   };
 }
@@ -191,7 +191,7 @@ export async function sendEmail(params: {
     const transporter = await createTransporter();
 
     if (!transporter) {
-      return { success: false, error: "Configura\u00E7\u00F5es de SMTP n\u00E3o encontradas." };
+      return { success: false, error: "Configurações de SMTP não encontradas." };
     }
 
     const settings = await db.getSmtpSettings();
@@ -232,6 +232,6 @@ export async function testSmtpConnection(config: {
     await transporter.verify();
     return { success: true };
   } catch (error: any) {
-    return { success: false, error: error.message || "Falha na conex\u00E3o SMTP" };
+    return { success: false, error: error.message || "Falha na conexão SMTP" };
   }
 }
