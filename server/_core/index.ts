@@ -645,12 +645,19 @@ async function startServer() {
 
     try {
       if (fileKey) {
-        if (/^(imports|uploads)\//i.test(fileKey)) {
-          const publicRoot = path.resolve(process.cwd(), "public");
-          const absolutePath = path.resolve(publicRoot, fileKey);
-          if (!absolutePath.startsWith(publicRoot) || !fs.existsSync(absolutePath)) {
-            return res.status(404).send("Arquivo não encontrado no servidor.");
-          }
+        const publicRoot = path.resolve(process.cwd(), "public");
+        const localCandidates = [fileKey];
+        const legacyMatch = fileKey.match(/^legacy\/verde\/(.+)$/i);
+        if (legacyMatch?.[1]) {
+          localCandidates.unshift(`imports/prontuario-verde/${legacyMatch[1]}`);
+        }
+
+        for (const candidate of Array.from(new Set(localCandidates))) {
+          if (!/^(imports|uploads)\//i.test(candidate)) continue;
+          const absolutePath = path.resolve(publicRoot, candidate);
+          const isInsidePublic = absolutePath === publicRoot || absolutePath.startsWith(`${publicRoot}${path.sep}`);
+          if (!isInsidePublic || !fs.existsSync(absolutePath)) continue;
+
           res.setHeader("Content-Type", (document as any).mimeType || "application/pdf");
           res.setHeader("Content-Disposition", `inline; filename="${fileName}"`);
           return res.sendFile(absolutePath);
