@@ -507,6 +507,43 @@ function summarizeClinicalDocumentContent(content?: string | null) {
     .slice(0, 220);
 }
 
+function extractLegacyProntuarioVerdeStorageKey(value?: unknown) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+
+  const normalized = text.replace(/\\/g, "/");
+  const legacyKey = normalized.match(/legacy\/verde\/([^\s"'<>]+?\.(?:pdf|docx?|jpe?g|png|txt|html?))/i);
+  if (legacyKey?.[1]) return `legacy/verde/${legacyKey[1].replace(/^\/+/, "")}`;
+
+  const oldPath = normalized.match(/prontuarioverde-documentos[;/]+(?:\d+\/)?(\d+)\/documentos\/([^\s"'<>;,]+?\.(?:pdf|docx?|jpe?g|png|txt|html?))/i);
+  if (oldPath?.[1] && oldPath?.[2]) {
+    return `legacy/verde/${oldPath[1]}/documentos/${oldPath[2]}`;
+  }
+
+  return "";
+}
+
+function extractStorageKeyFromUrl(value?: unknown) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  const legacy = extractLegacyProntuarioVerdeStorageKey(text);
+  if (legacy) return legacy;
+
+  try {
+    const parsed = new URL(text);
+    const pathname = decodeURIComponent(parsed.pathname.replace(/^\/+/, ""));
+    const bucketPrefix = "glutec-clinica/";
+    if (pathname.startsWith(bucketPrefix)) return pathname.slice(bucketPrefix.length);
+    if (pathname.startsWith("legacy/verde/")) return pathname;
+  } catch {
+    // Not an absolute URL.
+  }
+
+  const cleaned = text.replace(/^\/+/, "").replace(/^public[\/]/i, "");
+  if (/^(imports|uploads|legacy\/verde)\//i.test(cleaned)) return cleaned;
+  return "";
+}
+
 function extractDocumentFileReference(row: any) {
   const values = [
     row?.fileUrl,
@@ -522,12 +559,14 @@ function extractDocumentFileReference(row: any) {
   for (const value of values) {
     const text = String(value ?? "").trim();
     if (!text) continue;
+    const legacyKey = extractLegacyProntuarioVerdeStorageKey(text);
+    if (legacyKey) return legacyKey;
     if (/^(https?:|data:|\/).+\.(pdf|docx?|jpe?g|png|txt|html?)$/i.test(text)) return text;
 
-    const markerMatch = text.match(/arquivo original:\s*([^,;\n]+?\.(?:pdf|docx?|jpe?g|png|txt|html?))/i);
+    const markerMatch = text.match(/arquivo original:\s*([^\n]+?\.(?:pdf|docx?|jpe?g|png|txt|html?))/i);
     if (markerMatch?.[1]) return markerMatch[1].trim();
 
-    const knownPathMatch = text.match(/((?:prontuarioverde|imports|uploads|patient-documents|documents)[a-z0-9_\-\/. ]+\.(?:pdf|docx?|jpe?g|png|txt|html?))/i);
+    const knownPathMatch = text.match(/((?:prontuarioverde|imports|uploads|patient-documents|documents|legacy\/verde)[a-z0-9_;\-\/. ]+\.(?:pdf|docx?|jpe?g|png|txt|html?))/i);
     if (knownPathMatch?.[1]) return knownPathMatch[1].trim();
 
     const genericPathMatch = text.match(/([a-z0-9_-]+(?:\/[a-z0-9_. -]+)+\.(?:pdf|docx?|jpe?g|png|txt|html?))/i);
@@ -537,15 +576,31 @@ function extractDocumentFileReference(row: any) {
   return "";
 }
 
+function normalizeDocumentStorageKey(row: any, fileReference = extractDocumentFileReference(row)) {
+  return extractStorageKeyFromUrl(row?.fileKey)
+    || extractStorageKeyFromUrl(row?.storageKey)
+    || extractStorageKeyFromUrl(row?.fileUrl)
+    || extractStorageKeyFromUrl(fileReference);
+}
+
+function buildPatientDocumentDownloadUrl(row: any, fileReference: string, storageKey: string) {
+  if (row?.id && (storageKey || fileReference)) return `/api/patient-documents/${row.id}/download`;
+  return normalizeMediaUrl(fileReference);
+}
+
 function normalizeDocumentRow(row: any) {
-  const fileUrl = normalizeMediaUrl(extractDocumentFileReference(row));
+  const fileReference = extractDocumentFileReference(row);
+  const storageKey = normalizeDocumentStorageKey(row, fileReference);
+  const fileUrl = buildPatientDocumentDownloadUrl(row, fileReference, storageKey);
   const metadata = parseClinicalDocumentMetadata(row?.description);
-  const content = resolveStoredTextDocumentContent(row);
+  const content = resolveStoredTextDocumentContent({ ...row, fileKey: storageKey || row?.fileKey, fileUrl });
   const summary = metadata?.summary || summarizeClinicalDocumentContent(content) || row?.description || "";
   return {
     ...row,
+    fileKey: storageKey || row?.fileKey,
     fileUrl,
     url: fileUrl,
+    rawFileUrl: row?.fileUrl ?? null,
     rawDescription: row?.description ?? null,
     description: summary,
     content,
@@ -2945,7 +3000,7 @@ async function logNfseEvent(
   params: {
     status?: string | null;
     message?: string | null;
-    xmlRequestá: string | null;
+    xmlRequest?: string | null;
     xmlResponse?: string | null;
     userId?: number | null;
   } = {},

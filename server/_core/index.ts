@@ -14,6 +14,7 @@ import { transcribeAudio } from "./voiceTranscription";
 import { resolveSystemExport } from "../lib/system-export";
 import { refineTranscriptToPtBr } from "../lib/clinical-transcription";
 import * as dbComplete from "../db_complete";
+import { storageGet } from "../storage";
 
 function getRequestBaseUrl(req: express.Request) {
   const forwardedProto = req.headers["x-forwarded-proto"];
@@ -618,6 +619,59 @@ async function startServer() {
   const uploadsPath = path.resolve(process.cwd(), "public", "uploads");
   serveProtectedDirectory(app, "/uploads", uploadsPath);
 
+
+  app.get("/api/patient-documents/:id/download", async (req, res) => {
+    addNoIndexHeaders(res);
+
+    const user = await authenticateRequest(req);
+    if (!user) {
+      return res.status(401).send("Sessão inválida. Faça login novamente.");
+    }
+
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).send("Documento inválido.");
+    }
+
+    const document = await dbComplete.getPatientDocumentById(id);
+    if (!document) {
+      return res.status(404).send("Documento não encontrado.");
+    }
+
+    const fileKey = String((document as any).fileKey ?? "").replace(/^\/+/, "").trim();
+    const rawFileUrl = String((document as any).rawFileUrl ?? "").trim();
+    const fallbackUrl = String((document as any).url ?? (document as any).fileUrl ?? "").trim();
+    const fileName = `${String((document as any).name || `documento-${id}`).replace(/[\\/:*?"<>|]+/g, "-").trim() || `documento-${id}`}.pdf`;
+
+    try {
+      if (fileKey) {
+        if (/^(imports|uploads)\//i.test(fileKey)) {
+          const publicRoot = path.resolve(process.cwd(), "public");
+          const absolutePath = path.resolve(publicRoot, fileKey);
+          if (!absolutePath.startsWith(publicRoot) || !fs.existsSync(absolutePath)) {
+            return res.status(404).send("Arquivo não encontrado no servidor.");
+          }
+          res.setHeader("Content-Type", (document as any).mimeType || "application/pdf");
+          res.setHeader("Content-Disposition", `inline; filename="${fileName}"`);
+          return res.sendFile(absolutePath);
+        }
+
+        const signed = await storageGet(fileKey);
+        return res.redirect(signed.url);
+      }
+
+      const externalUrl = rawFileUrl || fallbackUrl;
+      if (/^https?:\/\//i.test(externalUrl)) {
+        return res.redirect(externalUrl);
+      }
+
+      return res.status(404).send("Arquivo do documento não encontrado.");
+    } catch (error) {
+      console.error("[PatientDocumentDownload] Failed:", { id, fileKey, error });
+      return res.status(500).send("Não foi possível abrir o PDF deste documento.");
+    }
+  });
+
   app.get("/api/admin/system-export/:token", async (req, res) => {
     const user = await authenticateRequest(req);
     if (!user || user.role !== "admin") {
@@ -693,4 +747,3 @@ async function startServer() {
 }
 
 startServer().catch(console.error);
-
