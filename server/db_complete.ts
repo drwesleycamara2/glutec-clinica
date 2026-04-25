@@ -29,6 +29,11 @@ function unwrapRows<T = any>(result: any): T[] {
   return (result ?? []) as T[];
 }
 
+function unwrapInsertId(result: any): number {
+  const header = Array.isArray(result) ? result[0] : result;
+  return Number(header?.insertId ?? 0);
+}
+
 function normalizeStoredBloodType(value: unknown) {
   const normalized = String(value ?? "").trim().toUpperCase();
   const validBloodTypes = new Set(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]);
@@ -37,6 +42,7 @@ function normalizeStoredBloodType(value: unknown) {
 
 const tableColumnCache = new Map<string, Promise<Map<string, string>>>();
 let ensurePrescriptionSchemaPromise: Promise<void> | null = null;
+let ensureCloudSignatureUserColumnsPromise: Promise<void> | null = null;
 
 function clearTableColumnCache(tableName: string) {
   tableColumnCache.delete(tableName);
@@ -1585,17 +1591,21 @@ export async function listPrescriptionTemplates() {
   const db = await getDb();
   if (!db) return [];
 
-  const rows = await db.select().from(sql`medical_record_templates`).where(eq(sql`specialty`, 'Prescrição'));
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from medical_record_templates
+    where specialty = ${"Prescri\u00e7\u00e3o"}
+      and active = 1
+    order by name asc
+  `));
+
   return rows.map((row: any) => {
-    const sections = Array.isArray(row.sections)
-      ? row.sections
-      : typeof row.sections === "string"
-        ? JSON.parse(row.sections)
-        : [];
+    const sections = parseTemplateSections(row.sections);
     const firstSection = Array.isArray(sections) ? sections[0] : null;
 
     return {
       ...row,
+      sections,
       type: row.description || "simples",
       content: firstSection?.content || firstSection?.text || "",
     };
@@ -1603,35 +1613,42 @@ export async function listPrescriptionTemplates() {
 }
 
 export async function createPrescriptionTemplate(data: any, userId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("DB unavailable");
-
-  const result = await db.insert(sql`medical_record_templates`).values({
+  return createTemplateNormalized({
     name: data.name,
-    specialty: 'Prescrição',
+    specialty: "Prescrição",
+    group: "prescricao",
     description: data.type || "simples",
-    sections: JSON.stringify([
+    sections: [
       {
+        title: data.name || "Prescrição",
         type: "richtext",
         content: data.content ?? "",
+        fields: [],
       },
-    ]),
-    active: true,
-    createdBy: userId,
-  });
-  return result[0];
+    ],
+  }, userId);
 }
 
 // --- EXAM REQUESTS -----------------------------------------------------------
 export async function createExamRequest(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
-  const result = await db.insert(sql`exam_requests`).values({
-    ...data,
-    doctorId: userId,
-  });
-  return result[0];
+
+  const exams = Array.isArray(data.exams)
+    ? data.exams
+    : Array.isArray(data.content)
+      ? data.content
+      : [String(data.content ?? "").trim()].filter(Boolean);
+
+  const result = await db.execute(sql`
+    insert into exam_requests
+      (patientId, doctorId, medicalRecordId, appointmentId, specialty, exams, clinicalIndication, observations, pdfUrl, pdfKey, d4signDocumentKey, d4signStatus)
+    values
+      (${Number(data.patientId)}, ${userId}, ${data.medicalRecordId ?? null}, ${data.appointmentId ?? null}, ${data.specialty ?? null}, ${JSON.stringify(exams)}, ${data.clinicalIndication ?? null}, ${data.observations ?? null}, ${data.pdfUrl ?? null}, ${data.pdfKey ?? null}, ${data.d4signDocumentKey ?? null}, ${data.d4signStatus ?? 'pendente'})
+  `);
+
+  const insertedId = unwrapInsertId(result);
+  return insertedId ? await getExamRequestById(insertedId) : { id: insertedId, ...data, doctorId: userId, exams };
 }
 
 export async function getExamRequestsByPatient(patientId: number) {
@@ -1664,65 +1681,85 @@ export async function getExamRequestById(id: number) {
 export async function listExamTemplates() {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(sql`medical_record_templates`).where(eq(sql`specialty`, 'Exame'));
+
+  return unwrapRows<any>(await db.execute(sql`
+    select *
+    from medical_record_templates
+    where specialty = ${"Exame"}
+      and active = 1
+    order by name asc
+  `));
 }
 
 export async function createExamTemplate(data: any, userId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("DB unavailable");
-  
-  const result = await db.insert(sql`medical_record_templates`).values({
+  return createTemplateNormalized({
     ...data,
-    specialty: 'Exame',
-    createdBy: userId,
-  });
-  return result[0];
+    group: "solicitacao_exames",
+    specialty: data.specialty ?? "Solicitação de exames",
+    sections: Array.isArray(data.sections)
+      ? data.sections
+      : [{ title: data.name, type: "richtext", content: data.content ?? "", fields: [] }],
+  }, userId);
 }
 
 // --- FINANCIAL ---------------------------------------------------------------
 export async function createFinancialTransaction(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
-  const result = await db.insert(sql`financial_transactions`).values({
-    ...data,
-    createdBy: userId,
-  });
-  return result[0];
+
+  const result = await db.execute(sql`
+    insert into financial_transactions
+      (type, category, description, amountInCents, paymentMethod, patientId, budgetId, appointmentId, dueDate, paidAt, status, createdBy)
+    values
+      (${data.type}, ${data.category}, ${data.description}, ${Number(data.amountInCents || 0)}, ${data.paymentMethod ?? null}, ${data.patientId ?? null}, ${data.budgetId ?? null}, ${data.appointmentId ?? null}, ${data.dueDate ?? null}, ${data.paidAt ?? null}, ${data.status ?? 'pendente'}, ${userId})
+  `);
+
+  const insertedId = unwrapInsertId(result);
+  const rows = insertedId
+    ? unwrapRows<any>(await db.execute(sql`select * from financial_transactions where id = ${insertedId} limit 1`))
+    : [];
+  return rows[0] ?? { id: insertedId, ...data, createdBy: userId };
 }
 
 export async function listFinancialTransactions() {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(sql`financial_transactions`).orderBy(desc(sql`createdAt`));
+
+  return unwrapRows<any>(await db.execute(sql`
+    select *
+    from financial_transactions
+    order by createdAt desc, id desc
+  `));
 }
 
 export async function getFinancialSummary(from?: string, to?: string) {
   const db = await getDb();
   if (!db) return { totalReceita: 0, totalDespesa: 0, saldo: 0 };
-  
-  let query = db.select({
-    type: sql`type`,
-    total: sql`SUM(amountInCents) as total`
-  }).from(sql`financial_transactions`).groupBy(sql`type`);
-  
-  if (from && to) {
-    query = query.where(and(
-      gte(sql`createdAt`, from),
-      lte(sql`createdAt`, to)
-    ));
-  }
-  
-  const results = await query;
+
+  const rows = unwrapRows<any>(await db.execute(
+    from && to
+      ? sql`
+          select type, coalesce(sum(amountInCents), 0) as total
+          from financial_transactions
+          where createdAt >= ${from}
+            and createdAt <= ${to}
+          group by type
+        `
+      : sql`
+          select type, coalesce(sum(amountInCents), 0) as total
+          from financial_transactions
+          group by type
+        `,
+  ));
+
   const summary = { totalReceita: 0, totalDespesa: 0, saldo: 0 };
-  
-  for (const row of results) {
-    if (row.type === 'receita') summary.totalReceita = row.total || 0;
-    if (row.type === 'despesa') summary.totalDespesa = row.total || 0;
+
+  for (const row of rows) {
+    const total = Number(row.total || 0);
+    if (row.type === "receita") summary.totalReceita = total;
+    if (row.type === "despesa") summary.totalDespesa = total;
   }
-  
+
   summary.saldo = summary.totalReceita - summary.totalDespesa;
   return summary;
 }
@@ -1731,94 +1768,142 @@ export async function getFinancialSummary(from?: string, to?: string) {
 export async function listProcedures() {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(sql`budget_procedure_catalog`).where(eq(sql`active`, true));
+
+  return unwrapRows<any>(await db.execute(sql`
+    select *
+    from budget_procedure_catalog
+    where active = 1
+    order by name asc
+  `));
 }
 
 export async function createProcedure(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
-  const result = await db.insert(sql`budget_procedure_catalog`).values({
-    ...data,
-    createdBy: userId,
-    active: true,
-  });
-  return result[0];
+
+  const result = await db.execute(sql`
+    insert into budget_procedure_catalog
+      (name, category, description, estimatedSessionsMin, estimatedSessionsMax, sessionIntervalDays, active, createdBy)
+    values
+      (${data.name}, ${data.category ?? null}, ${data.description ?? null}, ${data.estimatedSessionsMin ?? 1}, ${data.estimatedSessionsMax ?? 1}, ${data.sessionIntervalDays ?? 30}, 1, ${userId})
+  `);
+
+  const insertedId = unwrapInsertId(result);
+  return insertedId ? await getProcedureById(insertedId) : { id: insertedId, ...data, createdBy: userId, active: true };
 }
 
 export async function createProcedureArea(data: any) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
-  const result = await db.insert(sql`budget_procedure_areas`).values({
-    ...data,
-    active: true,
-  });
-  return result[0];
+
+  const result = await db.execute(sql`
+    insert into budget_procedure_areas
+      (procedureId, areaName, sortOrder, active)
+    values
+      (${Number(data.procedureId)}, ${data.areaName}, ${data.sortOrder ?? 0}, 1)
+  `);
+
+  const insertedId = unwrapInsertId(result);
+  const rows = insertedId
+    ? unwrapRows<any>(await db.execute(sql`select * from budget_procedure_areas where id = ${insertedId} limit 1`))
+    : [];
+  return rows[0] ?? { id: insertedId, ...data, active: true };
 }
 
 export async function getProcedureAreas(procedureId: number) {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(sql`budget_procedure_areas`).where(eq(sql`procedureId`, procedureId));
+
+  return unwrapRows<any>(await db.execute(sql`
+    select *
+    from budget_procedure_areas
+    where procedureId = ${procedureId}
+      and active = 1
+    order by sortOrder asc, areaName asc
+  `));
 }
 
 export async function getProcedureById(id: number) {
   const db = await getDb();
   if (!db) return null;
-  
-  const result = await db.select().from(sql`budget_procedure_catalog`).where(eq(sql`id`, id)).limit(1);
-  return result[0];
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from budget_procedure_catalog
+    where id = ${id}
+    limit 1
+  `));
+  return rows[0] ?? null;
 }
 
 export async function getProcedurePrice(procedureId: number, areaId: number, complexity: string) {
   const db = await getDb();
   if (!db) return null;
-  
-  const result = await db.select().from(sql`budget_procedure_pricing`)
-    .where(and(
-      eq(sql`procedureId`, procedureId),
-      eq(sql`areaId`, areaId),
-      eq(sql`complexity`, complexity)
-    )).limit(1);
-  
-  return result[0];
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from budget_procedure_pricing
+    where procedureId = ${procedureId}
+      and areaId = ${areaId}
+      and complexity = ${complexity}
+      and active = 1
+    limit 1
+  `));
+
+  return rows[0] ?? null;
 }
 
 export async function listPaymentPlans() {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(sql`budget_payment_plans`).where(eq(sql`active`, true));
+
+  return unwrapRows<any>(await db.execute(sql`
+    select *
+    from budget_payment_plans
+    where active = 1
+    order by sortOrder asc, name asc
+  `));
 }
 
 export async function createPaymentPlan(data: any) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
-  const result = await db.insert(sql`budget_payment_plans`).values({
-    ...data,
-    active: true,
-  });
-  return result[0];
+
+  const result = await db.execute(sql`
+    insert into budget_payment_plans
+      (name, type, discountPercent, maxInstallments, interestRatePercent, description, active, sortOrder)
+    values
+      (${data.name}, ${data.type}, ${data.discountPercent ?? 0}, ${data.maxInstallments ?? 1}, ${data.interestRatePercent ?? 0}, ${data.description ?? null}, 1, ${data.sortOrder ?? 0})
+  `);
+
+  const insertedId = unwrapInsertId(result);
+  const rows = insertedId
+    ? unwrapRows<any>(await db.execute(sql`select * from budget_payment_plans where id = ${insertedId} limit 1`))
+    : [];
+  return rows[0] ?? { id: insertedId, ...data, active: true };
 }
 
 export async function upsertProcedurePrice(data: any) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
+
   const existing = await getProcedurePrice(data.procedureId, data.areaId, data.complexity);
-  
+
   if (existing) {
-    await db.update(sql`budget_procedure_pricing`)
-      .set({ priceInCents: data.priceInCents })
-      .where(eq(sql`id`, existing.id));
+    await db.execute(sql`
+      update budget_procedure_pricing
+      set priceInCents = ${Number(data.priceInCents || 0)}, updatedAt = now()
+      where id = ${existing.id}
+    `);
   } else {
-    await db.insert(sql`budget_procedure_pricing`).values(data);
+    await db.execute(sql`
+      insert into budget_procedure_pricing
+        (procedureId, areaId, complexity, priceInCents, active)
+      values
+        (${Number(data.procedureId)}, ${Number(data.areaId)}, ${data.complexity}, ${Number(data.priceInCents || 0)}, 1)
+    `);
   }
-  
+
   return { success: true };
 }
 
@@ -1826,52 +1911,79 @@ export async function upsertProcedurePrice(data: any) {
 export async function listInventoryProducts() {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(sql`inventory_products`).where(eq(sql`active`, true));
+
+  return unwrapRows<any>(await db.execute(sql`
+    select *
+    from inventory_products
+    where active = 1
+    order by name asc
+  `));
 }
 
 export async function createInventoryProduct(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
-  const result = await db.insert(sql`inventory_products`).values({
-    ...data,
-    createdBy: userId,
-    active: true,
-  });
-  return result[0];
+
+  const result = await db.execute(sql`
+    insert into inventory_products
+      (name, sku, category, description, unit, currentStock, minimumStock, costPriceInCents, supplierName, supplierContact, active, createdBy)
+    values
+      (${data.name}, ${data.sku ?? null}, ${data.category ?? null}, ${data.description ?? null}, ${data.unit ?? 'un'}, ${Number(data.currentStock ?? 0)}, ${Number(data.minimumStock ?? 5)}, ${data.costPriceInCents ?? null}, ${data.supplierName ?? null}, ${data.supplierContact ?? null}, 1, ${userId})
+  `);
+
+  const insertedId = unwrapInsertId(result);
+  const rows = insertedId
+    ? unwrapRows<any>(await db.execute(sql`select * from inventory_products where id = ${insertedId} limit 1`))
+    : [];
+  return rows[0] ?? { id: insertedId, ...data, createdBy: userId, active: true };
 }
 
 export async function getLowStockItems() {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(sql`inventory_products`)
-    .where(sql`currentStock <= minimumStock AND active = true`);
+
+  return unwrapRows<any>(await db.execute(sql`
+    select *
+    from inventory_products
+    where currentStock <= coalesce(minimumStock, 0)
+      and active = 1
+    order by currentStock asc, name asc
+  `));
 }
 
 export async function createInventoryMovement(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
-  const result = await db.insert(sql`inventory_movements`).values({
-    ...data,
-    createdBy: userId,
-  });
-  
-  // Atualizar estoque do produto
-  const product = await db.select().from(sql`inventory_products`).where(eq(sql`id`, data.productId)).limit(1);
+
+  const result = await db.execute(sql`
+    insert into inventory_movements
+      (productId, type, quantity, reason, patientId, appointmentId, createdBy)
+    values
+      (${Number(data.productId)}, ${data.type}, ${Number(data.quantity || 0)}, ${data.reason ?? null}, ${data.patientId ?? null}, ${data.appointmentId ?? null}, ${userId})
+  `);
+
+  const products = unwrapRows<any>(await db.execute(sql`
+    select currentStock
+    from inventory_products
+    where id = ${Number(data.productId)}
+    limit 1
+  `));
+
+  const product = products[0];
   if (product) {
-    let newStock = product[0].currentStock;
-    if (data.type === 'entrada') newStock += data.quantity;
-    else if (data.type === 'saida') newStock -= data.quantity;
-    
-    await db.update(sql`inventory_products`)
-      .set({ currentStock: newStock })
-      .where(eq(sql`id`, data.productId));
+    let newStock = Number(product.currentStock || 0);
+    if (data.type === "entrada") newStock += Number(data.quantity || 0);
+    else if (data.type === "saida") newStock -= Number(data.quantity || 0);
+    else if (data.type === "ajuste") newStock = Number(data.quantity || 0);
+
+    await db.execute(sql`
+      update inventory_products
+      set currentStock = ${newStock}, updatedAt = now()
+      where id = ${Number(data.productId)}
+    `);
   }
-  
-  return result[0];
+
+  return { id: unwrapInsertId(result), ...data, createdBy: userId };
 }
 
 // --- PHOTOS ------------------------------------------------------------------
@@ -1912,27 +2024,15 @@ export async function uploadPatientPhoto(data: any, userId: number) {
     data.mimeType,
     sourceFolder,
   );
-  const result = await db.insert(sql`patient_photos`).values({
-    patientId: data.patientId,
-    folderId: data.folderId ?? null,
-    category: data.category,
-    description: data.description ?? null,
-    photoUrl: stored.photoUrl,
-    thumbnailUrl: stored.photoUrl,
-    photoKey: stored.photoKey,
-    mimeType: stored.mimeType ?? data.mimeType ?? null,
-    originalFileName: data.originalFileName ?? null,
-    mediaType: stored.mediaType,
-    mediaSource: data.mediaSource === "patient" ? "patient" : "clinic",
-    takenAt: data.takenAt ? new Date(data.takenAt) : null,
-    uploadedBy: userId,
-  });
 
-  const insertedId =
-    typeof result[0] === "number"
-      ? result[0]
-      : result[0]?.insertId ?? result[0]?.id;
+  const result = await db.execute(sql`
+    insert into patient_photos
+      (patientId, folderId, category, description, photoUrl, thumbnailUrl, photoKey, mimeType, originalFileName, mediaType, mediaSource, takenAt, uploadedBy)
+    values
+      (${Number(data.patientId)}, ${data.folderId ?? null}, ${data.category}, ${data.description ?? null}, ${stored.photoUrl}, ${stored.photoUrl}, ${stored.photoKey}, ${stored.mimeType ?? data.mimeType ?? null}, ${data.originalFileName ?? null}, ${stored.mediaType}, ${data.mediaSource === 'patient' ? 'patient' : 'clinic'}, ${data.takenAt ? new Date(data.takenAt) : null}, ${userId})
+  `);
 
+  const insertedId = unwrapInsertId(result);
   const rows = unwrapRows<any>(await db.execute(sql`
     select *
     from patient_photos
@@ -2809,24 +2909,33 @@ export async function searchTussCatalog(query?: string, limit: number = 60) {
 export async function getChatMessages(channelId: string, limit: number = 100) {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(sql`chat_messages`)
-    .where(eq(sql`channelId`, channelId))
-    .orderBy(desc(sql`createdAt`))
-    .limit(limit);
+
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 500));
+  return unwrapRows<any>(await db.execute(sql`
+    select *
+    from chat_messages
+    where channelId = ${channelId}
+    order by createdAt desc, id desc
+    limit ${safeLimit}
+  `));
 }
 
 export async function createChatMessage(channelId: string, userId: number, content: string) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
-  const result = await db.insert(sql`chat_messages`).values({
-    channelId,
-    senderId: userId,
-    content,
-    messageType: 'text',
-  });
-  return result[0];
+
+  const result = await db.execute(sql`
+    insert into chat_messages
+      (channelId, senderId, content, messageType)
+    values
+      (${channelId}, ${userId}, ${content}, 'text')
+  `);
+
+  const insertedId = unwrapInsertId(result);
+  const rows = insertedId
+    ? unwrapRows<any>(await db.execute(sql`select * from chat_messages where id = ${insertedId} limit 1`))
+    : [];
+  return rows[0] ?? { id: insertedId, channelId, senderId: userId, content, messageType: "text" };
 }
 
 // --- CLINIC ------------------------------------------------------------------
@@ -3576,7 +3685,7 @@ export async function createBudget(data: any, userId: number) {
     const area = areas.find((entry: any) => Number(entry.id) === Number(item.areaId));
 
     if (!procedure || !price || !area) {
-      throw new Error(`Não foi possível montar o item ${index + 1} do orçamento.`);
+      throw new Error(`N?o foi poss?vel montar o item ${index + 1} do or?amento.`);
     }
 
     const quantity = Number(item.quantity || 1);
@@ -3603,34 +3712,20 @@ export async function createBudget(data: any, userId: number) {
       ? resolvedItems[0].procedureName
       : `${resolvedItems.length} procedimentos`;
 
-  const result = await db.insert(sql`budgets`).values({
+  const result = await db.execute(sql`
+    insert into budgets
+      (patientId, doctorId, date, validUntil, title, items, subtotal, discount, total, status, notes)
+    values
+      (${Number(data.patientId)}, ${userId}, ${today.toISOString().slice(0, 10)}, ${validUntil.toISOString().slice(0, 10)}, ${title}, ${JSON.stringify(resolvedItems)}, ${centsToDecimal(subtotalInCents)}, 0, ${centsToDecimal(subtotalInCents)}, 'rascunho', ${data.clinicalNotes ?? null})
+  `);
+
+  const insertedId = unwrapInsertId(result);
+  const created = insertedId ? await getBudgetById(insertedId) : null;
+  return created ?? {
+    id: insertedId,
     patientId: data.patientId,
     doctorId: userId,
-    date: today.toISOString().slice(0, 10),
-    validUntil: validUntil.toISOString().slice(0, 10),
     title,
-    items: JSON.stringify(resolvedItems),
-    subtotal: centsToDecimal(subtotalInCents),
-    discount: 0,
-    total: centsToDecimal(subtotalInCents),
-    status: 'rascunho',
-    notes: data.clinicalNotes ?? null,
-  });
-
-  const insertedId =
-    typeof result[0] === "number"
-      ? result[0]
-      : result[0]?.insertId ?? result[0]?.id;
-
-  const rows = unwrapRows<any>(await db.execute(sql`
-    select *
-    from budgets
-    where id = ${insertedId}
-    limit 1
-  `));
-
-  return {
-    ...rows[0],
     items: resolvedItems,
     totalInCents: subtotalInCents,
     subtotalInCents,
@@ -3641,16 +3736,24 @@ export async function createBudget(data: any, userId: number) {
 export async function emitBudget(budgetId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
-  await db.update(sql`budgets`).set({ status: 'enviado' }).where(eq(sql`id`, budgetId));
+
+  await db.execute(sql`
+    update budgets
+    set status = 'enviado', updatedAt = now()
+    where id = ${budgetId}
+  `);
   return { success: true };
 }
 
 export async function approveBudget(budgetId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
-  await db.update(sql`budgets`).set({ status: 'aprovado' }).where(eq(sql`id`, budgetId));
+
+  await db.execute(sql`
+    update budgets
+    set status = 'aprovado', updatedAt = now()
+    where id = ${budgetId}
+  `);
   return { success: true };
 }
 
@@ -3766,27 +3869,45 @@ export async function emitBudgetNfse(
 export async function listCrmIndications(limit: number = 100) {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(sql`crm_indications`).orderBy(desc(sql`createdAt`)).limit(limit);
+
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 500));
+  return unwrapRows<any>(await db.execute(sql`
+    select *
+    from crm_indications
+    order by createdAt desc, id desc
+    limit ${safeLimit}
+  `));
 }
 
 export async function createCrmIndication(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
-  const result = await db.insert(sql`crm_indications`).values({
-    ...data,
-    indicatedBy: userId,
-    status: 'indicado',
-  });
-  return result[0];
+
+  const result = await db.execute(sql`
+    insert into crm_indications
+      (patientId, procedureName, notes, status, indicatedBy, appointmentId)
+    values
+      (${Number(data.patientId)}, ${data.procedureName}, ${data.notes ?? null}, 'indicado', ${userId}, ${data.appointmentId ?? null})
+  `);
+
+  const insertedId = unwrapInsertId(result);
+  const rows = insertedId
+    ? unwrapRows<any>(await db.execute(sql`select * from crm_indications where id = ${insertedId} limit 1`))
+    : [];
+  return rows[0] ?? { id: insertedId, ...data, indicatedBy: userId, status: "indicado" };
 }
 
 export async function updateCrmIndication(id: number, data: any) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
-  await db.update(sql`crm_indications`).set(data).where(eq(sql`id`, id));
+
+  await db.execute(sql`
+    update crm_indications
+    set status = coalesce(${data.status ?? null}, status),
+        notes = coalesce(${data.notes ?? null}, notes),
+        updatedAt = now()
+    where id = ${id}
+  `);
   return { success: true };
 }
 
@@ -3806,54 +3927,61 @@ export async function sendForSignature(
 ) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
-  const result = await db.insert(sql`document_signatures`).values({
-    resourceId: documentId,
-    resourceType: documentType,
-    doctorId: userId,
-    d4signDocumentKey: extra.d4signDocumentKey,
-    d4signSafeKey: extra.d4signSafeKey,
-    status: extra.status || 'enviado',
-    signatureType: extra.signatureType || 'eletronica',
-    signedDocumentUrl: extra.signedDocumentUrl,
-    webhookData: extra.webhookData ? JSON.stringify(extra.webhookData) : undefined,
-  });
-  return result[0];
+
+  const result = await db.execute(sql`
+    insert into document_signatures
+      (resourceId, resourceType, doctorId, d4signDocumentKey, d4signSafeKey, status, signatureType, signedDocumentUrl, webhookData)
+    values
+      (${documentId}, ${documentType}, ${userId}, ${extra.d4signDocumentKey ?? null}, ${extra.d4signSafeKey ?? null}, ${extra.status || 'enviado'}, ${extra.signatureType || 'eletronica'}, ${extra.signedDocumentUrl ?? null}, ${extra.webhookData ? JSON.stringify(extra.webhookData) : null})
+  `);
+
+  const insertedId = unwrapInsertId(result);
+  const rows = insertedId
+    ? unwrapRows<any>(await db.execute(sql`select * from document_signatures where id = ${insertedId} limit 1`))
+    : [];
+  return rows[0] ?? { id: insertedId, resourceId: documentId, resourceType: documentType, doctorId: userId };
 }
 
 // --- TEMPLATES ----------------------------------------------------------------
 export async function listTemplates() {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(sql`medical_record_templates`).where(eq(sql`active`, true));
+
+  return unwrapRows<any>(await db.execute(sql`
+    select *
+    from medical_record_templates
+    where active = 1
+    order by name asc
+  `));
 }
 
 export async function createTemplate(data: any, userId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("DB unavailable");
-  
-  const result = await db.insert(sql`medical_record_templates`).values({
-    ...data,
-    createdBy: userId,
-    active: true,
-  });
-  return result[0];
+  return createTemplateNormalized(data, userId);
 }
 
 // --- MEDICAL RECORDS ----------------------------------------------------------
 export async function listMedicalRecordTemplates() {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(sql`medical_record_templates`).where(eq(sql`active`, true));
+
+  return unwrapRows<any>(await db.execute(sql`
+    select *
+    from medical_record_templates
+    where active = 1
+    order by name asc
+  `));
 }
 
 export async function listTemplatesNormalized() {
   const db = await getDb();
   if (!db) return [];
 
-  const rows = await db.select().from(sql`medical_record_templates`).where(eq(sql`active`, true));
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from medical_record_templates
+    where active = 1
+    order by name asc
+  `));
   return rows.map((row: any) => normalizeTemplateRow(row));
 }
 
@@ -3863,15 +3991,18 @@ export async function createTemplateNormalized(data: any, userId: number) {
 
   const group = normalizeTemplateGroup(data.group ?? data.specialty ?? data.name);
   const sections = Array.isArray(data.sections) ? data.sections : [];
-  const result = await db.insert(sql`medical_record_templates`).values({
-    name: data.name,
-    specialty: data.specialty ?? getTemplateGroupLabel(group),
-    description: data.description ?? null,
-    sections: JSON.stringify(sections),
-    createdBy: userId,
-    active: true,
-  });
-  return result[0];
+  const result = await db.execute(sql`
+    insert into medical_record_templates
+      (name, specialty, description, sections, active, createdBy)
+    values
+      (${data.name}, ${data.specialty ?? getTemplateGroupLabel(group)}, ${data.description ?? null}, ${JSON.stringify(sections)}, 1, ${userId})
+  `);
+
+  const insertedId = unwrapInsertId(result);
+  const rows = insertedId
+    ? unwrapRows<any>(await db.execute(sql`select * from medical_record_templates where id = ${insertedId} limit 1`))
+    : [];
+  return rows[0] ? normalizeTemplateRow(rows[0]) : { id: insertedId, ...data, sections, createdBy: userId, active: true };
 }
 
 export async function updateTemplateNormalized(id: number, data: any, _userId: number) {
@@ -4062,37 +4193,63 @@ export async function getAppointmentStats(from?: string, to?: string) {
 export async function getAuditLogs(limit: number = 100) {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(sql`audit_logs`).orderBy(desc(sql`createdAt`)).limit(limit);
+
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 500));
+  return unwrapRows<any>(await db.execute(sql`
+    select *
+    from audit_logs
+    order by createdAt desc, id desc
+    limit ${safeLimit}
+  `));
 }
 
 export async function getUserPermissions(userId: number) {
   const db = await getDb();
   if (!db) return [];
-  
-  return db.select().from(sql`permissions`).where(eq(sql`userId`, userId));
+
+  return unwrapRows<any>(await db.execute(sql`
+    select *
+    from permissions
+    where userId = ${userId}
+    order by module asc
+  `));
 }
 
 export async function setUserPermission(userId: number, module: string, permission: any) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
-  const existing = await db.select().from(sql`permissions`)
-    .where(and(eq(sql`userId`, userId), eq(sql`module`, module)))
-    .limit(1);
-  
-  if (existing && existing[0]) {
-    await db.update(sql`permissions`)
-      .set(permission)
-      .where(eq(sql`id`, existing[0].id));
+
+  const existing = unwrapRows<any>(await db.execute(sql`
+    select *
+    from permissions
+    where userId = ${userId}
+      and module = ${module}
+    limit 1
+  `));
+
+  const canCreate = permission.canCreate === undefined ? false : Boolean(permission.canCreate);
+  const canRead = permission.canRead === undefined ? true : Boolean(permission.canRead);
+  const canUpdate = permission.canUpdate === undefined ? false : Boolean(permission.canUpdate);
+  const canDelete = permission.canDelete === undefined ? false : Boolean(permission.canDelete);
+
+  if (existing[0]) {
+    await db.execute(sql`
+      update permissions
+      set canCreate = ${canCreate},
+          canRead = ${canRead},
+          canUpdate = ${canUpdate},
+          canDelete = ${canDelete}
+      where id = ${existing[0].id}
+    `);
   } else {
-    await db.insert(sql`permissions`).values({
-      userId,
-      module,
-      ...permission,
-    });
+    await db.execute(sql`
+      insert into permissions
+        (userId, module, canCreate, canRead, canUpdate, canDelete)
+      values
+        (${userId}, ${module}, ${canCreate}, ${canRead}, ${canUpdate}, ${canDelete})
+    `);
   }
-  
+
   return { success: true };
 }
 
@@ -4148,11 +4305,49 @@ export async function updateUserRole(userId: number, role: string) {
   return { success: true };
 }
 
-// ??? CLOUD SIGNATURE (VIDaaS / BirdID) ???????????????????????????????????????
+// --- CLOUD SIGNATURE (VIDaaS / BirdID) -----------------------------------
 
+async function ensureCloudSignatureUserColumns(db: any) {
+  if (!ensureCloudSignatureUserColumnsPromise) {
+    ensureCloudSignatureUserColumnsPromise = (async () => {
+      const columns = await getTableColumns("users");
+      const alterations: string[] = [];
+
+      if (!columns.has("cloudSignatureProvider")) {
+        alterations.push("ADD COLUMN `cloudSignatureProvider` VARCHAR(64) NULL");
+      }
+      if (!columns.has("cloudSignatureCpf")) {
+        alterations.push("ADD COLUMN `cloudSignatureCpf` VARCHAR(14) NULL");
+      }
+      if (!columns.has("cloudSignatureClientId")) {
+        alterations.push("ADD COLUMN `cloudSignatureClientId` VARCHAR(255) NULL");
+      }
+      if (!columns.has("cloudSignatureClientSecret")) {
+        alterations.push("ADD COLUMN `cloudSignatureClientSecret` TEXT NULL");
+      }
+      if (!columns.has("cloudSignatureAmbiente")) {
+        alterations.push("ADD COLUMN `cloudSignatureAmbiente` VARCHAR(32) NULL DEFAULT 'homologacao'");
+      }
+
+      if (alterations.length > 0) {
+        await db.execute(sql.raw(`ALTER TABLE users ${alterations.join(", ")}`));
+        clearTableColumnCache("users");
+      }
+    })();
+  }
+
+  try {
+    await ensureCloudSignatureUserColumnsPromise;
+  } catch (error) {
+    ensureCloudSignatureUserColumnsPromise = null;
+    throw error;
+  }
+}
 export async function getCloudSignatureConfig(userId: number) {
   const db = await getDb();
   if (!db) return null;
+
+  await ensureCloudSignatureUserColumns(db);
 
   const rows = unwrapRows<any>(await db.execute(sql`
     select cloudSignatureProvider, cloudSignatureCpf, cloudSignatureClientId,
@@ -4186,6 +4381,8 @@ export async function saveCloudSignatureConfig(
 ) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+
+  await ensureCloudSignatureUserColumns(db);
 
   await db.execute(sql`
     update users set
@@ -4385,7 +4582,7 @@ export async function applyDocumentSignature(data: {
   return { success: true };
 }
 
-// ??? CERTILLION (agregador VIDAAS / BirdID / CERTILLION_SIGNER) ???????????????
+// --- CERTILLION (agregador VIDaaS / BirdID / CERTILLION_SIGNER) --------------
 
 export async function getCertillionConfig() {
   const db = await getDb();
@@ -4521,7 +4718,7 @@ export async function updateCertillionSession(
   `);
 }
 
-// ??? CERTIFICADO A1 PF POR USU?RIO ????????????????????????????????????????????
+// --- CERTIFICADO A1 PF POR USUÁRIO -----------------------------------------
 
 export async function saveUserA1Certificate(
   userId: number,

@@ -25,7 +25,7 @@ export default function TrocarSenha() {
     setError("");
 
     if (newPassword !== confirmPassword) {
-      setError("As senhas nao coincidem.");
+      setError("As senhas não coincidem.");
       return;
     }
 
@@ -44,7 +44,7 @@ export default function TrocarSenha() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Nao foi possivel atualizar a senha.");
+        setError(data.error || "Não foi possível atualizar a senha.");
         return;
       }
 

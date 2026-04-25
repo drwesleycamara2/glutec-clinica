@@ -123,7 +123,7 @@ export default function UsuariosPremium() {
         {!users || users.length === 0 ? (
           <PremiumCard borderGold className="py-20 text-center">
             <Users size={48} className="mx-auto mb-4 text-text-tertiary/20" />
-            <p className="text-text-secondary">Nenhum usuario cadastrado.</p>
+            <p className="text-text-secondary">Nenhum usuário cadastrado.</p>
           </PremiumCard>
         ) : (
           users.map((u: any) => {
@@ -142,7 +142,7 @@ export default function UsuariosPremium() {
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="font-semibold text-text-primary">{u.name || "Sem nome"}</h3>
-                        {isSelf ? <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-bold uppercase text-accent">Voce</span> : null}
+                        {isSelf ? <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-bold uppercase text-accent">Você</span> : null}
                         {isTargetSuperAdmin ? <Shield size={14} className="text-accent" /> : null}
                       </div>
                       <p className="text-sm text-text-tertiary">{u.email}</p>
@@ -177,7 +177,7 @@ export default function UsuariosPremium() {
                           className="border-[#6B6B6B]/30 text-[#6B6B6B] hover:bg-[#6B6B6B]/10"
                           icon={<Trash2 size={14} />}
                           onClick={() => {
-                            if (confirm('Tem certeza que deseja remover este usuario permanentemente?')) {
+                            if (confirm('Tem certeza que deseja remover este usuário permanentemente?')) {
                               deleteMutation.mutate({ userId: u.id });
                             }
                           }}

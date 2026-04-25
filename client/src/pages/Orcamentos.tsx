@@ -71,11 +71,11 @@ const BUDGET_STATUS_COLORS: Record<string, string> = {
 
 const NFSE_STATUS_LABELS: Record<string, string> = {
   rascunho: "Rascunho fiscal",
-  aguardando: "Aguardando emissao",
+  aguardando: "Aguardando emissão",
   autorizada: "NFS-e autorizada",
-  erro: "Falha na emissao",
+  erro: "Falha na emissão",
   cancelada: "Cancelada",
-  substituida: "Substituida",
+  substituida: "Substituída",
 };
 
 const NFSE_STATUS_COLORS: Record<string, string> = {
@@ -174,7 +174,7 @@ export default function Orcamentos() {
 
   const createMutation = trpc.budgets.create.useMutation({
     onSuccess: () => {
-      toast.success("Orcamento criado com sucesso.");
+      toast.success("Orçamento criado com sucesso.");
       refetch();
       setShowCreate(false);
       resetForm();
@@ -184,7 +184,7 @@ export default function Orcamentos() {
 
   const emitMutation = trpc.budgets.emit.useMutation({
     onSuccess: () => {
-      toast.success("Orcamento enviado para aprovacao.");
+      toast.success("Orçamento enviado para aprovação.");
       refetch();
     },
     onError: (err) => toast.error(err.message),
@@ -192,7 +192,7 @@ export default function Orcamentos() {
 
   const approveMutation = trpc.budgets.approve.useMutation({
     onSuccess: () => {
-      toast.success("Orcamento aprovado.");
+      toast.success("Orçamento aprovado.");
       refetch();
     },
     onError: (err) => toast.error(err.message),
@@ -267,7 +267,7 @@ export default function Orcamentos() {
     const price = Number(priceData?.priceInCents || 0);
 
     if (!procedure || !area || !price) {
-      toast.error("Nao foi possivel resolver o valor deste procedimento.");
+      toast.error("Não foi possível resolver o valor deste procedimento.");
       return;
     }
 
@@ -341,7 +341,7 @@ export default function Orcamentos() {
   function openInvoiceLink(budget: any) {
     const link = getInvoiceLink(budget);
     if (!link) {
-      toast.error("A nota ainda nao possui link disponivel.");
+      toast.error("A nota ainda não possui link disponível.");
       return;
     }
 
@@ -353,18 +353,18 @@ export default function Orcamentos() {
     const phone = digitsOnly(budget?.patientPhone);
 
     if (!link) {
-      toast.error("A nota ainda nao possui link disponivel.");
+      toast.error("A nota ainda não possui link disponível.");
       return;
     }
 
     if (!phone) {
-      toast.error("O paciente nao possui telefone cadastrado.");
+      toast.error("O paciente não possui telefone cadastrado.");
       return;
     }
 
     const waPhone = phone.startsWith("55") ? phone : `55${phone}`;
     const text = encodeURIComponent(
-      `Ola, ${budget.patientName}. Segue sua NFS-e: ${link}`,
+      `Olá, ${budget.patientName}. Segue sua NFS-e: ${link}`,
     );
 
     window.open(`https://wa.me/${waPhone}?text=${text}`, "_blank", "noopener,noreferrer");
@@ -375,18 +375,18 @@ export default function Orcamentos() {
     const email = String(budget?.patientEmail ?? "").trim();
 
     if (!link) {
-      toast.error("A nota ainda nao possui link disponivel.");
+      toast.error("A nota ainda não possui link disponível.");
       return;
     }
 
     if (!email) {
-      toast.error("O paciente nao possui e-mail cadastrado.");
+      toast.error("O paciente não possui e-mail cadastrado.");
       return;
     }
 
     const subject = encodeURIComponent("Sua NFS-e - Glutec");
     const body = encodeURIComponent(
-      `Ola, ${budget.patientName}.\n\nSegue o link da sua nota fiscal de servico:\n${link}\n\nAtenciosamente,\nGlutec`,
+      `Olá, ${budget.patientName}.\n\nSegue o link da sua nota fiscal de serviço:\n${link}\n\nAtenciosamente,\nGlutec`,
     );
 
     window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
@@ -398,10 +398,10 @@ export default function Orcamentos() {
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-semibold">
             <Calculator className="h-6 w-6 text-primary" />
-            Motor de Orcamentos
+            Motor de Orçamentos
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Orcamentos com aprovacao, integracao fiscal e acompanhamento da NFS-e.
+            Orçamentos com aprovação, integração fiscal e acompanhamento da NFS-e.
           </p>
         </div>
 
@@ -409,12 +409,12 @@ export default function Orcamentos() {
           <DialogTrigger asChild>
             <Button>
               <Plus className="mr-2 h-4 w-4" />
-              Novo orcamento
+              Novo orçamento
             </Button>
           </DialogTrigger>
           <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Criar orcamento</DialogTitle>
+              <DialogTitle>Criar orçamento</DialogTitle>
             </DialogHeader>
 
             <div className="space-y-5">
@@ -567,7 +567,7 @@ export default function Orcamentos() {
               {items.length > 0 && (
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">Itens do orcamento</CardTitle>
+                    <CardTitle className="text-sm">Itens do orçamento</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="overflow-x-auto">
@@ -710,7 +710,7 @@ export default function Orcamentos() {
                 >
                   {createMutation.isPending
                     ? "Criando..."
-                    : `Criar orcamento (${formatCurrency(totalInCents)})`}
+                    : `Criar orçamento (${formatCurrency(totalInCents)})`}
                 </Button>
               </div>
             </div>
@@ -724,11 +724,11 @@ export default function Orcamentos() {
             <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-700 dark:text-amber-300" />
             <div className="space-y-1">
               <p className="font-medium text-amber-900 dark:text-amber-100">
-                A configuracao fiscal ainda precisa de confirmacao final.
+                A configuração fiscal ainda precisa de confirmação final.
               </p>
               <p className="text-sm text-amber-800 dark:text-amber-200">
-                A emissao do orcamento pode seguir, mas a NFS-e so deve ir para producao
-                depois de confirmar certificado, dados do prestador e parametros municipais.
+                A emissão do orçamento pode seguir, mas a NFS-e só deve ir para produção
+                depois de confirmar certificado, dados do prestador e parâmetros municipais.
               </p>
             </div>
           </CardContent>
@@ -738,7 +738,7 @@ export default function Orcamentos() {
       <Dialog open={showNfseDialog} onOpenChange={setShowNfseDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Emitir NFS-e do orcamento</DialogTitle>
+            <DialogTitle>Emitir NFS-e do orçamento</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -763,7 +763,7 @@ export default function Orcamentos() {
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Descricao padrao: {fiscalSettings?.descricaoServicoPadrao || "Referente a procedimentos medicos ambulatoriais."}
+                  Descrição padrão: {fiscalSettings?.descricaoServicoPadrao || "Referente a procedimentos médicos ambulatoriais."}
                 </p>
               </CardContent>
             </Card>
@@ -795,7 +795,7 @@ export default function Orcamentos() {
               </div>
 
               <div className="space-y-2">
-                <Label>Data de competencia</Label>
+                <Label>Data de competência</Label>
                 <Input
                   type="date"
                   value={competenceDate}
@@ -815,8 +815,8 @@ export default function Orcamentos() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="homologacao">Homologacao</SelectItem>
-                    <SelectItem value="producao">Producao</SelectItem>
+                    <SelectItem value="homologacao">Homologação</SelectItem>
+                    <SelectItem value="producao">Produção</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -826,17 +826,17 @@ export default function Orcamentos() {
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <Receipt className="h-4 w-4 text-primary" />
-                  Previa da descricao fiscal
+                  Prévia da descrição fiscal
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
-                <p>{fiscalSettings?.descricaoServicoPadrao || "Referente a procedimentos medicos ambulatoriais."}</p>
+                <p>{fiscalSettings?.descricaoServicoPadrao || "Referente a procedimentos médicos ambulatoriais."}</p>
                 <p>
                   Forma de Pagamento: {buildPaymentLabel(paymentMethod, paymentDetails)}
                 </p>
                 <p className="whitespace-pre-wrap text-muted-foreground">
                   {fiscalSettings?.textoLegalFixo ||
-                    "Nao sujeito a retencao de seguridade social, conforme art-31 da lei-8.212/91, os/inss-209/99, In/inss-dc-100/03 e in 971/09 art.120 inciso III. Os servicos acima descritos foram prestados pessoalmente pelo(s) socio(s) e sem o concurso de empregados ou outros contribuintes individuais."}
+                    "Não sujeito à retenção da seguridade social, conforme art. 31 da Lei 8.212/91, OS/INSS 209/99, IN/INSS-DC 100/03 e IN 971/09, art. 120, inciso III. Os serviços acima descritos foram prestados pessoalmente pelo(s) sócio(s) e sem o concurso de empregados ou outros contribuintes individuais."}
                 </p>
               </CardContent>
             </Card>
@@ -855,13 +855,13 @@ export default function Orcamentos() {
 
       {loadingBudgets ? (
         <div className="flex h-32 items-center justify-center">
-          <p className="text-muted-foreground">Carregando orcamentos...</p>
+          <p className="text-muted-foreground">Carregando orçamentos...</p>
         </div>
       ) : !budgetsList || budgetsList.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Calculator className="mb-3 h-12 w-12 text-muted-foreground/30" />
-            <p className="text-muted-foreground">Nenhum orcamento criado ainda.</p>
+            <p className="text-muted-foreground">Nenhum orçamento criado ainda.</p>
           </CardContent>
         </Card>
       ) : (
@@ -882,7 +882,7 @@ export default function Orcamentos() {
                     <div className="space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <FileText className="h-5 w-5 text-primary/70" />
-                        <h3 className="text-lg font-semibold">Orcamento #{budget.id}</h3>
+                        <h3 className="text-lg font-semibold">Orçamento #{budget.id}</h3>
                         <Badge className={BUDGET_STATUS_COLORS[budget.status] ?? ""}>
                           {BUDGET_STATUS_LABELS[budget.status] ?? budget.status}
                         </Badge>
@@ -937,7 +937,7 @@ export default function Orcamentos() {
 
                       {hasNfseError ? (
                         <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900 dark:border-rose-950/50 dark:bg-rose-950/20 dark:text-rose-200">
-                          <p className="font-medium">Falha na emissao da NFS-e</p>
+                          <p className="font-medium">Falha na emissão da NFS-e</p>
                           <p>{latestNfse?.erroMensagem || "A API nacional retornou um erro."}</p>
                         </div>
                       ) : null}

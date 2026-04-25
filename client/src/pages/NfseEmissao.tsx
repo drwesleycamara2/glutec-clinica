@@ -243,13 +243,13 @@ export default function NfseEmissao() {
       window.localStorage.setItem("glutec-nfse-simples-confirmed-month", currentMonthKey);
     }
     setConfirmedAliquotaMonth(currentMonthKey);
-    toast.success("Aliquota do Simples Nacional confirmada para este mes.");
+    toast.success("Alíquota do Simples Nacional confirmada para este mês.");
   };
 
   // Submeter NFS-e
   const handleSubmit = () => {
     if (needsAliquotaConfirmation) {
-      toast.error("Confirme primeiro se a aliquota do Simples Nacional deste mes esta atualizada.");
+      toast.error("Confirme primeiro se a alíquota do Simples Nacional deste mês está atualizada.");
       return;
     }
 
@@ -703,14 +703,14 @@ export default function NfseEmissao() {
           <CardContent className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
             <div className="space-y-1">
               <p className="text-sm font-semibold text-amber-900">
-                Confirme a aliquota do Simples Nacional deste mes
+                Confirme a alíquota do Simples Nacional deste mês
               </p>
               <p className="text-xs text-amber-800">
-                Antes da primeira emissao de {new Date(`${currentMonthKey}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}, confirme se o percentual informado ainda esta correto.
+                Antes da primeira emissão de {new Date(`${currentMonthKey}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}, confirme se o percentual informado ainda está correto.
               </p>
             </div>
             <Button type="button" variant="outline" onClick={confirmAliquotaForCurrentMonth}>
-              Confirmar aliquota atual
+              Confirmar alíquota atual
             </Button>
           </CardContent>
         </Card>

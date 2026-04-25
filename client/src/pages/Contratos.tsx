@@ -53,7 +53,7 @@ export default function Contratos() {
             Contratos
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Contratos e termos importados do Prontuario Verde, reunidos em uma lista unica.
+            Contratos e termos importados do Prontuário Verde, reunidos em uma lista única.
           </p>
         </div>
         <Badge variant="outline" className="w-fit">
@@ -103,9 +103,9 @@ export default function Contratos() {
                 </CardHeader>
                 <CardContent className="space-y-3 pt-0">
                   <div className="grid gap-2 text-sm text-muted-foreground md:grid-cols-3">
-                    <p><span className="font-medium text-foreground">Paciente:</span> {doc.patientName || "Nao informado"}</p>
+                    <p><span className="font-medium text-foreground">Paciente:</span> {doc.patientName || "Não informado"}</p>
                     <p><span className="font-medium text-foreground">Data:</span> {formatDate(doc.createdAt)}</p>
-                    <p><span className="font-medium text-foreground">Origem:</span> {doc.sourceSystem === "prontuario_verde" ? "Prontuario Verde" : cleanText(doc.sourceSystem) || "Sistema"}</p>
+                    <p><span className="font-medium text-foreground">Origem:</span> {doc.sourceSystem === "prontuario_verde" ? "Prontuário Verde" : cleanText(doc.sourceSystem) || "Sistema"}</p>
                   </div>
                   {doc.description ? <p className="text-sm text-muted-foreground">{cleanText(doc.description)}</p> : null}
                   <div className="flex flex-wrap gap-2">
@@ -119,13 +119,13 @@ export default function Contratos() {
                     ) : (
                       <Button size="sm" variant="outline" disabled>
                         <FileDown className="mr-1.5 h-3.5 w-3.5" />
-                        PDF indisponivel
+                        PDF indisponível
                       </Button>
                     )}
                     {doc.patientId ? (
                       <Button size="sm" variant="ghost" onClick={() => navigate(`/prontuarios/${doc.patientId}#contratos`)}>
                         <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                        Abrir prontuario
+                        Abrir prontuário
                       </Button>
                     ) : null}
                   </div>

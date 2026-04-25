@@ -122,7 +122,7 @@ export function PatientEditDialog({ patientId, onClose, onSaved, onDeleted }: Pr
 
   const deleteMutation = trpc.patients.delete.useMutation({
     onSuccess: () => {
-      toast.success("Prontuario excluido.");
+      toast.success("Prontuário excluído.");
       utils.patients.list.invalidate();
       if (patientId) utils.patients.getById.invalidate({ id: patientId });
       onDeleted?.();
