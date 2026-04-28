@@ -1,4 +1,4 @@
-import { eq, sql, or, like, and, desc } from "drizzle-orm";
+import { asc, eq, sql, or, like, and, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, icd10Codes, userFavoriteIcds, audioTranscriptions, InsertIcd10Code, InsertUserFavoriteIcd, InsertAudioTranscription } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -114,18 +114,33 @@ export async function getUserByOpenId(openId: string) {
 
 // ─── CID-10 ─────────────────────────────────────────────────────────────────
 
+export async function listIcd10(limit = 80) {
+  const db = await getDb();
+  if (!db) return [];
+  await ensureIcd10Catalog();
+  return db
+    .select()
+    .from(icd10Codes)
+    .orderBy(asc(icd10Codes.code))
+    .limit(Math.min(Math.max(limit, 20), 200));
+}
+
 export async function searchIcd10(query: string, limit = 50) {
   const db = await getDb();
   if (!db) return [];
   await ensureIcd10Catalog();
-  const q = `%${query}%`;
+  const normalizedQuery = String(query ?? "").trim();
+  if (!normalizedQuery) {
+    return listIcd10(limit);
+  }
+  const q = `%${normalizedQuery}%`;
   return db
     .select()
     .from(icd10Codes)
-    .where(or(like(icd10Codes.code, q), like(icd10Codes.description, q)))
-    .limit(limit);
+    .where(or(like(icd10Codes.code, q), like(icd10Codes.description, q), like(icd10Codes.descriptionAbbrev, q)))
+    .orderBy(asc(icd10Codes.code))
+    .limit(Math.min(Math.max(limit, 10), 200));
 }
-
 export async function getIcd10ById(id: number) {
   const db = await getDb();
   if (!db) return undefined;

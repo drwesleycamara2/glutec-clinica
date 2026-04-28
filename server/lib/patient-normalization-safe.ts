@@ -90,6 +90,17 @@ export function normalizePtBrTitleCase(value?: string | null) {
     .join(" ");
 }
 
+export function isLegacyNumericCityCode(value?: string | null) {
+  return /^\d{2,}$/.test(normalizeWhitespace(repairMojibakeUtf8(value)));
+}
+
+export function normalizeCityNameValue(value?: string | null) {
+  if (isLegacyNumericCityCode(value)) {
+    return "";
+  }
+  return normalizePtBrTitleCase(value);
+}
+
 export function normalizeEmailValue(value?: string | null) {
   const repaired = repairMojibakeUtf8(value);
   return repaired ? repaired.toLocaleLowerCase("pt-BR") : "";
@@ -144,7 +155,7 @@ export function normalizePatientAddressFields(address: PatientAddressFields) {
     street: normalizePtBrTitleCase(address.street),
     number: normalizeAddressNumberValue(address.number),
     neighborhood: normalizePtBrTitleCase(address.neighborhood),
-    city: normalizePtBrTitleCase(address.city),
+    city: normalizeCityNameValue(address.city),
     state: normalizeStateCode(address.state),
     zip: normalizeZipCodeValue(address.zip),
   };

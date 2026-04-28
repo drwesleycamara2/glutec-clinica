@@ -353,6 +353,28 @@ def build_address_json(row: Dict[str, str]) -> Optional[str]:
     return json.dumps(payload, ensure_ascii=False)
 
 
+def looks_like_city_id(value: Optional[str]) -> bool:
+    return bool(re.fullmatch(r"\d{2,}", str(value or "").strip()))
+
+
+def existing_address_needs_update(existing_address: Optional[str], existing_city: Optional[str], incoming_address: Optional[str]) -> bool:
+    if not incoming_address:
+        return False
+    if not existing_address or str(existing_address).strip() in {"", "{}"}:
+        return True
+    if looks_like_city_id(existing_city):
+        return True
+    try:
+        parsed = json.loads(str(existing_address))
+        if isinstance(parsed, dict):
+            city = parsed.get("city")
+            street = parsed.get("street")
+            return not street or not city or looks_like_city_id(city)
+    except Exception:
+        return False
+    return False
+
+
 def insert_patient(mysql: MysqlCli, row: Dict[str, str], created_by: int) -> int:
     birth_date = parse_date(row.get("Nascimento"))
     phone = clean_phone(first_non_empty(row.get("Telefone1"), row.get("Telefone2"), row.get("Telefone3")))
@@ -385,6 +407,10 @@ def update_patient_if_needed(mysql: MysqlCli, patient_id: int, row: Dict[str, st
     phone2 = clean_phone(first_non_empty(row.get("Telefone2"), row.get("Telefone3")))
     address_json = build_address_json(row)
     observations = compose_patient_observations(row)
+    current_rows = mysql.query(f"SELECT address, city FROM patients WHERE id = {patient_id} LIMIT 1")
+    current_address = current_rows[0][0] if current_rows and len(current_rows[0]) > 0 else None
+    current_city = current_rows[0][1] if current_rows and len(current_rows[0]) > 1 else None
+    should_update_address = existing_address_needs_update(current_address, current_city, address_json)
 
     mysql.execute(
         "UPDATE patients SET "
@@ -395,7 +421,7 @@ def update_patient_if_needed(mysql: MysqlCli, patient_id: int, row: Dict[str, st
         f"phone = CASE WHEN (phone IS NULL OR phone = '') THEN {sql_literal(phone)} ELSE phone END, "
         f"phone2 = CASE WHEN (phone2 IS NULL OR phone2 = '') THEN {sql_literal(phone2)} ELSE phone2 END, "
         f"email = CASE WHEN (email IS NULL OR email = '') THEN {sql_literal(row.get('E-mail') or None)} ELSE email END, "
-        f"address = CASE WHEN (address IS NULL OR address = '') THEN {sql_literal(address_json)} ELSE address END, "
+        f"address = CASE WHEN (address IS NULL OR address = '' OR {1 if should_update_address else 0} = 1) THEN {sql_literal(address_json)} ELSE address END, "
         f"observations = CASE WHEN (observations IS NULL OR observations = '') THEN {sql_literal(observations)} ELSE observations END, "
         f"sourceSystem = CASE WHEN (sourceSystem IS NULL OR sourceSystem = '') THEN {sql_literal(SOURCE_SYSTEM)} ELSE sourceSystem END, "
         f"sourceId = CASE WHEN (sourceId IS NULL OR sourceId = '') THEN {sql_literal(row.get('PAC_ID'))} ELSE sourceId END "

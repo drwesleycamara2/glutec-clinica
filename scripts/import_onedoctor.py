@@ -276,6 +276,61 @@ def read_csv_rows(path: Path) -> List[Dict[str, str]]:
     raise RuntimeError(f"Falha ao decodificar CSV: {path}")
 
 
+def looks_like_city_id(value: Optional[str]) -> bool:
+    return bool(re.fullmatch(r"\d{2,}", str(value or "").strip()))
+
+
+def first_non_empty_value(*values: Optional[str]) -> Optional[str]:
+    for value in values:
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return None
+
+
+def load_city_lookup(root: Path) -> Dict[str, str]:
+    """Best-effort city lookup for exports that include a city/municipality CSV.
+
+    Some OneDoctor exports omit this table. In that case we intentionally do
+    not persist the numeric id_cidade as the city name; the CEP repair script can
+    resolve it later from ViaCEP.
+    """
+    city_lookup: Dict[str, str] = {}
+    id_columns = ["id", "ID", "codigo", "CODIGO", "id_cidade", "ID_CIDADE", "cidade_id"]
+    name_columns = ["nome", "Nome", "cidade", "Cidade", "descricao", "DESCRICAO", "municipio", "Município", "MUNICIPIO"]
+
+    for path in root.rglob("*.csv"):
+        normalized_name = path.stem.upper()
+        if "CIDADE" not in normalized_name and "MUNICIP" not in normalized_name:
+            continue
+        try:
+            rows = read_csv_rows(path)
+        except Exception:
+            continue
+        for row in rows:
+            source_id = first_non_empty_value(*(row.get(column) for column in id_columns))
+            city_name = first_non_empty_value(*(row.get(column) for column in name_columns))
+            if source_id and city_name and not looks_like_city_id(city_name):
+                city_lookup[str(source_id).strip()] = city_name.strip()
+    return city_lookup
+
+
+def resolve_city(row: Dict[str, str], city_lookup: Dict[str, str]) -> Optional[str]:
+    explicit_city = first_non_empty_value(row.get("cidade"), row.get("Cidade"), row.get("municipio"), row.get("Município"))
+    if explicit_city and not looks_like_city_id(explicit_city):
+        return explicit_city
+
+    city_id = first_non_empty_value(row.get("id_cidade"), row.get("cidade_id"))
+    if city_id and city_lookup.get(str(city_id).strip()):
+        return city_lookup[str(city_id).strip()]
+
+    return None
+
+
+def resolve_state(row: Dict[str, str]) -> Optional[str]:
+    value = first_non_empty_value(row.get("UF"), row.get("uf"), row.get("estado"), row.get("Estado"))
+    return value.upper()[:2] if value else None
+
+
 def find_patient(mysql: MysqlCli, source_id: str, cpf: Optional[str], full_name: str, birth_date: Optional[str]) -> Optional[int]:
     mapped = map_id(mysql, "PESSOA", source_id)
     if mapped:
@@ -304,7 +359,7 @@ def find_patient(mysql: MysqlCli, source_id: str, cpf: Optional[str], full_name:
     return None
 
 
-def upsert_patient(mysql: MysqlCli, row: Dict[str, str], created_by: int, stats: ImportStats) -> Optional[int]:
+def upsert_patient(mysql: MysqlCli, row: Dict[str, str], created_by: int, stats: ImportStats, city_lookup: Optional[Dict[str, str]] = None) -> Optional[int]:
     source_id = str(row.get("id") or "").strip()
     full_name = " ".join(str(row.get("nome") or "").strip().upper().split())
     if not source_id or not full_name:
@@ -314,13 +369,15 @@ def upsert_patient(mysql: MysqlCli, row: Dict[str, str], created_by: int, stats:
     cpf = clean_document(row.get("cnpj_cpf"))
     birth_date = parse_date(row.get("nascimento"))
     patient_id = find_patient(mysql, source_id, cpf, full_name, birth_date)
+    resolved_city = resolve_city(row, city_lookup or {})
+    resolved_state = resolve_state(row)
     address_json = {
         "street": row.get("endereco") or None,
         "number": row.get("numero") or None,
         "complement": row.get("complemento") or None,
         "neighborhood": row.get("bairro") or None,
-        "city": row.get("id_cidade") or None,
-        "state": None,
+        "city": resolved_city,
+        "state": resolved_state,
         "zip": clean_zip(row.get("CEP")),
     }
     notes = "\n".join(
@@ -347,7 +404,7 @@ def upsert_patient(mysql: MysqlCli, row: Dict[str, str], created_by: int, stats:
             "email": row.get("email") or None,
             "address": json.dumps(address_json, ensure_ascii=False) if any(address_json.values()) else None,
             "zipCode": clean_zip(row.get("CEP")),
-            "city": row.get("id_cidade") or None,
+            "city": resolved_city,
             "healthInsurance": row.get("convenio_nome_empresa") or None,
             "healthInsuranceNumber": row.get("numero_contrato") or None,
             "insuranceName": row.get("convenio_nome_empresa") or None,
@@ -732,11 +789,12 @@ def main() -> None:
         receber = read_csv_rows(find_file(source_root, "RECEBER.csv"))
         anexo = read_csv_rows(find_file(source_root, "ANEXO.csv"))
         anexo_pasta = read_csv_rows(find_file(source_root, "ANEXO_PASTA.csv"))
+        city_lookup = load_city_lookup(source_root)
         stats.total_rows = len(pessoa) + len(agenda) + len(prontuario) + len(prescricao) + len(orcamento) + len(receber) + len(anexo)
 
         for row in pessoa:
             try:
-                upsert_patient(mysql, row, args.created_by, stats)
+                upsert_patient(mysql, row, args.created_by, stats, city_lookup)
             except Exception as exc:
                 stats.error_rows += 1
                 errors.append(f"Paciente {row.get('id')}: {exc}")

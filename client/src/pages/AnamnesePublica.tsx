@@ -1,4 +1,4 @@
-﻿import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { useParams } from "wouter";
 import { Loader2, Send, ShieldCheck, UserRound } from "lucide-react";
 import {
@@ -6,6 +6,8 @@ import {
   shouldShowFollowUp,
   validateAnamnesisQuestions,
 } from "@/lib/anamnesis";
+
+const PRIVACY_NOTICE = "Seus dados são protegidos por sigilo médico-paciente. As respostas são usadas para seu atendimento e não ficam expostas a toda a equipe da clínica.";
 
 type PublicAnamnesisResponse = {
   patientName?: string;
@@ -69,8 +71,8 @@ export default function AnamnesePublica() {
         const hydratedQuestions = (payload.questions || []).map((question, index) => ({
           ...question,
           id: makeUniqueQuestionId(question, index, usedQuestionIds),
-          answer: payload.answers?.[question.text] || "",
-          followUpAnswer: payload.answers?.[`${question.text}::__complemento`] || "",
+          answer: payload.answers?.[question.id] || payload.answers?.[question.text] || "",
+          followUpAnswer: payload.answers?.[`${question.id}::__complemento`] || payload.answers?.[`${question.text}::__complemento`] || "",
           options: Array.isArray(question.options) ? question.options : [],
         }));
 
@@ -98,6 +100,7 @@ export default function AnamnesePublica() {
   const questionCount = useMemo(() => questions.length, [questions.length]);
 
   const updateQuestion = (id: string, updates: Partial<AnamnesisQuestion>) => {
+    setError("");
     setQuestions((current) => current.map((question) => (question.id === id ? { ...question, ...updates } : question)));
   };
 
@@ -147,9 +150,11 @@ export default function AnamnesePublica() {
 
       const answers = Object.fromEntries(
         questions.flatMap((question) => {
-          const entries: Array<[string, string]> = [[question.text, String(question.answer ?? "")]];
+          const answer = String(question.answer ?? "");
+          const entries: Array<[string, string]> = [[question.id, answer], [question.text, answer]];
           if (question.followUp) {
-            entries.push([`${question.text}::__complemento`, String(question.followUpAnswer ?? "")]);
+            const followUpAnswer = String(question.followUpAnswer ?? "");
+            entries.push([`${question.id}::__complemento`, followUpAnswer], [`${question.text}::__complemento`, followUpAnswer]);
           }
           return entries;
         }),
@@ -212,7 +217,7 @@ export default function AnamnesePublica() {
           <p className="text-center text-xs uppercase tracking-[0.45em] text-[#E8D3A1]">Clínica Glutée</p>
           <h1 className="mt-3 text-center text-3xl font-semibold md:text-4xl">{anamnesis?.title || "Preenchimento de anamnese"}</h1>
           <p className="mx-auto mt-4 max-w-2xl text-center text-sm text-white/72 md:text-base">
-            Preencha todas as informações para adiantar o atendimento. Seus dados são recebidos diretamente pela equipe da clínica.
+            Preencha todas as informações para adiantar o atendimento. {PRIVACY_NOTICE}
           </p>
           <div className="mt-5 flex flex-wrap items-center justify-center gap-3 text-xs text-white/70 md:text-sm">
             <span className="rounded-full border border-[#C9A55B]/20 bg-white/5 px-3 py-1.5">Paciente: {anamnesis?.patientName || "Identificação protegida"}</span>
@@ -226,7 +231,8 @@ export default function AnamnesePublica() {
             <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A55B]" />
             <div>
               <p className="font-medium text-white">Canal seguro da Clínica Glutée</p>
-              <p className="mt-1">Todas as perguntas são obrigatórias. Se uma resposta exigir complemento, o sistema abrirá o campo correspondente na mesma caixa.</p>
+              <p className="mt-1">{PRIVACY_NOTICE}</p>
+              <p className="mt-2">Todas as perguntas são obrigatórias. Se uma resposta exigir complemento, o sistema abrirá o campo correspondente na mesma caixa.</p>
             </div>
           </div>
 
@@ -341,7 +347,7 @@ export default function AnamnesePublica() {
           {success ? <div className="mt-6 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">{success}</div> : null}
 
           <div className="mt-8 flex flex-col items-stretch gap-3 md:flex-row md:items-center md:justify-between">
-            <p className="text-sm text-white/60">Ao enviar, suas respostas ficam disponíveis para a equipe da clínica no prontuário.</p>
+            <p className="text-sm text-white/60">Ao enviar, suas respostas ficam protegidas no prontuário e acessíveis apenas aos perfis autorizados.</p>
             <button
               type="button"
               onClick={handleSubmit}

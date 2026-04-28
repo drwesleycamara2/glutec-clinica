@@ -11,6 +11,8 @@ import {
   testNationalApiConnection,
 } from "./lib/nfse-nacional";
 import {
+  isLegacyNumericCityCode,
+  normalizeCityNameValue,
   normalizeEmailValue,
   normalizePatientAddressFields,
   normalizePtBrTitleCase,
@@ -27,6 +29,10 @@ function unwrapRows<T = any>(result: any): T[] {
   }
 
   return (result ?? []) as T[];
+}
+
+function normalizePatientCity(rowCity?: string | null, addressCity?: string | null) {
+  return normalizeCityNameValue(isLegacyNumericCityCode(rowCity) ? addressCity : rowCity) || normalizeCityNameValue(addressCity);
 }
 
 function unwrapInsertId(result: any): number {
@@ -894,7 +900,7 @@ export async function listPatients(
     );
     const fullName = normalizePtBrTitleCase(row.fullName ?? "");
     const email = normalizeEmailValue(row.email ?? "");
-    const city = normalizePtBrTitleCase(row.city ?? addressData.city ?? "");
+    const city = normalizePatientCity(row.city, addressData.city);
     const state = normalizeStateCode(row.state ?? addressData.state ?? "");
     const zipCode = String(row.zipCode ?? addressData.zip ?? "").trim();
 
@@ -994,7 +1000,7 @@ export async function getPatientById(id: number) {
   const addressData = normalizePatientAddressFields(parseStoredPatientAddress(row.address));
   const fullName = normalizePtBrTitleCase(row.fullName ?? "");
   const email = normalizeEmailValue(row.email ?? "");
-  const city = normalizePtBrTitleCase(row.city ?? addressData.city ?? "");
+  const city = normalizePatientCity(row.city, addressData.city);
   const state = normalizeStateCode(row.state ?? addressData.state ?? "");
   const zipCode = String(row.zipCode ?? addressData.zip ?? "").trim();
   const emergencyContactName = normalizePtBrTitleCase(row.emergencyContactName ?? "");
@@ -1029,7 +1035,7 @@ export async function updatePatient(id: number, data: any) {
     street: data.address ?? existing.address ?? "",
     number: data.addressNumber ?? existing.addressNumber ?? "",
     neighborhood: data.neighborhood ?? existing.neighborhood ?? "",
-    city: data.city ?? existing.city ?? "",
+    city: isLegacyNumericCityCode(data.city ?? existing.city) ? existing.city || "" : data.city ?? existing.city ?? "",
     state: data.state ?? existing.state ?? "",
     zip: data.zipCode ?? existing.zipCode ?? "",
   });

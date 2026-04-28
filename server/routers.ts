@@ -127,8 +127,13 @@ export const appRouter = router({
   }),
   twoFactor: twoFactorRouter,
   icd10: router({
+    list: publicProcedure
+      .input(z.object({ limit: z.number().optional() }).optional())
+      .query(async ({ input }) => {
+        return db.listIcd10(input?.limit);
+      }),
     search: publicProcedure
-      .input(z.object({ query: z.string().min(1), limit: z.number().optional() }))
+      .input(z.object({ query: z.string().optional().default(""), limit: z.number().optional() }))
       .query(async ({ input }) => {
         return db.searchIcd10(input.query, input.limit);
       }),
