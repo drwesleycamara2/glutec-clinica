@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { patientDisplayName } from "@/lib/patientDisplay";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -103,7 +104,7 @@ export default function Exames() {
         <Select value={filterPatientId?.toString() ?? ""} onValueChange={(v) => setFilterPatientId(v ? parseInt(v) : null)}>
           <SelectTrigger className="w-72 h-9"><SelectValue placeholder="Filtrar por paciente..." /></SelectTrigger>
           <SelectContent>
-            {patients?.map((p) => <SelectItem key={p.id} value={p.id.toString()}>{p.fullName}</SelectItem>)}
+            {patients?.map((p) => <SelectItem key={p.id} value={p.id.toString()}>{patientDisplayName(p)}</SelectItem>)}
           </SelectContent>
         </Select>
         {filterPatientId && <Button variant="ghost" size="sm" onClick={() => setFilterPatientId(null)}>Limpar</Button>}
@@ -200,7 +201,7 @@ export default function Exames() {
                 <Label>Paciente *</Label>
                 <Select value={form.patientId} onValueChange={(v) => setForm({ ...form, patientId: v })}>
                   <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{patients?.map((p) => <SelectItem key={p.id} value={p.id.toString()}>{p.fullName}</SelectItem>)}</SelectContent>
+                  <SelectContent>{patients?.map((p) => <SelectItem key={p.id} value={p.id.toString()}>{patientDisplayName(p)}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>

@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
+import { patientDisplayName } from "@/lib/patientDisplay";
 import { CalendarDays, Camera, CheckCircle2, Copy, FolderClosed, FolderPlus, ImageIcon, Layers3, Link2, Maximize2, Plus, Search, Trash2, Video } from "lucide-react";
 import { type ChangeEvent, type SyntheticEvent, useMemo, useRef, useState } from "react";
 import { useEffect } from "react";
@@ -121,7 +122,7 @@ export default function Fotos() {
 
   const pickPatient = (patient: any) => {
     setPatientId(String(patient.id));
-    setSelectedPatientLabel(patient.fullName ?? patient.name ?? "");
+    setSelectedPatientLabel(patientDisplayName(patient));
     setPatientSearch("");
     setSelectedFolderValue("all");
     setUploadFolderValue("none");
@@ -180,7 +181,7 @@ export default function Fotos() {
 
   useEffect(() => {
     if (selectedPatient?.fullName || selectedPatient?.name) {
-      setSelectedPatientLabel(selectedPatient.fullName ?? selectedPatient.name ?? "");
+      setSelectedPatientLabel(patientDisplayName(selectedPatient));
     }
   }, [selectedPatient]);
 
@@ -209,8 +210,8 @@ export default function Fotos() {
                   <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl border border-border/70 bg-background shadow-xl">
                     {patientMatches?.map((patient) => (
                       <button key={patient.id} type="button" className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm transition-colors hover:bg-muted/40" onClick={() => pickPatient(patient)}>
-                        <span className="font-medium text-foreground">{patient.fullName ?? patient.name}</span>
-                        <span className="text-xs text-muted-foreground">ID {patient.id}</span>
+                        <span className="font-medium text-foreground">{patientDisplayName(patient)}</span>
+                        <span className="text-xs text-muted-foreground">{patient.cpf || `ID ${patient.id}`}</span>
                       </button>
                     ))}
                   </div>

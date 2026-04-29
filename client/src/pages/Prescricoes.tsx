@@ -1,5 +1,6 @@
 ﻿import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { patientDisplayName } from "@/lib/patientDisplay";
 import { useEffect } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -172,7 +173,7 @@ export default function Prescricoes() {
               <SelectItem value="all">Todos os pacientes</SelectItem>
               {(patients ?? []).map((patient) => (
                 <SelectItem key={patient.id} value={String(patient.id)}>
-                  {patient.fullName}
+                  {patientDisplayName(patient)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -289,7 +290,7 @@ export default function Prescricoes() {
                   <SelectContent>
                     {(patients ?? []).map((patient) => (
                       <SelectItem key={patient.id} value={String(patient.id)}>
-                        {patient.fullName}
+                        {patientDisplayName(patient)}
                       </SelectItem>
                     ))}
                   </SelectContent>

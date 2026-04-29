@@ -4,7 +4,6 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -13,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Plus, Search, User, Phone, Calendar, ChevronRight, Loader2, MapPin, Mail, Pencil } from "lucide-react";
 import { PatientEditDialog } from "@/components/PatientEditDialog";
+import { PatientAttentionMark, PatientRecordBadge } from "@/lib/patientDisplay";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "desconhecido"];
 const CIVIL_STATES = [
@@ -233,7 +233,11 @@ export default function Pacientes() {
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="font-semibold text-sm truncate">{patient.fullName}</p>
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <PatientAttentionMark patient={patient} />
+                        <PatientRecordBadge patient={patient} />
+                        <p className="truncate text-sm font-semibold">{patient.fullName}</p>
+                      </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <button
                           type="button"

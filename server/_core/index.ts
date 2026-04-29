@@ -550,6 +550,7 @@ async function startServer() {
       );
       return res.json({ success: true });
     } catch (error: any) {
+      console.error("[PublicAnamnesisSubmit] Failed:", error);
       return res.status(400).json({ error: error?.message || "Não foi possível enviar a anamnese." });
     }
   });

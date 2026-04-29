@@ -856,6 +856,55 @@ function normalizeTemplateRow(row: any) {
   };
 }
 
+function latestPatientPhotoUrlExpression(patientAlias = "p") {
+  const patientIdRef = sql.raw(`${patientAlias}.id`);
+  return sql`(
+    select ph.photoUrl
+    from patient_photos ph
+    where ph.patientId = ${patientIdRef}
+      and coalesce(ph.mediaType, 'image') <> 'video'
+    order by
+      case
+        when ph.category = 'perfil' then 0
+        when ph.description like 'Foto de perfil%' then 1
+        else 2
+      end,
+      ph.createdAt desc,
+      ph.id desc
+    limit 1
+  )`;
+}
+
+function normalizePatientSexValue(value: unknown, fallback = "nao_informado") {
+  const normalized = String(value ?? fallback ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\s-]+/g, "_");
+
+  if (["m", "male", "masculino"].includes(normalized)) return "masculino";
+  if (["f", "female", "feminino"].includes(normalized)) return "feminino";
+  if (["intersexo", "intersex"].includes(normalized)) return "intersexo";
+  if (["nao_binario", "non_binary", "nonbinary"].includes(normalized)) return "nao_binario";
+  if (["outro", "other"].includes(normalized)) return "outro";
+  return fallback || "nao_informado";
+}
+
+function normalizeBiologicalSexValue(value: unknown, fallback = "nao_informado") {
+  const normalized = normalizePatientSexValue(value, fallback);
+  return ["masculino", "feminino", "intersexo"].includes(normalized) ? normalized : "nao_informado";
+}
+
+async function getNextPatientRecordNumber(db: any) {
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select coalesce(max(recordNumber), 0) + 1 as nextRecordNumber
+    from patients
+  `));
+  const nextRecordNumber = Number(rows[0]?.nextRecordNumber ?? 1);
+  return Number.isFinite(nextRecordNumber) && nextRecordNumber > 0 ? nextRecordNumber : 1;
+}
+
 // --- PATIENTS ----------------------------------------------------------------
 export async function listPatients(
   query?: string,
@@ -865,30 +914,39 @@ export async function listPatients(
   const db = await getDb();
   if (!db) return [];
 
+  const columns = await getTableColumns("patients");
   const normalizedQuery = query?.trim();
   const orderByClause =
     sort === "name_desc"
-      ? sql`fullName desc`
+      ? sql`p.fullName desc`
       : sort === "created_desc"
-      ? sql`createdAt desc, id desc`
+      ? sql`p.createdAt desc, p.id desc`
       : sort === "created_asc"
-      ? sql`createdAt asc, id asc`
-      : sql`fullName asc`;
+      ? sql`p.createdAt asc, p.id asc`
+      : sql`p.fullName asc`;
+
+  const searchClauses = normalizedQuery
+    ? [
+        sql`p.fullName like ${`%${normalizedQuery}%`}`,
+        sql`p.cpf like ${`%${normalizedQuery}%`}`,
+        sql`p.phone like ${`%${normalizedQuery}%`}`,
+      ]
+    : [];
+
+  if (normalizedQuery && columns.has("recordNumber") && /^\d+$/.test(normalizedQuery)) {
+    searchClauses.push(sql`p.recordNumber = ${Number(normalizedQuery)}`);
+  }
 
   const whereClause = normalizedQuery
     ? sql`
-        where coalesce(active, 1) <> 0
-          and (
-            fullName like ${`%${normalizedQuery}%`}
-            or cpf like ${`%${normalizedQuery}%`}
-            or phone like ${`%${normalizedQuery}%`}
-          )
+        where coalesce(p.active, 1) <> 0
+          and (${sql.join(searchClauses, sql` or `)})
       `
-    : sql`where coalesce(active, 1) <> 0`;
+    : sql`where coalesce(p.active, 1) <> 0`;
 
   const rows = unwrapRows<any>(await db.execute(sql`
-    select *
-    from patients
+    select p.*, ${latestPatientPhotoUrlExpression("p")} as photoUrl
+    from patients p
     ${whereClause}
     order by ${orderByClause}
     limit ${limit}
@@ -922,6 +980,7 @@ export async function createPatient(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
+  const columns = await getTableColumns("patients");
   const normalizedAddress = normalizePatientAddressFields({
     street: data.address,
     number: data.addressNumber,
@@ -933,8 +992,9 @@ export async function createPatient(data: any, userId: number) {
   const normalizedFullName = normalizePtBrTitleCase(data.fullName);
   const normalizedEmail = normalizeEmailValue(data.email);
   const normalizedEmergencyContactName = normalizePtBrTitleCase(data.emergencyContactName);
+  const normalizedGender = normalizePatientSexValue(data.gender);
+  const normalizedBiologicalSex = normalizeBiologicalSexValue(data.biologicalSex ?? data.biological_sex ?? data.sex ?? normalizedGender);
 
-  // Store full address (including neighborhood) as JSON in the `address` column
   const addressJson = JSON.stringify({
     street: normalizedAddress.street,
     number: normalizedAddress.number,
@@ -944,36 +1004,49 @@ export async function createPatient(data: any, userId: number) {
     zip: normalizedAddress.zip,
   });
 
+  const payload: Record<string, unknown> = {};
+  const setColumn = (column: string, value: unknown) => {
+    if (columns.has(column)) payload[column] = value;
+  };
+
+  setColumn("fullName", normalizedFullName);
+  setColumn("name", normalizedFullName);
+  setColumn("cpf", data.cpf || null);
+  setColumn("birthDate", data.birthDate || null);
+  setColumn("gender", normalizedGender);
+  setColumn("biologicalSex", normalizedBiologicalSex);
+  setColumn("phone", data.phone || null);
+  setColumn("email", nullableOrNull(normalizedEmail));
+  setColumn("address", addressJson);
+  setColumn("addressNumber", nullableOrNull(normalizedAddress.number));
+  setColumn("neighborhood", nullableOrNull(normalizedAddress.neighborhood));
+  setColumn("city", nullableOrNull(normalizedAddress.city));
+  setColumn("state", nullableOrNull(normalizedAddress.state));
+  setColumn("zipCode", nullableOrNull(normalizedAddress.zip));
+  setColumn("rg", data.rg || null);
+  setColumn("bloodType", normalizeStoredBloodType(data.bloodType));
+  setColumn("allergies", data.allergies || null);
+  setColumn("chronicConditions", data.chronicConditions || null);
+  setColumn("insuranceName", data.insuranceName || null);
+  setColumn("insuranceNumber", data.insuranceNumber || null);
+  setColumn("healthInsurance", data.insuranceName || null);
+  setColumn("healthInsuranceNumber", data.insuranceNumber || null);
+  setColumn("emergencyContactName", nullableOrNull(normalizedEmergencyContactName));
+  setColumn("emergencyContactPhone", data.emergencyContactPhone || null);
+  setColumn("active", true);
+  setColumn("createdBy", userId);
+  if (columns.has("recordNumber")) {
+    setColumn("recordNumber", await getNextPatientRecordNumber(db));
+  }
+
+  const entries = Object.entries(payload);
+  if (entries.length === 0) throw new Error("Tabela de pacientes sem colunas validas para cadastro.");
+
   const result = await db.execute(sql`
     INSERT INTO patients (
-      fullName, cpf, birthDate, gender,
-      phone, email, address,
-      city, state, zipCode,
-      rg, bloodType, allergies, chronicConditions,
-      insuranceName, insuranceNumber,
-      emergencyContactName, emergencyContactPhone,
-      active, createdBy
+      ${sql.join(entries.map(([key]) => sql.raw(`\`${key}\``)), sql`, `)}
     ) VALUES (
-      ${normalizedFullName},
-      ${data.cpf || null},
-      ${data.birthDate || null},
-      ${data.gender || "nao_informado"},
-      ${data.phone || null},
-      ${nullableOrNull(normalizedEmail)},
-      ${addressJson},
-      ${nullableOrNull(normalizedAddress.city)},
-      ${nullableOrNull(normalizedAddress.state)},
-      ${nullableOrNull(normalizedAddress.zip)},
-      ${data.rg || null},
-      ${normalizeStoredBloodType(data.bloodType)},
-      ${data.allergies || null},
-      ${data.chronicConditions || null},
-      ${data.insuranceName || null},
-      ${data.insuranceNumber || null},
-      ${nullableOrNull(normalizedEmergencyContactName)},
-      ${data.emergencyContactPhone || null},
-      true,
-      ${userId}
+      ${sql.join(entries.map(([, value]) => sql`${value}`), sql`, `)}
     )
   `);
 
@@ -988,9 +1061,9 @@ export async function getPatientById(id: number) {
   if (!db) return null;
 
   const rows = unwrapRows<any>(await db.execute(sql`
-    select *
-    from patients
-    where id = ${id}
+    select p.*, ${latestPatientPhotoUrlExpression("p")} as photoUrl
+    from patients p
+    where p.id = ${id}
     limit 1
   `));
 
@@ -1064,7 +1137,8 @@ export async function updatePatient(id: number, data: any) {
   setColumn("name", normalizedFullName);
   setColumn("cpf", data.cpf ?? existing.cpf ?? null);
   setColumn("birthDate", data.birthDate ?? existing.birthDate ?? null);
-  setColumn("gender", data.gender ?? existing.gender ?? "nao_informado");
+  setColumn("gender", normalizePatientSexValue(data.gender ?? existing.gender ?? "nao_informado"));
+  setColumn("biologicalSex", normalizeBiologicalSexValue(data.biologicalSex ?? existing.biologicalSex ?? existing.gender ?? "nao_informado"));
   setColumn("phone", data.phone ?? existing.phone ?? null);
   setColumn("email", nullableOrNull(normalizedEmail));
   setColumn("address", addressJson);
@@ -2081,6 +2155,10 @@ export async function uploadPatientPhoto(data: any, userId: number) {
   if (!db) throw new Error("DB unavailable");
 
   const sourceFolder = data.mediaSource === "patient" ? "patient-submissions" : "manual";
+  const photoColumns = await getTableColumns("patient_photos");
+  const categoryType = photoColumns.get("category") ?? "";
+  const requestedCategory = String(data.category ?? "evolucao").trim() || "evolucao";
+  const normalizedCategory = requestedCategory === "perfil" && !categoryType.includes("'perfil'") ? "outro" : requestedCategory;
   const stored = savePatientMediaToPublicDir(
     Number(data.patientId),
     String(data.base64 ?? ""),
@@ -2092,7 +2170,7 @@ export async function uploadPatientPhoto(data: any, userId: number) {
     insert into patient_photos
       (patientId, folderId, category, description, photoUrl, thumbnailUrl, photoKey, mimeType, originalFileName, mediaType, mediaSource, takenAt, uploadedBy)
     values
-      (${Number(data.patientId)}, ${data.folderId ?? null}, ${data.category}, ${data.description ?? null}, ${stored.photoUrl}, ${stored.photoUrl}, ${stored.photoKey}, ${stored.mimeType ?? data.mimeType ?? null}, ${data.originalFileName ?? null}, ${stored.mediaType}, ${data.mediaSource === 'patient' ? 'patient' : 'clinic'}, ${data.takenAt ? new Date(data.takenAt) : null}, ${userId})
+      (${Number(data.patientId)}, ${data.folderId ?? null}, ${normalizedCategory}, ${data.description ?? null}, ${stored.photoUrl}, ${stored.photoUrl}, ${stored.photoKey}, ${stored.mimeType ?? data.mimeType ?? null}, ${data.originalFileName ?? null}, ${stored.mediaType}, ${data.mediaSource === 'patient' ? 'patient' : 'clinic'}, ${data.takenAt ? new Date(data.takenAt) : null}, ${userId})
   `);
 
   const insertedId = unwrapInsertId(result);

@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
+import { patientDisplayName } from "@/lib/patientDisplay";
 import { toast } from "sonner";
 import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
 import {
@@ -183,7 +184,8 @@ export default function NfseEmissao() {
     return patients.filter((p: any) => {
       const patientName = String(p.name || p.fullName || "").toLowerCase();
       const patientCpf = String(p.cpf || "");
-      return patientName.includes(q) || patientCpf.includes(q);
+      const patientRecord = String(p.recordNumber || "");
+      return patientName.includes(q) || patientCpf.includes(q) || patientRecord.includes(q);
     }).slice(0, 8);
   }, [patients, patientSearch]);
 
@@ -369,7 +371,7 @@ export default function NfseEmissao() {
                     onClick={() => selectPatient(p)}
                     className="w-full text-left px-3 py-2 hover:bg-muted/50 text-sm border-b last:border-0"
                   >
-                    <span className="font-medium">{p.name || p.fullName}</span>
+                    <span className="font-medium">{patientDisplayName(p)}</span>
                     {p.cpf && <span className="text-muted-foreground ml-2">CPF: {formatCpfCnpj(p.cpf)}</span>}
                   </button>
                 ))}

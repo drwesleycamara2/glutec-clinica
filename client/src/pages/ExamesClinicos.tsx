@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { patientDisplayName } from "@/lib/patientDisplay";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useEffect } from "react";
 import { AllergyAlert } from "@/components/AllergyAlert";
@@ -112,7 +113,7 @@ export default function ExamesClinicos() {
 
   useEffect(() => {
     if (patient?.fullName || patient?.name) {
-      setSelectedPatientLabel(patient.fullName ?? patient.name ?? "");
+      setSelectedPatientLabel(patientDisplayName(patient));
     }
   }, [patient]);
 
@@ -166,11 +167,11 @@ export default function ExamesClinicos() {
                       className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm transition-colors hover:bg-muted/40"
                       onClick={() => {
                         setSelectedPatientId(match.id);
-                        setSelectedPatientLabel(match.fullName ?? match.name ?? "");
+                        setSelectedPatientLabel(patientDisplayName(match));
                         setPatientSearch("");
                       }}
                     >
-                      <span className="font-medium text-foreground">{match.fullName ?? match.name}</span>
+                      <span className="font-medium text-foreground">{patientDisplayName(match)}</span>
                       <span className="text-xs text-muted-foreground">ID {match.id}</span>
                     </button>
                   ))}

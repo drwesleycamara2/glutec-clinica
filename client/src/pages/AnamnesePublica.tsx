@@ -9,6 +9,64 @@ import {
 
 const PRIVACY_NOTICE = "Seus dados são protegidos por sigilo médico-paciente. As respostas são usadas para seu atendimento e não ficam expostas a toda a equipe da clínica.";
 
+const PROFILE_PHOTO_MAX_SIDE = 900;
+const PROFILE_PHOTO_QUALITY = 0.82;
+const PROFILE_PHOTO_MAX_INPUT_MB = 20;
+
+async function resizeProfilePhoto(file: File) {
+  if (file.size > PROFILE_PHOTO_MAX_INPUT_MB * 1024 * 1024) {
+    throw new Error("A foto selecionada est\u00e1 muito grande. Envie uma imagem de at\u00e9 20 MB.");
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("N\u00e3o foi poss\u00edvel carregar a foto selecionada."));
+      img.src = objectUrl;
+    });
+
+    const scale = Math.min(1, PROFILE_PHOTO_MAX_SIDE / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height));
+    const width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
+    const height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("N\u00e3o foi poss\u00edvel preparar a foto para envio.");
+    context.drawImage(image, 0, 0, width, height);
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((result) => {
+        if (result) resolve(result);
+        else reject(new Error("N\u00e3o foi poss\u00edvel redimensionar a foto."));
+      }, "image/jpeg", PROFILE_PHOTO_QUALITY);
+    });
+
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result ?? "");
+        resolve(result.includes(",") ? result.split(",")[1] : result);
+      };
+      reader.onerror = () => reject(new Error("N\u00e3o foi poss\u00edvel ler a foto redimensionada."));
+      reader.readAsDataURL(blob);
+    });
+
+    const safeName = (file.name || "perfil-anamnese").replace(/\.[^.]+$/, "") || "perfil-anamnese";
+    return {
+      base64,
+      mimeType: "image/jpeg",
+      fileName: `${safeName}.jpg`,
+      previewUrl: URL.createObjectURL(blob),
+    };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+
 type PublicAnamnesisResponse = {
   patientName?: string;
   title?: string;
@@ -108,25 +166,26 @@ export default function AnamnesePublica() {
     const file = event.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      setError("Envie apenas uma foto real da própria pessoa, em formato de imagem.");
+      setError("Envie apenas uma foto real da pr\u00f3pria pessoa, em formato de imagem.");
+      event.target.value = "";
       return;
     }
 
-    const base64 = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = String(reader.result ?? "");
-        resolve(result.includes(",") ? result.split(",")[1] : result);
-      };
-      reader.onerror = () => reject(new Error("Não foi possível ler a foto selecionada."));
-      reader.readAsDataURL(file);
-    });
-
-    setProfilePhotoBase64(base64);
-    setProfilePhotoMimeType(file.type);
-    setProfilePhotoFileName(file.name);
-    setProfilePhotoPreview(URL.createObjectURL(file));
-    setError("");
+    try {
+      const resized = await resizeProfilePhoto(file);
+      setProfilePhotoBase64(resized.base64);
+      setProfilePhotoMimeType(resized.mimeType);
+      setProfilePhotoFileName(resized.fileName);
+      setProfilePhotoPreview(resized.previewUrl);
+      setError("");
+    } catch (err: any) {
+      setProfilePhotoBase64("");
+      setProfilePhotoMimeType("");
+      setProfilePhotoFileName("");
+      setProfilePhotoPreview("");
+      setError(err?.message || "N\u00e3o foi poss\u00edvel preparar a foto selecionada.");
+      event.target.value = "";
+    }
   };
 
   const handleSubmit = async () => {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import type { ChangeEvent, ReactNode } from "react";
 import { trpc } from "@/lib/trpc";
+import { PatientAttentionMark, PatientRecordBadge } from "@/lib/patientDisplay";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -2194,7 +2195,9 @@ export default function ProntuarioDetalhe() {
         <Button variant="ghost" size="sm" onClick={() => setLocation("/prontuarios")}><ArrowLeft className="h-4 w-4 mr-1" />Voltar</Button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-semibold truncate">{patient.fullName}</h1>
+            <PatientAttentionMark patient={patient} />
+            <PatientRecordBadge patient={patient} />
+            <h1 className="truncate text-xl font-semibold">{patient.fullName}</h1>
             <Badge variant="outline" className="text-[10px] shrink-0">PEP · CFM 1821/2007</Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">

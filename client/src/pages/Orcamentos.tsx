@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
+import { patientDisplayName } from "@/lib/patientDisplay";
 import {
   Calculator,
   Check,
@@ -249,7 +250,7 @@ export default function Orcamentos() {
 
   function selectPatient(patient: any) {
     setPatientId(String(patient.id));
-    setPatientSearch(patient.name || "");
+    setPatientSearch(patientDisplayName(patient));
   }
 
   function addItem() {
@@ -435,7 +436,7 @@ export default function Orcamentos() {
                           className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
                           onClick={() => selectPatient(patient)}
                         >
-                          <span>{patient.name}</span>
+                          <span>{patientDisplayName(patient)}</span>
                           <span className="text-xs text-muted-foreground">
                             {patient.cpf || `ID ${patient.id}`}
                           </span>
@@ -445,7 +446,7 @@ export default function Orcamentos() {
                   )}
                   {selectedPatient && (
                     <p className="text-xs text-muted-foreground">
-                      Selecionado: {selectedPatient.name} {selectedPatient.cpf ? `- ${selectedPatient.cpf}` : ""}
+                      Selecionado: {patientDisplayName(selectedPatient)} {selectedPatient.cpf ? `- ${selectedPatient.cpf}` : ""}
                     </p>
                   )}
                 </div>

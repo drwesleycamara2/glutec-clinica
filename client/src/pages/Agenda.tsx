@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { patientDisplayName } from "@/lib/patientDisplay";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -388,7 +389,7 @@ export default function Agenda() {
   }, [daysInMonth, firstDayOfMonth]);
 
   const getPatientName = (patientId: number) =>
-    patients?.find((patient) => patient.id === patientId)?.fullName ?? `Paciente #${patientId}`;
+    (() => { const patient = patients?.find((item) => item.id === patientId); return patient ? patientDisplayName(patient) : `Paciente #${patientId}`; })();
 
   const getDoctorName = (doctorId: number) =>
     doctors?.find((doctor) => doctor.id === doctorId)?.name ?? `Profissional #${doctorId}`;
@@ -1230,7 +1231,7 @@ export default function Agenda() {
                 <SelectContent>
                   {patients?.map((patient) => (
                     <SelectItem key={patient.id} value={String(patient.id)}>
-                      {patient.fullName}
+                      {patientDisplayName(patient)}
                     </SelectItem>
                   ))}
                 </SelectContent>

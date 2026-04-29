@@ -1,6 +1,11 @@
 import { getDb } from "./db";
 import { eq, like, and, gte, lte, desc, sql } from "drizzle-orm";
 
+function unwrapRows<T = any>(result: any): T[] {
+  if (Array.isArray(result) && Array.isArray(result[0])) return result[0] as T[];
+  return Array.isArray(result) ? (result as T[]) : [];
+}
+
 /**
  * ─── ATENDIMENTO RETROATIVO ──────────────────────────────────────────────
  * 
@@ -258,29 +263,43 @@ export async function searchPatientsAutocomplete(
   const db = await getDb();
   if (!db) return [];
 
-  if (!query || query.trim().length === 0) {
-    return [];
-  }
+  const normalizedQuery = query?.trim();
+  if (!normalizedQuery) return [];
 
-  const searchTerm = `%${query}%`;
+  const searchTerm = `%${normalizedQuery}%`;
+  const recordNumberClause = /^\d+$/.test(normalizedQuery)
+    ? sql`or p.recordNumber = ${Number(normalizedQuery)}`
+    : sql``;
 
-  // Buscar por nome, CPF ou email
-  const results = await db.select({
-    id: sql`id`,
-    fullName: sql`fullName`,
-    cpf: sql`cpf`,
-    email: sql`email`,
-    phone: sql`phone`,
-    birthDate: sql`birthDate`,
-    photoUrl: sql`photoUrl`,
-  }).from(sql`patients`)
-    .where(sql`(fullName LIKE ${searchTerm} OR cpf LIKE ${searchTerm} OR email LIKE ${searchTerm})`)
-    .orderBy(sql`CASE WHEN fullName LIKE ${query}% THEN 0 ELSE 1 END, fullName`)
-    .limit(limit);
-
-  return results;
+  return unwrapRows<any>(await db.execute(sql`
+    select
+      p.id,
+      p.fullName,
+      p.recordNumber,
+      p.biologicalSex,
+      p.gender,
+      p.cpf,
+      p.email,
+      p.phone,
+      p.birthDate,
+      (
+        select ph.photoUrl
+        from patient_photos ph
+        where ph.patientId = p.id
+          and coalesce(ph.mediaType, 'image') <> 'video'
+        order by
+          case when ph.category = 'perfil' then 0 when ph.description like 'Foto de perfil%' then 1 else 2 end,
+          ph.createdAt desc,
+          ph.id desc
+        limit 1
+      ) as photoUrl
+    from patients p
+    where coalesce(p.active, 1) <> 0
+      and (p.fullName like ${searchTerm} or p.cpf like ${searchTerm} or p.email like ${searchTerm} ${recordNumberClause})
+    order by case when p.fullName like ${`${normalizedQuery}%`} then 0 else 1 end, p.fullName
+    limit ${limit}
+  `));
 }
-
 /**
  * ─── PERMISSÕES CUSTOMIZÁVEIS ───────────────────────────────────────────
  * 

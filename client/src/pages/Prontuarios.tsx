@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, FileText, User, ChevronRight, Loader2, Pencil, Stethoscope } from "lucide-react";
 import { PatientEditDialog } from "@/components/PatientEditDialog";
+import { PatientAttentionMark, PatientRecordBadge, patientDisplayName } from "@/lib/patientDisplay";
 
 export default function Prontuarios() {
   const [, setLocation] = useLocation();
@@ -78,13 +79,17 @@ export default function Prontuarios() {
               <CardContent className="flex items-center gap-4 p-4">
                 <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                   {patient.photoUrl ? (
-                    <img src={patient.photoUrl} alt={patient.fullName} className="h-10 w-10 rounded-full object-cover" />
+                    <img src={patient.photoUrl} alt={patientDisplayName(patient)} className="h-10 w-10 rounded-full object-cover" />
                   ) : (
                     <User className="h-5 w-5 text-primary" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate">{patient.fullName}</p>
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <PatientAttentionMark patient={patient} />
+                    <PatientRecordBadge patient={patient} />
+                    <p className="truncate text-sm font-semibold">{patient.fullName}</p>
+                  </div>
                   <div className="flex items-center gap-3 mt-0.5">
                     {patient.birthDate && (
                       <span className="text-xs text-muted-foreground">

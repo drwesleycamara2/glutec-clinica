@@ -62,6 +62,7 @@ type Form = {
   cpf: string;
   birthDate: string;
   gender: string;
+  biologicalSex: string;
   zipCode: string;
   address: string;
   addressNumber: string;
@@ -81,7 +82,7 @@ type Form = {
 };
 
 const EMPTY: Form = {
-  fullName: "", cpf: "", birthDate: "", gender: "nao_informado",
+  fullName: "", cpf: "", birthDate: "", gender: "nao_informado", biologicalSex: "nao_informado",
   zipCode: "", address: "", addressNumber: "", neighborhood: "", city: "", state: "",
   phone: "", rg: "", email: "",
   bloodType: "desconhecido", allergies: "", chronicConditions: "",
@@ -138,6 +139,7 @@ export function PatientEditDialog({ patientId, onClose, onSaved, onDeleted }: Pr
       cpf: patient.cpf ? formatCPF(patient.cpf) : "",
       birthDate: (patient.birthDate ? String(patient.birthDate).slice(0, 10) : "") || "",
       gender: patient.gender || "nao_informado",
+      biologicalSex: (patient as any).biologicalSex || patient.gender || "nao_informado",
       zipCode: patient.zipCode ? formatCEP(patient.zipCode) : "",
       address: patient.address || "",
       addressNumber: (patient as any).addressNumber || "",
@@ -189,6 +191,7 @@ export function PatientEditDialog({ patientId, onClose, onSaved, onDeleted }: Pr
       cpf: form.cpf.replace(/\D/g, "") || undefined,
       birthDate: form.birthDate || undefined,
       gender: form.gender,
+      biologicalSex: form.biologicalSex,
       phone: form.phone.replace(/\D/g, "") || undefined,
       email: form.email || undefined,
       zipCode: form.zipCode.replace(/\D/g, "") || undefined,
@@ -262,7 +265,7 @@ export function PatientEditDialog({ patientId, onClose, onSaved, onDeleted }: Pr
                   />
                 </div>
                 <div>
-                  <Label>Sexo</Label>
+                  <Label>G&ecirc;nero</Label>
                   <Select value={form.gender} onValueChange={(v) => setForm({ ...form, gender: v })}>
                     <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -270,6 +273,18 @@ export function PatientEditDialog({ patientId, onClose, onSaved, onDeleted }: Pr
                       <SelectItem value="masculino">Masculino</SelectItem>
                       <SelectItem value="feminino">Feminino</SelectItem>
                       <SelectItem value="outro">Outro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Sexo biológico</Label>
+                  <Select value={form.biologicalSex} onValueChange={(v) => setForm({ ...form, biologicalSex: v })}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="nao_informado">Não informado</SelectItem>
+                      <SelectItem value="masculino">Masculino</SelectItem>
+                      <SelectItem value="feminino">Feminino</SelectItem>
+                      <SelectItem value="intersexo">Intersexo</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

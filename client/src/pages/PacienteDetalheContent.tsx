@@ -8,6 +8,7 @@ import { Activity, ArrowLeft, FileText, Link2, Loader2, MessageCircle, Pencil, U
 import { toast } from "sonner";
 import { useLocation, useParams } from "wouter";
 import { PatientEditDialog } from "@/components/PatientEditDialog";
+import { PatientAttentionMark, PatientRecordBadge } from "@/lib/patientDisplay";
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
@@ -74,7 +75,11 @@ export default function PacienteDetalheContent() {
           Voltar
         </Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-semibold">{patient.fullName}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <PatientAttentionMark patient={patient} />
+            <PatientRecordBadge patient={patient} />
+            <h1 className="text-2xl font-semibold">{patient.fullName}</h1>
+          </div>
           <p className="mt-1 text-sm text-muted-foreground">Cadastro do paciente</p>
         </div>
         <Button variant="outline" onClick={() => setEditOpen(true)}>
@@ -103,9 +108,11 @@ export default function PacienteDetalheContent() {
           </CardHeader>
           <CardContent className="space-y-3">
             {[
+              { label: "Nº prontuário", value: patient.recordNumber ? `#${patient.recordNumber}` : "—" },
               { label: "Nome", value: patient.fullName },
               { label: "Nascimento", value: formatDate(patient.birthDate) },
-              { label: "Sexo", value: patient.gender ?? "—" },
+              { label: "Gênero", value: patient.gender ?? "—" },
+              { label: "Sexo biológico", value: (patient as any).biologicalSex ?? "—" },
               { label: "CPF", value: patient.cpf ?? "—" },
               { label: "Telefone", value: patient.phone ?? "—" },
               { label: "E-mail", value: patient.email ?? "—" },
