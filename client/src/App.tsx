@@ -1,8 +1,8 @@
-﻿import { Toaster } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Dashboard from "./pages/Dashboard.premium";
@@ -56,6 +56,9 @@ const publicPaths = [
   "/anamnese-preencher",
 ];
 const sessionSetupPaths = ["/configurar-2fa", "/trocar-senha"];
+const INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000;
+const LAST_ACTIVITY_KEY = "glutec:last-activity-at";
+const ACTIVITY_EVENTS = ["pointerdown", "keydown", "scroll", "touchstart", "focus"] as const;
 
 function AccessDenied() {
   return (
@@ -128,7 +131,69 @@ function ProtectedEntry() {
 
 function Router() {
   const [location, setLocation] = useLocation();
-  const { loading, user } = useAuth();
+  const { loading, user, logout } = useAuth();
+
+  const forceLogoutForInactivity = useCallback(async () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(LAST_ACTIVITY_KEY);
+    }
+    try {
+      await logout();
+    } catch {
+      // Mesmo se o servidor já expirou a sessão, a interface deve voltar ao login.
+    } finally {
+      setLocation("/login");
+    }
+  }, [logout, setLocation]);
+
+  useEffect(() => {
+    if (loading || !user || typeof window === "undefined") return;
+
+    const isPublicPath = publicPaths.some(
+      path => location === path || location.startsWith(`${path}?`) || location.startsWith(`${path}/`)
+    );
+    if (isPublicPath) return;
+
+    let loggingOut = false;
+    const enforceTimeout = () => {
+      const lastActivityAt = Number(window.localStorage.getItem(LAST_ACTIVITY_KEY) || 0);
+      if (lastActivityAt > 0 && Date.now() - lastActivityAt >= INACTIVITY_TIMEOUT_MS) {
+        loggingOut = true;
+        void forceLogoutForInactivity();
+        return true;
+      }
+      return false;
+    };
+
+    if (enforceTimeout()) return;
+
+    const markActivity = () => {
+      if (loggingOut) return;
+      window.localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+    };
+    const handleActivity = () => {
+      if (!enforceTimeout()) markActivity();
+    };
+
+    markActivity();
+    ACTIVITY_EVENTS.forEach((eventName) => {
+      window.addEventListener(eventName, handleActivity, { passive: true });
+    });
+    const interval = window.setInterval(enforceTimeout, 60_000);
+
+    return () => {
+      ACTIVITY_EVENTS.forEach((eventName) => {
+        window.removeEventListener(eventName, handleActivity);
+      });
+      window.clearInterval(interval);
+    };
+  }, [forceLogoutForInactivity, loading, location, user]);
+
+  useEffect(() => {
+    if (!loading && !user && typeof window !== "undefined") {
+      window.localStorage.removeItem(LAST_ACTIVITY_KEY);
+    }
+  }, [loading, user]);
 
   useEffect(() => {
     if (loading) return;

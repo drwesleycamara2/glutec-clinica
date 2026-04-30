@@ -239,9 +239,7 @@ export function registerAuthRoutes(app: Express) {
     const cookieOptions = getSessionCookieOptions(req);
     res.cookie(COOKIE_NAME, sessionToken, {
       ...cookieOptions,
-      ...(user.mustChangePassword
-        ? { maxAge: MUST_CHANGE_PASSWORD_SESSION_MS }
-        : {}),
+      maxAge: user.mustChangePassword ? MUST_CHANGE_PASSWORD_SESSION_MS : SESSION_DURATION_MS,
     });
 
     if (user.mustChangePassword) {
@@ -284,7 +282,7 @@ export function registerAuthRoutes(app: Express) {
     });
 
     const cookieOptions = getSessionCookieOptions(req);
-    res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
+    res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: SESSION_DURATION_MS });
     return res.json({ status: "ok", user: sanitizeUser((await db.getUserById(user.id)) ?? user) });
   });
 
@@ -324,7 +322,7 @@ export function registerAuthRoutes(app: Express) {
     });
 
     const cookieOptions = getSessionCookieOptions(req);
-    res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
+    res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: SESSION_DURATION_MS });
     return res.json({
       status: "ok",
       user: sanitizeUser((await db.getUserById(user.id)) ?? user),
@@ -384,7 +382,7 @@ export function registerAuthRoutes(app: Express) {
     });
 
     const cookieOptions = getSessionCookieOptions(req);
-    res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
+    res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: SESSION_DURATION_MS });
     return res.json({ status: "requires_2fa_setup", user: sanitizeUser(user) });
   });
 
@@ -431,7 +429,7 @@ export function registerAuthRoutes(app: Express) {
     });
 
     const cookieOptions = getSessionCookieOptions(req);
-    res.cookie(COOKIE_NAME, sessionToken, cookieOptions);
+    res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: SESSION_DURATION_MS });
     return res.json({
       status: updatedUser.twoFactorEnabled ? "ok" : "requires_2fa_setup",
       user: sanitizeUser(updatedUser),

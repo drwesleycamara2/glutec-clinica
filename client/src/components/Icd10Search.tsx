@@ -137,14 +137,21 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
     const updateDropdownPosition = () => {
       const rect = searchInputRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const availableHeight = Math.max(220, window.innerHeight - rect.bottom - 18);
+      const viewportPadding = 12;
+      const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - viewportPadding);
+      const spaceAbove = Math.max(0, rect.top - viewportPadding);
+      const openAbove = spaceBelow < 260 && spaceAbove > spaceBelow;
+      const maxHeight = Math.min(420, Math.max(180, (openAbove ? spaceAbove : spaceBelow) - 8));
+      const width = Math.min(rect.width, window.innerWidth - viewportPadding * 2);
       setDropdownStyle({
         position: "fixed",
-        left: rect.left,
-        top: rect.bottom + 8,
-        width: rect.width,
-        maxHeight: Math.min(420, availableHeight),
-        zIndex: 10000,
+        left: Math.max(viewportPadding, rect.left),
+        top: openAbove
+          ? Math.max(viewportPadding, rect.top - maxHeight - 8)
+          : Math.min(rect.bottom + 8, window.innerHeight - viewportPadding - maxHeight),
+        width,
+        maxHeight,
+        zIndex: 2147483647,
       });
     };
 

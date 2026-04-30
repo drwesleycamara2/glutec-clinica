@@ -200,7 +200,7 @@ export const appRouter = router({
       if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
       return db.getAllUsers();
     }),
-    
+
     listUsers: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
       return db.getAllUsers();
@@ -929,7 +929,10 @@ export const appRouter = router({
         takenAt: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        return dbComplete.uploadPatientPhoto(input, ctx.user.id);
+        const payload = input.category === "perfil" && ctx.user.role !== "admin"
+          ? { ...input, category: "evolucao" }
+          : input;
+        return dbComplete.uploadPatientPhoto(payload, ctx.user.id);
       }),
 
     delete: protectedProcedure
@@ -2186,14 +2189,23 @@ export const appRouter = router({
             values: z.array(z.string()),
           }).optional(),
         })),
-        answers: z.record(z.string()),
+        answers: z.record(z.string(), z.string()),
         profilePhotoBase64: z.string().optional(),
         profilePhotoMimeType: z.string().optional(),
         profilePhotoFileName: z.string().optional(),
         profilePhotoDeclarationAccepted: z.boolean().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        return dbComplete.createPatientAnamnesis(input, ctx.user.id);
+        const payload = ctx.user.role === "admin"
+          ? input
+          : {
+              ...input,
+              profilePhotoBase64: undefined,
+              profilePhotoMimeType: undefined,
+              profilePhotoFileName: undefined,
+              profilePhotoDeclarationAccepted: undefined,
+            };
+        return dbComplete.createPatientAnamnesis(payload as any, ctx.user.id);
       }),
   }),
 

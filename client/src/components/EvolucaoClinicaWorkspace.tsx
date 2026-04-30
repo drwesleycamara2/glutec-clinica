@@ -484,8 +484,8 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
     if (!form.attendanceType) {
       throw new Error("Selecione o tipo de atendimento: Presencial ou Online.");
     }
-    if (!form.icd10) {
-      throw new Error("Selecione um CID-10.");
+    if (status === "finalizado" && !form.icd10) {
+      throw new Error("Selecione um CID-10 para finalizar a consulta.");
     }
     const clinicalNotesText = stripHtml(form.clinicalNotes);
     if (!clinicalNotesText && !form.audioTranscription.trim()) {
@@ -510,8 +510,8 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
 
     return {
       attendanceType: form.attendanceType as "presencial" | "online",
-      icdCode: form.icd10.code,
-      icdDescription: form.icd10.description,
+      icdCode: form.icd10?.code ?? "",
+      icdDescription: form.icd10?.description ?? "",
       clinicalNotes: form.clinicalNotes,
       assistantName: form.assistantName.trim(),
       assistantUserId: form.assistantUserId ? Number(form.assistantUserId) : undefined,
@@ -1327,7 +1327,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
           )}
 
           <div className="space-y-2 pt-2 border-t border-border/40">
-            <Label>CID-10 (selecione após descrever a evolução)</Label>
+            <Label>CID-10 (obrigatório apenas ao finalizar)</Label>
             <Icd10Search
               selectedCode={form.icd10}
               onSelect={(value) => setForm((current) => ({ ...current, icd10: value?.code ? value : null }))}
@@ -1786,5 +1786,3 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
     </div>
   );
 }
-
-

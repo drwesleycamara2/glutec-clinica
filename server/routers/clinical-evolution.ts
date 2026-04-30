@@ -49,8 +49,8 @@ export const clinicalEvolutionRouter = router({
       z.object({
         patientId: z.number(),
         attendanceType: z.enum(["presencial", "online"]),
-        icdCode: z.string().min(1),
-        icdDescription: z.string().min(1),
+        icdCode: z.string().optional().default(""),
+        icdDescription: z.string().optional().default(""),
         clinicalNotes: z.string(),
         secretaryNotes: z.string().optional(),
         assistantName: z.string().min(1),
@@ -73,6 +73,12 @@ export const clinicalEvolutionRouter = router({
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "A secretaria deve usar o registro administrativo próprio do prontuário.",
+        });
+      }
+      if ((input.status === "finalizado" || input.status === "assinado") && (!input.icdCode?.trim() || !input.icdDescription?.trim())) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Selecione um CID-10 para finalizar a consulta.",
         });
       }
 
@@ -163,7 +169,6 @@ export const clinicalEvolutionRouter = router({
           message: "A secretaria deve usar o registro administrativo próprio do prontuário.",
         });
       }
-
       try {
         const evolution = await db.getClinicalEvolutionById(input.id);
 
@@ -183,6 +188,15 @@ export const clinicalEvolutionRouter = router({
         }
 
         const previousStatus = String(evolution.status || "rascunho");
+        const nextStatus = String(input.status || previousStatus);
+        const nextIcdCode = String(input.icdCode ?? evolution.icdCode ?? "").trim();
+        const nextIcdDescription = String(input.icdDescription ?? evolution.icdDescription ?? "").trim();
+        if ((nextStatus === "finalizado" || nextStatus === "assinado") && (!nextIcdCode || !nextIcdDescription)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Selecione um CID-10 para finalizar a consulta.",
+          });
+        }
         const isFinalizedOrSigned = previousStatus === "finalizado" || previousStatus === "assinado";
         const justification = (input.editJustification || "").trim();
 

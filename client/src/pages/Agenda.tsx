@@ -188,15 +188,28 @@ function appointmentDedupeKey(appointment: any) {
     : date.toISOString();
 
   return [
-    appointment?.patientId ?? normalizeAppointmentDedupeKeyPart(appointment?.patientName),
-    appointment?.doctorId ?? normalizeAppointmentDedupeKeyPart(appointment?.doctorName),
+    normalizeAppointmentDedupeKeyPart(appointment?.patientName) || appointment?.patientId,
+    normalizeAppointmentDedupeKeyPart(appointment?.doctorName) || appointment?.doctorId,
     scheduledKey,
-    normalizeAppointmentDedupeKeyPart(appointment?.status),
-    normalizeAppointmentDedupeKeyPart(appointment?.type),
-    normalizeAppointmentDedupeKeyPart(appointment?.room),
-    normalizeAppointmentDedupeKeyPart(appointment?.notes),
-    normalizeAppointmentDedupeKeyPart(appointment?.cancelReason),
   ].join("|");
+}
+
+const APPOINTMENT_STATUS_PRIORITY: Record<string, number> = {
+  cancelada: 7,
+  concluida: 6,
+  em_atendimento: 5,
+  confirmada: 4,
+  agendada: 3,
+  falta: 2,
+};
+
+function appointmentStatusPriority(appointment: any) {
+  return APPOINTMENT_STATUS_PRIORITY[normalizeAppointmentDedupeKeyPart(appointment?.status)] ?? 0;
+}
+
+function appointmentUpdatedTime(appointment: any) {
+  const date = new Date(appointment?.updatedAt || appointment?.createdAt || appointment?.scheduledAt || 0);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
 }
 
 function appointmentMetadataScore(appointment: any) {
@@ -207,7 +220,24 @@ function appointmentMetadataScore(appointment: any) {
     appointment?.doctorName,
     appointment?.notes,
     appointment?.cancelReason,
+    appointment?.room,
   ].reduce((score, value) => score + String(value ?? "").trim().length, 0);
+}
+
+function shouldReplaceDisplayAppointment(current: any, candidate: any) {
+  const currentStatus = appointmentStatusPriority(current);
+  const candidateStatus = appointmentStatusPriority(candidate);
+  if (candidateStatus !== currentStatus) return candidateStatus > currentStatus;
+
+  const candidateUpdated = appointmentUpdatedTime(candidate);
+  const currentUpdated = appointmentUpdatedTime(current);
+  if (candidateUpdated !== currentUpdated) return candidateUpdated > currentUpdated;
+
+  const candidateScore = appointmentMetadataScore(candidate);
+  const currentScore = appointmentMetadataScore(current);
+  if (candidateScore !== currentScore) return candidateScore > currentScore;
+
+  return Number(candidate?.id ?? 0) > Number(current?.id ?? 0);
 }
 
 function dedupeAppointments(items: any[] = []) {
@@ -216,16 +246,7 @@ function dedupeAppointments(items: any[] = []) {
   for (const appointment of items) {
     const key = appointmentDedupeKey(appointment);
     const current = byKey.get(key);
-    if (!current) {
-      byKey.set(key, appointment);
-      continue;
-    }
-
-    const candidateScore = appointmentMetadataScore(appointment);
-    const currentScore = appointmentMetadataScore(current);
-    const candidateId = Number(appointment?.id ?? Number.MAX_SAFE_INTEGER);
-    const currentId = Number(current?.id ?? Number.MAX_SAFE_INTEGER);
-    if (candidateScore > currentScore || (candidateScore === currentScore && candidateId < currentId)) {
+    if (!current || shouldReplaceDisplayAppointment(current, appointment)) {
       byKey.set(key, appointment);
     }
   }

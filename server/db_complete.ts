@@ -862,15 +862,12 @@ function latestPatientPhotoUrlExpression(patientAlias = "p") {
     select ph.photoUrl
     from patient_photos ph
     where ph.patientId = ${patientIdRef}
+      and (
+        ph.category = 'perfil'
+        or ph.description like 'Foto de perfil enviada na anamnese%'
+      )
       and coalesce(ph.mediaType, 'image') <> 'video'
-    order by
-      case
-        when ph.category = 'perfil' then 0
-        when ph.description like 'Foto de perfil%' then 1
-        else 2
-      end,
-      ph.createdAt desc,
-      ph.id desc
+    order by ph.createdAt desc, ph.id desc
     limit 1
   )`;
 }
@@ -1240,20 +1237,49 @@ function appointmentDedupeKey(row: any) {
     : date.toISOString();
 
   return [
-    row?.patientId ?? normalizeAppointmentDedupeText(row?.patientName),
-    row?.doctorId ?? normalizeAppointmentDedupeText(row?.doctorName),
+    normalizeAppointmentDedupeText(row?.patientName) || row?.patientId,
+    normalizeAppointmentDedupeText(row?.doctorName) || row?.doctorId,
     scheduledKey,
-    normalizeAppointmentDedupeText(row?.status),
-    normalizeAppointmentDedupeText(row?.type),
-    normalizeAppointmentDedupeText(row?.room),
-    normalizeAppointmentDedupeText(row?.notes),
-    normalizeAppointmentDedupeText(row?.cancelReason),
   ].join("|");
 }
 
+const APPOINTMENT_STATUS_PRIORITY: Record<string, number> = {
+  cancelada: 7,
+  concluida: 6,
+  em_atendimento: 5,
+  confirmada: 4,
+  agendada: 3,
+  falta: 2,
+};
+
+function appointmentStatusPriority(row: any) {
+  return APPOINTMENT_STATUS_PRIORITY[normalizeAppointmentDedupeText(row?.status)] ?? 0;
+}
+
+function appointmentUpdatedTime(row: any) {
+  const date = new Date(row?.updatedAt || row?.createdAt || row?.scheduledAt || 0);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
 function appointmentMetadataScore(row: any) {
-  return [row?.patientName, row?.patientPhone, row?.patientEmail, row?.doctorName, row?.notes, row?.cancelReason]
+  return [row?.patientName, row?.patientPhone, row?.patientEmail, row?.doctorName, row?.notes, row?.cancelReason, row?.room]
     .reduce((score, value) => score + String(value ?? "").trim().length, 0);
+}
+
+function shouldReplaceDisplayAppointment(current: any, candidate: any) {
+  const currentStatus = appointmentStatusPriority(current);
+  const candidateStatus = appointmentStatusPriority(candidate);
+  if (candidateStatus !== currentStatus) return candidateStatus > currentStatus;
+
+  const candidateUpdated = appointmentUpdatedTime(candidate);
+  const currentUpdated = appointmentUpdatedTime(current);
+  if (candidateUpdated !== currentUpdated) return candidateUpdated > currentUpdated;
+
+  const candidateScore = appointmentMetadataScore(candidate);
+  const currentScore = appointmentMetadataScore(current);
+  if (candidateScore !== currentScore) return candidateScore > currentScore;
+
+  return Number(candidate?.id ?? 0) > Number(current?.id ?? 0);
 }
 
 function dedupeAppointmentsForDisplay(rows: any[]) {
@@ -1262,16 +1288,7 @@ function dedupeAppointmentsForDisplay(rows: any[]) {
   for (const row of rows) {
     const key = appointmentDedupeKey(row);
     const current = byKey.get(key);
-    if (!current) {
-      byKey.set(key, row);
-      continue;
-    }
-
-    const candidateScore = appointmentMetadataScore(row);
-    const currentScore = appointmentMetadataScore(current);
-    const candidateId = Number(row?.id ?? Number.MAX_SAFE_INTEGER);
-    const currentId = Number(current?.id ?? Number.MAX_SAFE_INTEGER);
-    if (candidateScore > currentScore || (candidateScore === currentScore && candidateId < currentId)) {
+    if (!current || shouldReplaceDisplayAppointment(current, row)) {
       byKey.set(key, row);
     }
   }
@@ -3309,7 +3326,7 @@ async function logNfseEvent(
 export async function getFiscalSettings() {
   const db = await getDb();
   if (!db) return null;
-  
+
   const rows = unwrapRows<any>(await db.execute(sql`select * from fiscal_config limit 1`));
   const fiscal = rows[0];
   if (!fiscal) return null;
@@ -3335,7 +3352,7 @@ export async function getFiscalSettings() {
 export async function upsertFiscalSettings(data: any) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
+
   const existing = await getFiscalSettings();
   const payload = {
     cnpj: data.cnpj ?? null,
@@ -3381,7 +3398,7 @@ export async function upsertFiscalSettings(data: any) {
     cnaeServico: data.cnaeServico ?? null,
     webserviceUrl: data.webserviceUrl ?? null,
   };
-  
+
   if (existing) {
     await db.execute(sql`
       update fiscal_config set
@@ -3434,7 +3451,7 @@ export async function upsertFiscalSettings(data: any) {
       )
     `);
   }
-  
+
   return { success: true };
 }
 
@@ -3542,7 +3559,7 @@ export async function syncFiscalMunicipalParameters(ambiente?: "homologacao" | "
 export async function listNfse() {
   const db = await getDb();
   if (!db) return [];
-  
+
   const rows = unwrapRows<any>(await db.execute(sql`select * from nfse order by createdAt desc`));
   return rows.map(normalizeNfseRow);
 }
@@ -3575,7 +3592,7 @@ export async function createNfse(data: any, userId: number) {
     numero: data.tomadorNumero || null,
     complemento: data.tomadorComplemento || null,
   });
-  
+
   const insertResult: any = await db.execute(sql`
     insert into nfse (
       patientId, budgetId,
@@ -3644,7 +3661,7 @@ export async function emitNfse(nfseId: number) {
 export async function cancelNfse(nfseId: number, reason: string) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  
+
   await db.execute(sql`
     update nfse set
       status = ${'cancelada'},
@@ -4358,19 +4375,19 @@ export async function getDashboardStats() {
 export async function getAppointmentStats(from?: string, to?: string) {
   const db = await getDb();
   if (!db) return {};
-  
+
   let query = db.select({
     status: sql`status`,
     count: sql`COUNT(*) as count`
   }).from(sql`appointments`).groupBy(sql`status`);
-  
+
   if (from && to) {
     query = query.where(and(
       gte(sql`scheduledAt`, from),
       lte(sql`scheduledAt`, to)
     ));
   }
-  
+
   return query;
 }
 

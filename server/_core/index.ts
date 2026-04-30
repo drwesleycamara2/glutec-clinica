@@ -40,6 +40,39 @@ function sanitizeUploadKey(value?: string) {
   return cleaned || fallback;
 }
 
+function inferAudioMimeType(filePath: string) {
+  const extension = path.extname(filePath).toLowerCase();
+  const map: Record<string, string> = {
+    ".aac": "audio/aac",
+    ".m4a": "audio/mp4",
+    ".mp3": "audio/mpeg",
+    ".mp4": "audio/mp4",
+    ".ogg": "audio/ogg",
+    ".oga": "audio/ogg",
+    ".wav": "audio/wav",
+    ".webm": "audio/webm",
+  };
+  return map[extension] || "audio/webm";
+}
+
+function resolveProtectedUploadPath(audioUrl: string, req: express.Request) {
+  let parsed: URL;
+  try {
+    parsed = new URL(audioUrl, getRequestBaseUrl(req));
+  } catch {
+    return null;
+  }
+
+  const relativePath = decodeURIComponent(parsed.pathname).replace(/^\/+/, "").replace(/\\/g, "/");
+  if (!relativePath.startsWith("uploads/")) return null;
+
+  const uploadRoot = path.resolve(process.cwd(), "public", "uploads");
+  const absolutePath = path.resolve(process.cwd(), "public", relativePath);
+  if (absolutePath !== uploadRoot && !absolutePath.startsWith(`${uploadRoot}${path.sep}`)) return null;
+  if (!fs.existsSync(absolutePath) || !fs.statSync(absolutePath).isFile()) return null;
+  return absolutePath;
+}
+
 function addNoIndexHeaders(res: express.Response) {
   res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet, noimageindex");
 }
@@ -446,8 +479,11 @@ async function startServer() {
       return res.status(400).send("URL do áudio não informada.");
     }
 
+    const localAudioPath = resolveProtectedUploadPath(audioUrl, req);
     const result = await transcribeAudio({
       audioUrl,
+      audioBuffer: localAudioPath ? fs.readFileSync(localAudioPath) : undefined,
+      mimeType: localAudioPath ? inferAudioMimeType(localAudioPath) : undefined,
       language: typeof language === "string" ? language : "pt",
       prompt: typeof prompt === "string" ? prompt : undefined,
     });
@@ -604,7 +640,7 @@ async function startServer() {
         {
           patientId: link.patientId,
           folderId: link.folderId ?? null,
-          category: typeof category === "string" && category.trim() ? category.trim() : "evolucao",
+          category: typeof category === "string" && category.trim() && category.trim() !== "perfil" ? category.trim() : "evolucao",
           description: typeof description === "string" ? description : null,
           base64,
           mimeType: typeof mimeType === "string" ? mimeType : "image/jpeg",
@@ -724,7 +760,7 @@ async function startServer() {
   } else {
     // Serve static files
     const distPath = path.resolve(process.cwd(), "dist", "public");
-    
+
     if (!fs.existsSync(distPath)) {
       console.error(
         `Could not find the build directory: ${distPath}, make sure to build the client first`
@@ -740,7 +776,7 @@ async function startServer() {
       // For non-API routes, try to serve static files
       express.static(distPath)(req, res, next);
     });
-    
+
     // Fall through to index.html for SPA routing (only for non-API routes)
     app.use((req, res, next) => {
       if (req.path.startsWith("/api/")) {
