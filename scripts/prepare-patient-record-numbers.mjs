@@ -89,6 +89,18 @@ async function ensureSchema(connection) {
       where biologicalSex is null or biologicalSex = '' or biologicalSex = 'nao_informado'
     `);
   }
+
+  const anamnesisColumns = await getColumns(connection, "anamnesis_share_links");
+  if (anamnesisColumns.size > 0) {
+    const alterations = [];
+    if (!anamnesisColumns.has("signatureEvidenceJson")) alterations.push("add column signatureEvidenceJson text null after submittedAnswers");
+    if (!anamnesisColumns.has("signatureHash")) alterations.push("add column signatureHash varchar(128) null after signatureEvidenceJson");
+    if (!anamnesisColumns.has("signatureMethod")) alterations.push("add column signatureMethod varchar(80) null after signatureHash");
+    if (!anamnesisColumns.has("signedAt")) alterations.push("add column signedAt timestamp null after submittedAt");
+    if (alterations.length > 0) {
+      await connection.query(`alter table anamnesis_share_links ${alterations.join(", ")}`);
+    }
+  }
 }
 
 function normalizePatientPayload(patient, columns, { insert }) {

@@ -213,6 +213,7 @@ function normalizeMediaUrl(value?: string | null) {
 }
 
 type DefaultAnamnesisQuestion = {
+  id: string;
   text: string;
   type: "text" | "radio" | "checkbox" | "select";
   options?: string[];
@@ -224,48 +225,47 @@ type DefaultAnamnesisQuestion = {
     required?: boolean;
     placeholder?: string;
   };
+  visibleWhen?: {
+    questionId: string;
+    values: string[];
+  };
 };
 
-const DEFAULT_ANAMNESIS_QUESTIONS_FEMININA: DefaultAnamnesisQuestion[] = [
-  { text: "Estado civil", type: "text", required: true, placeholder: "Informe o estado civil" },
-  { text: "Profissão", type: "text", required: true, placeholder: "Informe a profissão" },
-  { text: "Cidade e estado em que mora", type: "text", required: true, placeholder: "Ex: Mogi Guaçu - SP" },
-  { text: "Peso atual aproximado em kg", type: "text", required: true, placeholder: "Ex: 62" },
-  { text: "Sua estatura aproximada (em metros)", type: "text", required: true, placeholder: "Ex: 1,67" },
-  { text: "Tem alergia a algum medicamento, alimento ou substância?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Qual alergia é essa?", triggerValues: ["Sim"], required: true, placeholder: "Descreva a alergia" } },
-  { text: "É fumante?", type: "radio", options: ["Sim", "Não"], required: true },
-  { text: "Consome bebida alcoólica?", type: "radio", options: ["Sim, muito e com frequência", "Bebo pouco, socialmente", "Não bebo"], required: true },
-  { text: "Usa alguma droga ilícita?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Qual droga?", triggerValues: ["Sim"], required: true, placeholder: "Informe qual droga" } },
-  { text: "Usa algum tipo de hormônio?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Quais hormônios?", triggerValues: ["Sim"], required: true, placeholder: "Informe quais hormônios" } },
-  { text: "Faz uso de anticoagulante? (ou AAS?)", type: "radio", options: ["Sim", "Não"], required: true },
-  { text: "Toma vitamina D? Qual a dose e em que frequência?", type: "text", required: true, placeholder: "Descreva a dose e frequência" },
-  { text: "Faz uso de medicamentos regularmente?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Liste todos os medicamentos de uso regular", triggerValues: ["Sim"], required: true, placeholder: "Informe os medicamentos" } },
-  { text: "Selecione os problemas de saúde que tem atualmente", type: "checkbox", options: ["Nenhum problema de saúde", "Diabetes", "Pressão alta", "Problemas no coração ou arritmias", "Problema nos rins ou no fígado", "Tumores", "Alterações psiquiátricas", "Outros problemas de saúde"], required: true, followUp: { prompt: "Se marcou outros problemas de saúde, escreva quais", triggerValues: ["Outros problemas de saúde"], required: true, placeholder: "Descreva os outros problemas" } },
-  { text: "Teve gestações? Se sim, quando foi o último parto?", type: "text", required: true, placeholder: "Descreva" },
-  { text: "Está grávida ou amamentando?", type: "radio", options: ["Sim", "Não"], required: true },
-  { text: "Usa método anticoncepcional? Qual?", type: "text", required: true, placeholder: "Descreva o método" },
-  { text: "Já teve problemas de cicatrização, como queloides?", type: "radio", options: ["Sim", "Não"], required: true },
-  { text: "Já teve alguma reação ruim com anestesia?", type: "radio", options: ["Sim", "Não"], required: true },
-  { text: "Já teve alguma hemorragia? (como evacuar ou vomitar sangue?)", type: "radio", options: ["Sim", "Não"], required: true },
-  { text: "Realiza atividade física regular?", type: "radio", options: ["Sim, três ou mais vezes por semana", "Não realizo com frequência"], required: true, followUp: { prompt: "Se sim, diga qual atividade física realiza", triggerValues: ["Sim, três ou mais vezes por semana"], required: true, placeholder: "Descreva a atividade física" } },
-  { text: "Você é muito sensível à dor (sente dor com facilidade ou frequentemente)?", type: "radio", options: ["Sim", "Não"], required: true },
-  { text: "Já teve trombose, embolia ou AVC?", type: "radio", options: ["Sim", "Não"], required: true },
-  { text: "Já teve ou trata arritmia cardíaca?", type: "radio", options: ["Sim", "Não"], required: true },
-  { text: "Tem ou já teve pedras nos rins?", type: "radio", options: ["Sim", "Não"], required: true },
-  { text: "Já realizou alguma cirurgia?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Quais cirurgias realizou?", triggerValues: ["Sim"], required: true, placeholder: "Descreva as cirurgias" } },
-  { text: "Há algo que gostaria de informar ao médico?", type: "text", required: true, placeholder: "Escreva aqui" },
+const DEFAULT_ANAMNESIS_QUESTIONS: DefaultAnamnesisQuestion[] = [
+  { id: "sexo-biologico", text: "Sexo biológico", type: "radio", options: ["Masculino", "Feminino"], required: true },
+  { id: "genero", text: "Gênero (como você se identifica?)", type: "radio", options: ["Igual ao sexo biológico", "Discordante do sexo biológico (pacientes trans, por exemplo)"], required: true },
+  { id: "estado-civil", text: "Estado civil", type: "text", required: true, placeholder: "Informe o estado civil" },
+  { id: "profissao", text: "Profissão", type: "text", required: true, placeholder: "Informe a profissão" },
+  { id: "cidade-estado", text: "Cidade e estado em que mora", type: "text", required: true, placeholder: "Ex: Mogi Guaçu - SP" },
+  { id: "peso", text: "Peso atual aproximado em kg", type: "text", required: true, placeholder: "Ex: 62" },
+  { id: "altura", text: "Sua estatura aproximada (em metros)", type: "text", required: true, placeholder: "Ex: 1,67" },
+  { id: "alergia", text: "Tem alergia a algum medicamento, alimento ou substância?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Qual alergia é essa?", triggerValues: ["Sim"], required: true, placeholder: "Descreva a alergia" } },
+  { id: "fumante", text: "É fumante?", type: "radio", options: ["Sim", "Não"], required: true },
+  { id: "alcool", text: "Consome bebida alcoólica?", type: "radio", options: ["Sim, muito e com frequência", "Bebo pouco, socialmente", "Não bebo"], required: true },
+  { id: "droga", text: "Usa alguma droga ilícita?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Qual droga?", triggerValues: ["Sim"], required: true, placeholder: "Informe qual droga" } },
+  { id: "hormonio", text: "Usa algum tipo de hormônio?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Quais hormônios?", triggerValues: ["Sim"], required: true, placeholder: "Informe quais hormônios" } },
+  { id: "anticoagulante", text: "Faz uso de anticoagulante? (ou AAS?)", type: "radio", options: ["Sim", "Não"], required: true },
+  { id: "vitamina-d", text: "Toma vitamina D? Qual a dose e em que frequência?", type: "text", required: true, placeholder: "Descreva a dose e frequência" },
+  { id: "medicamentos", text: "Faz uso de medicamentos regularmente?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Liste todos os medicamentos de uso regular", triggerValues: ["Sim"], required: true, placeholder: "Informe os medicamentos" } },
+  { id: "problemas-saude", text: "Selecione os problemas de saúde que tem atualmente", type: "checkbox", options: ["Nenhum problema de saúde", "Diabetes", "Pressão alta", "Problemas no coração ou arritmias", "Problema nos rins ou no fígado", "Tumores", "Alterações psiquiátricas", "Outros problemas de saúde"], required: true, followUp: { prompt: "Se marcou outros problemas de saúde, escreva quais", triggerValues: ["Outros problemas de saúde"], required: true, placeholder: "Descreva os outros problemas" } },
+  { id: "gestacoes", text: "Teve gestações? Se sim, quando foi o último parto?", type: "text", required: true, placeholder: "Descreva", visibleWhen: { questionId: "sexo-biologico", values: ["Feminino"] } },
+  { id: "anticoncepcional", text: "Usa método anticoncepcional? Qual?", type: "text", required: true, placeholder: "Descreva o método", visibleWhen: { questionId: "sexo-biologico", values: ["Feminino"] } },
+  { id: "cicatrizacao", text: "Já teve problemas de cicatrização, como queloides?", type: "radio", options: ["Sim", "Não"], required: true },
+  { id: "anestesia", text: "Já teve alguma reação ruim com anestesia?", type: "radio", options: ["Sim", "Não"], required: true },
+  { id: "hemorragia", text: "Já teve alguma hemorragia? (como evacuar ou vomitar sangue?)", type: "radio", options: ["Sim", "Não"], required: true },
+  { id: "atividade-fisica", text: "Realiza atividade física regular?", type: "radio", options: ["Sim, três ou mais vezes por semana", "Não realizo com frequência"], required: true, followUp: { prompt: "Se sim, diga qual atividade física realiza", triggerValues: ["Sim, três ou mais vezes por semana"], required: true, placeholder: "Descreva a atividade física" } },
+  { id: "dor", text: "Você é muito sensível à dor (sente dor com facilidade ou frequentemente)?", type: "radio", options: ["Sim", "Não"], required: true },
+  { id: "trombose", text: "Já teve trombose, embolia ou AVC?", type: "radio", options: ["Sim", "Não"], required: true },
+  { id: "arritmia", text: "Já teve ou trata arritmia cardíaca?", type: "radio", options: ["Sim", "Não"], required: true },
+  { id: "pedras-rins", text: "Tem ou já teve pedras nos rins?", type: "radio", options: ["Sim", "Não"], required: true },
+  { id: "cirurgia", text: "Já realizou alguma cirurgia?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Quais cirurgias realizou?", triggerValues: ["Sim"], required: true, placeholder: "Descreva as cirurgias" } },
+  { id: "informar-medico", text: "Há algo que gostaria de informar ao médico?", type: "text", required: true, placeholder: "Escreva aqui" },
 ];
 
-function getDefaultAnamnesisDefinition(patient: any) {
-  const gender = normalizeSearchText(patient?.biologicalSex || patient?.gender);
-  const isMale = gender.includes("mascul");
-  const questions = isMale
-    ? DEFAULT_ANAMNESIS_QUESTIONS_FEMININA.filter((question) => !["Teve gestações? Se sim, quando foi o último parto?", "Está grávida ou amamentando?", "Usa método anticoncepcional? Qual?"].includes(question.text))
-    : DEFAULT_ANAMNESIS_QUESTIONS_FEMININA;
-
+function getDefaultAnamnesisDefinition(_patient: any) {
   return {
-    name: isMale ? "Anamnese masculina padrão" : "Anamnese feminina padrão",
-    questions,
+    name: "Anamnese inicial",
+    questions: DEFAULT_ANAMNESIS_QUESTIONS,
   };
 }
 
@@ -2873,6 +2873,12 @@ export async function submitAnamnesisShareLink(
     fileName?: string | null;
     declarationAccepted?: boolean;
   },
+  signature?: {
+    ipAddress?: string | null;
+    userAgent?: string | null;
+    acceptedAt?: string | null;
+    method?: string | null;
+  },
 ) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
@@ -2907,19 +2913,46 @@ export async function submitAnamnesisShareLink(
     declarationAccepted = true;
   }
 
+  const signedAt = new Date();
+  const signatureEvidence = {
+    method: signature?.method || "assinatura_eletronica_simples",
+    signedAt: signedAt.toISOString(),
+    respondentName: respondentName ?? link.patientName ?? null,
+    patientId: Number(link.patientId),
+    linkId: Number(link.id),
+    ipAddress: signature?.ipAddress ?? null,
+    userAgent: signature?.userAgent ?? null,
+    acceptedAt: signature?.acceptedAt ?? signedAt.toISOString(),
+    declaration: "Paciente declarou que as informa??es preenchidas na anamnese s?o verdadeiras ao salvar e enviar o formul?rio.",
+    answerKeys: Object.keys(answers ?? {}).sort(),
+  };
+  const signatureHash = crypto
+    .createHash("sha256")
+    .update(JSON.stringify({ evidence: signatureEvidence, answers: answers ?? {} }))
+    .digest("hex");
+
+  const linkColumns = await getTableColumns("anamnesis_share_links");
+  const assignments = [
+    sql`submittedAnswers = ${JSON.stringify(answers ?? {})}`,
+    sql`respondentName = ${respondentName ?? null}`,
+    sql`profilePhotoUrl = ${profilePhotoUrl}`,
+    sql`profilePhotoMimeType = ${profilePhotoMimeType}`,
+    sql`profilePhotoDeclarationAccepted = ${declarationAccepted ? 1 : 0}`,
+    sql`submittedAt = ${signedAt}`,
+  ];
+
+  if (linkColumns.has("signatureEvidenceJson")) assignments.push(sql`signatureEvidenceJson = ${JSON.stringify(signatureEvidence)}`);
+  if (linkColumns.has("signatureHash")) assignments.push(sql`signatureHash = ${signatureHash}`);
+  if (linkColumns.has("signatureMethod")) assignments.push(sql`signatureMethod = ${signatureEvidence.method}`);
+  if (linkColumns.has("signedAt")) assignments.push(sql`signedAt = ${signedAt}`);
+
   await db.execute(sql`
     update anamnesis_share_links
-    set
-      submittedAnswers = ${JSON.stringify(answers ?? {})},
-      respondentName = ${respondentName ?? null},
-      profilePhotoUrl = ${profilePhotoUrl},
-      profilePhotoMimeType = ${profilePhotoMimeType},
-      profilePhotoDeclarationAccepted = ${declarationAccepted ? 1 : 0},
-      submittedAt = now()
+    set ${sql.join(assignments, sql`, `)}
     where id = ${link.id}
   `);
 
-  return { success: true };
+  return { success: true, signatureHash };
 }
 
 export async function deletePatientPhoto(photoId: number) {
@@ -3830,7 +3863,7 @@ export async function createBudget(data: any, userId: number) {
     const area = areas.find((entry: any) => Number(entry.id) === Number(item.areaId));
 
     if (!procedure || !price || !area) {
-      throw new Error(`N?o foi poss?vel montar o item ${index + 1} do or?amento.`);
+      throw new Error(`Não foi possível montar o item ${index + 1} do orçamento.`);
     }
 
     const quantity = Number(item.quantity || 1);

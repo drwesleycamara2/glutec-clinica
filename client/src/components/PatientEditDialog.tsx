@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Save, Trash2, User } from "lucide-react";
 import { toast } from "sonner";
+import { SendAnamnesisButton } from "@/components/SendAnamnesisButton";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "desconhecido"];
 
@@ -82,7 +83,7 @@ type Form = {
 };
 
 const EMPTY: Form = {
-  fullName: "", cpf: "", birthDate: "", gender: "nao_informado", biologicalSex: "nao_informado",
+  fullName: "", cpf: "", birthDate: "", gender: "", biologicalSex: "",
   zipCode: "", address: "", addressNumber: "", neighborhood: "", city: "", state: "",
   phone: "", rg: "", email: "",
   bloodType: "desconhecido", allergies: "", chronicConditions: "",
@@ -138,8 +139,12 @@ export function PatientEditDialog({ patientId, onClose, onSaved, onDeleted }: Pr
       fullName: patient.fullName || "",
       cpf: patient.cpf ? formatCPF(patient.cpf) : "",
       birthDate: (patient.birthDate ? String(patient.birthDate).slice(0, 10) : "") || "",
-      gender: patient.gender || "nao_informado",
-      biologicalSex: (patient as any).biologicalSex || patient.gender || "nao_informado",
+      gender: ["masculino", "feminino", "outro"].includes(String(patient.gender || "")) ? String(patient.gender) : "",
+      biologicalSex: ["masculino", "feminino"].includes(String((patient as any).biologicalSex || ""))
+        ? String((patient as any).biologicalSex)
+        : ["masculino", "feminino"].includes(String(patient.gender || ""))
+          ? String(patient.gender)
+          : "",
       zipCode: patient.zipCode ? formatCEP(patient.zipCode) : "",
       address: patient.address || "",
       addressNumber: (patient as any).addressNumber || "",
@@ -190,8 +195,8 @@ export function PatientEditDialog({ patientId, onClose, onSaved, onDeleted }: Pr
       fullName: form.fullName.trim(),
       cpf: form.cpf.replace(/\D/g, "") || undefined,
       birthDate: form.birthDate || undefined,
-      gender: form.gender,
-      biologicalSex: form.biologicalSex,
+      gender: form.gender || undefined,
+      biologicalSex: form.biologicalSex || undefined,
       phone: form.phone.replace(/\D/g, "") || undefined,
       email: form.email || undefined,
       zipCode: form.zipCode.replace(/\D/g, "") || undefined,
@@ -265,26 +270,23 @@ export function PatientEditDialog({ patientId, onClose, onSaved, onDeleted }: Pr
                   />
                 </div>
                 <div>
-                  <Label>G&ecirc;nero</Label>
+                  <Label>Gênero</Label>
                   <Select value={form.gender} onValueChange={(v) => setForm({ ...form, gender: v })}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="nao_informado">Não informado</SelectItem>
                       <SelectItem value="masculino">Masculino</SelectItem>
                       <SelectItem value="feminino">Feminino</SelectItem>
-                      <SelectItem value="outro">Outro</SelectItem>
+                      <SelectItem value="outro">Outros</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
                   <Label>Sexo biológico</Label>
                   <Select value={form.biologicalSex} onValueChange={(v) => setForm({ ...form, biologicalSex: v })}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="nao_informado">Não informado</SelectItem>
                       <SelectItem value="masculino">Masculino</SelectItem>
                       <SelectItem value="feminino">Feminino</SelectItem>
-                      <SelectItem value="intersexo">Intersexo</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -414,6 +416,14 @@ export function PatientEditDialog({ patientId, onClose, onSaved, onDeleted }: Pr
               {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
               Excluir prontuario
             </Button>
+          ) : null}
+          {patientId ? (
+            <SendAnamnesisButton
+              patientId={patientId}
+              patientName={form.fullName}
+              variant="outline"
+              disabled={updateMutation.isPending || deleteMutation.isPending || isLoading}
+            />
           ) : null}
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button

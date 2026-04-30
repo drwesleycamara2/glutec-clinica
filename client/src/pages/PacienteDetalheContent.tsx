@@ -4,10 +4,11 @@ import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Activity, ArrowLeft, FileText, Link2, Loader2, MessageCircle, Pencil, User } from "lucide-react";
+import { Activity, ArrowLeft, FileText, Link2, Loader2, Pencil, User } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation, useParams } from "wouter";
 import { PatientEditDialog } from "@/components/PatientEditDialog";
+import { SendAnamnesisButton } from "@/components/SendAnamnesisButton";
 import { PatientAttentionMark, PatientRecordBadge } from "@/lib/patientDisplay";
 
 function formatDate(value?: string | null) {
@@ -36,16 +37,6 @@ export default function PacienteDetalheContent() {
     { patientId },
     { enabled: Number.isFinite(patientId) && patientId > 0 },
   );
-  const sendAnamnesisRequestMutation = trpc.whatsapp.sendAnamnesisRequest.useMutation({
-    onSuccess: async (result) => {
-      toast.success(`Pedido de anamnese enviado para ${result.patientName}.`);
-      await refetchAnamneses();
-    },
-    onError: (error: any) => {
-      toast.error(error?.message || "Não foi possível enviar a anamnese por WhatsApp.");
-    },
-  });
-
   const latestAnamnesis = anamneses?.[0] ?? null;
   const hasCompletedAnamnesis = Boolean(anamneses?.length);
   const canSendAnamnesis =
@@ -194,18 +185,12 @@ export default function PacienteDetalheContent() {
 
           <div className="flex flex-wrap gap-2">
             {canSendAnamnesis ? (
-              <Button
-                onClick={() => sendAnamnesisRequestMutation.mutate({ patientId })}
-                disabled={sendAnamnesisRequestMutation.isPending}
+              <SendAnamnesisButton
+                patientId={patientId}
+                patientName={patient.fullName}
+                onLinkCreated={() => void refetchAnamneses()}
                 className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] text-white hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]"
-              >
-                {sendAnamnesisRequestMutation.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <MessageCircle className="mr-2 h-4 w-4" />
-                )}
-                Enviar anamnese por WhatsApp
-              </Button>
+              />
             ) : null}
             <Button variant="outline" onClick={() => setLocation(`/prontuarios/${patient.id}?tab=anamnese`)}>
               <Link2 className="mr-2 h-4 w-4" />

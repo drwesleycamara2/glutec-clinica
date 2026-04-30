@@ -2127,6 +2127,7 @@ export const appRouter = router({
         anamnesisDate: z.string().optional(),
         expiresInDays: z.number().optional(),
         questions: z.array(z.object({
+          id: z.string().optional(),
           text: z.string(),
           type: z.string(),
           options: z.array(z.string()).optional(),
@@ -2137,6 +2138,10 @@ export const appRouter = router({
             triggerValues: z.array(z.string()),
             required: z.boolean().optional(),
             placeholder: z.string().optional(),
+          }).optional(),
+          visibleWhen: z.object({
+            questionId: z.string(),
+            values: z.array(z.string()),
           }).optional(),
         })),
       }))
@@ -2164,6 +2169,7 @@ export const appRouter = router({
         anamnesisDate: z.string().optional(),
         respondentName: z.string().optional(),
         questions: z.array(z.object({
+          id: z.string().optional(),
           text: z.string(),
           type: z.string(),
           options: z.array(z.string()).optional(),
@@ -2174,6 +2180,10 @@ export const appRouter = router({
             triggerValues: z.array(z.string()),
             required: z.boolean().optional(),
             placeholder: z.string().optional(),
+          }).optional(),
+          visibleWhen: z.object({
+            questionId: z.string(),
+            values: z.array(z.string()),
           }).optional(),
         })),
         answers: z.record(z.string()),

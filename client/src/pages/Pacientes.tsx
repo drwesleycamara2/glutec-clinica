@@ -101,7 +101,7 @@ function handleBirthDateTyping(raw: string, current: string): { display: string;
 const defaultForm = {
   // Obrigatórios
   fullName: "", cpf: "", birthDate: "",
-  gender: "nao_informado", biologicalSex: "nao_informado",
+  gender: "", biologicalSex: "",
   zipCode: "", address: "", addressNumber: "", neighborhood: "", city: "", state: "",
   phone: "",
   // Opcionais
@@ -137,12 +137,13 @@ export default function Pacientes() {
   });
 
   const createMutation = trpc.patients.create.useMutation({
-    onSuccess: () => {
-      toast.success("Paciente cadastrado com sucesso!");
+    onSuccess: (createdPatient: any) => {
+      toast.success("Paciente cadastrado com sucesso. Você já pode enviar a anamnese pelo cadastro.");
       setShowCreate(false);
       refetch();
       setForm(defaultForm);
       setBirthDateDisplay("");
+      if (createdPatient?.id) setEditId(Number(createdPatient.id));
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -172,11 +173,12 @@ export default function Pacientes() {
     if (!form.fullName.trim()) return toast.error("Nome completo é obrigatório.");
     if (!form.cpf.trim() || form.cpf.replace(/\D/g, "").length !== 11) return toast.error("CPF é obrigatório e deve ter 11 dígitos.");
     if (!form.birthDate) return toast.error("Data de nascimento é obrigatória.");
+    if (!form.gender) return toast.error("Selecione o gênero.");
+    if (!form.biologicalSex) return toast.error("Selecione o sexo biológico.");
     if (!form.phone.trim()) return toast.error("Telefone (WhatsApp) é obrigatório.");
     if (!form.zipCode.trim()) return toast.error("CEP é obrigatório.");
     createMutation.mutate(form as any);
   };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -313,27 +315,23 @@ export default function Pacientes() {
                   />
                 </div>
                 <div>
-                  <Label>Gênero <span className="text-[#6B6B6B]">*</span></Label>
+                  <Label>G&ecirc;nero <span className="text-[#6B6B6B]">*</span></Label>
                   <Select value={form.gender} onValueChange={(v) => setForm({ ...form, gender: v })}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="masculino">Masculino</SelectItem>
                       <SelectItem value="feminino">Feminino</SelectItem>
-                      <SelectItem value="nao_binario">Não binário</SelectItem>
-                      <SelectItem value="outro">Outro</SelectItem>
-                      <SelectItem value="nao_informado">Não informado</SelectItem>
+                      <SelectItem value="outro">Outros</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label>Sexo Biológico <span className="text-[#6B6B6B]">*</span></Label>
+                  <Label>Sexo Biol&oacute;gico <span className="text-[#6B6B6B]">*</span></Label>
                   <Select value={form.biologicalSex} onValueChange={(v) => setForm({ ...form, biologicalSex: v })}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="masculino">Masculino</SelectItem>
                       <SelectItem value="feminino">Feminino</SelectItem>
-                      <SelectItem value="intersexo">Intersexo</SelectItem>
-                      <SelectItem value="nao_informado">Não informado</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

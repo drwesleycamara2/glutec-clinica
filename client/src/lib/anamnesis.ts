@@ -7,6 +7,11 @@ export interface AnamnesisFollowUp {
   placeholder?: string;
 }
 
+export interface AnamnesisVisibilityRule {
+  questionId: string;
+  values: string[];
+}
+
 export interface AnamnesisQuestion {
   id: string;
   text: string;
@@ -17,6 +22,7 @@ export interface AnamnesisQuestion {
   answer?: string;
   followUp?: AnamnesisFollowUp;
   followUpAnswer?: string;
+  visibleWhen?: AnamnesisVisibilityRule;
 }
 
 export interface AnamnesisTemplate {
@@ -45,7 +51,12 @@ function createQuestion(
   };
 }
 
-const femaleQuestions: AnamnesisQuestion[] = [
+const standardQuestions: AnamnesisQuestion[] = [
+  createQuestion("sexo-biologico", "Sexo biológico", "radio", ["Masculino", "Feminino"]),
+  createQuestion("genero", "Gênero (como você se identifica?)", "radio", [
+    "Igual ao sexo biológico",
+    "Discordante do sexo biológico (pacientes trans, por exemplo)",
+  ]),
   createQuestion("estado-civil", "Estado civil", "text", [], { placeholder: "Informe o estado civil" }),
   createQuestion("profissao", "Profissão", "text", [], { placeholder: "Informe a profissão" }),
   createQuestion("cidade-estado", "Cidade e estado em que mora", "text", [], { placeholder: "Ex: Mogi Guaçu - SP" }),
@@ -104,9 +115,14 @@ const femaleQuestions: AnamnesisQuestion[] = [
       placeholder: "Descreva os outros problemas",
     },
   }),
-  createQuestion("gestacoes", "Teve gestações? Se sim, quando foi o último parto?", "text", [], { placeholder: "Descreva" }),
-  createQuestion("gravida", "Está grávida ou amamentando?", "radio", ["Sim", "Não"]),
-  createQuestion("anticoncepcional", "Usa método anticoncepcional? Qual?", "text", [], { placeholder: "Descreva o método" }),
+  createQuestion("gestacoes", "Teve gestações? Se sim, quando foi o último parto?", "text", [], {
+    placeholder: "Descreva",
+    visibleWhen: { questionId: "sexo-biologico", values: ["Feminino"] },
+  }),
+  createQuestion("anticoncepcional", "Usa método anticoncepcional? Qual?", "text", [], {
+    placeholder: "Descreva o método",
+    visibleWhen: { questionId: "sexo-biologico", values: ["Feminino"] },
+  }),
   createQuestion("cicatrizacao", "Já teve problemas de cicatrização, como queloides?", "radio", ["Sim", "Não"]),
   createQuestion("anestesia", "Já teve alguma reação ruim com anestesia?", "radio", ["Sim", "Não"]),
   createQuestion("hemorragia", "Já teve alguma hemorragia? (como evacuar ou vomitar sangue?)", "radio", ["Sim", "Não"]),
@@ -135,16 +151,10 @@ const femaleQuestions: AnamnesisQuestion[] = [
 
 export const SYSTEM_ANAMNESIS_TEMPLATES: AnamnesisTemplate[] = [
   {
-    id: "anamnesis-feminina-padrao",
-    name: "Anamnese feminina padrão",
-    description: "Modelo padrão completo para atendimento feminino.",
-    questions: femaleQuestions,
-  },
-  {
-    id: "anamnesis-masculina-padrao",
-    name: "Anamnese masculina padrão",
-    description: "Cópia do modelo feminino, sem perguntas de anticoncepcional, gestações e gestação/amamentação.",
-    questions: femaleQuestions.filter((question) => !["gestacoes", "gravida", "anticoncepcional"].includes(question.id)),
+    id: "anamnesis-inicial-padrao",
+    name: "Anamnese inicial",
+    description: "Modelo único para pacientes, com perguntas condicionais por sexo biológico quando necessário.",
+    questions: standardQuestions,
   },
 ];
 
@@ -155,6 +165,7 @@ export function cloneAnamnesisQuestions(questions: AnamnesisQuestion[]): Anamnes
     answer: question.answer ?? "",
     followUp: question.followUp ? { ...question.followUp, triggerValues: [...question.followUp.triggerValues] } : undefined,
     followUpAnswer: question.followUpAnswer ?? "",
+    visibleWhen: question.visibleWhen ? { ...question.visibleWhen, values: [...question.visibleWhen.values] } : undefined,
   }));
 }
 
@@ -194,15 +205,37 @@ export function shouldShowFollowUp(question: AnamnesisQuestion): boolean {
   return question.followUp.triggerValues.some((value) => selected.includes(value));
 }
 
-export function validateAnamnesisQuestions(questions: AnamnesisQuestion[]): string | null {
+export function shouldShowQuestion(question: AnamnesisQuestion, questions: AnamnesisQuestion[]): boolean {
+  if (!question.visibleWhen) return true;
+  const controller = questions.find((item) => item.id === question.visibleWhen?.questionId);
+  const answer = String(controller?.answer ?? "");
+  const selected = controller?.type === "checkbox" ? answer.split(";").filter(Boolean) : [answer];
+  return question.visibleWhen.values.some((value) => selected.includes(value));
+}
+
+export function getMissingAnamnesisQuestions(questions: AnamnesisQuestion[]) {
+  const missing: Array<{ id: string; text: string; followUp?: boolean }> = [];
   for (const question of questions) {
+    if (!shouldShowQuestion(question, questions)) continue;
     const answer = String(question.answer ?? "").trim();
     if (question.required !== false && !answer) {
-      return `Preencha a pergunta "${question.text}".`;
+      missing.push({ id: question.id, text: question.text });
+      continue;
     }
     if (shouldShowFollowUp(question) && question.followUp?.required && !String(question.followUpAnswer ?? "").trim()) {
-      return `Complete a informação complementar em "${question.text}".`;
+      missing.push({ id: question.id, text: question.text, followUp: true });
     }
+  }
+  return missing;
+}
+
+export function validateAnamnesisQuestions(questions: AnamnesisQuestion[]): string | null {
+  const missing = getMissingAnamnesisQuestions(questions);
+  if (missing.length > 0) {
+    const first = missing[0];
+    return first.followUp
+      ? `Complete a informação complementar em "${first.text}".`
+      : `Preencha a pergunta "${first.text}".`;
   }
   return null;
 }
@@ -216,14 +249,15 @@ export function serializeAnamnesisQuestions(questions: AnamnesisQuestion[]) {
     required: question.required !== false,
     placeholder: question.placeholder,
     followUp: question.followUp,
+    visibleWhen: question.visibleWhen,
   }));
 }
 
 export function buildAnamnesisAnswersMap(questions: AnamnesisQuestion[]) {
   return Object.fromEntries(
-    questions.flatMap((question) => {
+    questions.filter((question) => shouldShowQuestion(question, questions)).flatMap((question) => {
       const entries: Array<[string, string]> = [[question.text, String(question.answer ?? "")]];
-      if (question.followUp) {
+      if (question.followUp && shouldShowFollowUp(question)) {
         entries.push([`${question.text}::__complemento`, String(question.followUpAnswer ?? "")]);
       }
       return entries;

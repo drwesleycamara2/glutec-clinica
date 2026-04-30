@@ -1,10 +1,11 @@
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+﻿import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { useParams } from "wouter";
 import { Loader2, Send, ShieldCheck, UserRound } from "lucide-react";
 import {
   type AnamnesisQuestion,
+  getMissingAnamnesisQuestions,
   shouldShowFollowUp,
-  validateAnamnesisQuestions,
+  shouldShowQuestion,
 } from "@/lib/anamnesis";
 
 const PRIVACY_NOTICE = "Seus dados são protegidos por sigilo médico-paciente. As respostas são usadas para seu atendimento e não ficam expostas a toda a equipe da clínica.";
@@ -15,7 +16,7 @@ const PROFILE_PHOTO_MAX_INPUT_MB = 20;
 
 async function resizeProfilePhoto(file: File) {
   if (file.size > PROFILE_PHOTO_MAX_INPUT_MB * 1024 * 1024) {
-    throw new Error("A foto selecionada est\u00e1 muito grande. Envie uma imagem de at\u00e9 20 MB.");
+    throw new Error("A foto selecionada está muito grande. Envie uma imagem de até 20 MB.");
   }
 
   const objectUrl = URL.createObjectURL(file);
@@ -23,7 +24,7 @@ async function resizeProfilePhoto(file: File) {
     const image = await new Promise<HTMLImageElement>((resolve, reject) => {
       const img = new Image();
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("N\u00e3o foi poss\u00edvel carregar a foto selecionada."));
+      img.onerror = () => reject(new Error("Não foi possível carregar a foto selecionada."));
       img.src = objectUrl;
     });
 
@@ -34,13 +35,13 @@ async function resizeProfilePhoto(file: File) {
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext("2d");
-    if (!context) throw new Error("N\u00e3o foi poss\u00edvel preparar a foto para envio.");
+    if (!context) throw new Error("Não foi possível preparar a foto para envio.");
     context.drawImage(image, 0, 0, width, height);
 
     const blob = await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob((result) => {
         if (result) resolve(result);
-        else reject(new Error("N\u00e3o foi poss\u00edvel redimensionar a foto."));
+        else reject(new Error("Não foi possível redimensionar a foto."));
       }, "image/jpeg", PROFILE_PHOTO_QUALITY);
     });
 
@@ -50,7 +51,7 @@ async function resizeProfilePhoto(file: File) {
         const result = String(reader.result ?? "");
         resolve(result.includes(",") ? result.split(",")[1] : result);
       };
-      reader.onerror = () => reject(new Error("N\u00e3o foi poss\u00edvel ler a foto redimensionada."));
+      reader.onerror = () => reject(new Error("Não foi possível ler a foto redimensionada."));
       reader.readAsDataURL(blob);
     });
 
@@ -65,7 +66,6 @@ async function resizeProfilePhoto(file: File) {
     URL.revokeObjectURL(objectUrl);
   }
 }
-
 
 type PublicAnamnesisResponse = {
   patientName?: string;
@@ -103,6 +103,7 @@ export default function AnamnesePublica() {
   const [anamnesis, setAnamnesis] = useState<PublicAnamnesisResponse | null>(null);
   const [respondentName, setRespondentName] = useState("");
   const [questions, setQuestions] = useState<Array<AnamnesisQuestion>>([]);
+  const [missingQuestionIds, setMissingQuestionIds] = useState<Set<string>>(new Set());
   const [profilePhotoPreview, setProfilePhotoPreview] = useState("");
   const [profilePhotoBase64, setProfilePhotoBase64] = useState("");
   const [profilePhotoMimeType, setProfilePhotoMimeType] = useState("");
@@ -135,6 +136,7 @@ export default function AnamnesePublica() {
         }));
 
         setAnamnesis(payload);
+        setRespondentName(payload.patientName || "");
         setQuestions(hydratedQuestions);
         setProfilePhotoPreview(payload.profilePhotoUrl || "");
         setSuccess(payload.submittedAt ? "Esta anamnese já foi enviada anteriormente e pode ser atualizada, se necessário." : "");
@@ -155,10 +157,20 @@ export default function AnamnesePublica() {
     };
   }, [token]);
 
-  const questionCount = useMemo(() => questions.length, [questions.length]);
+  const visibleQuestions = useMemo(
+    () => questions.filter((question) => shouldShowQuestion(question, questions)),
+    [questions],
+  );
+  const questionCount = visibleQuestions.length;
+  const patientDisplayName = anamnesis?.patientName || respondentName || "Paciente";
 
   const updateQuestion = (id: string, updates: Partial<AnamnesisQuestion>) => {
     setError("");
+    setMissingQuestionIds((current) => {
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
     setQuestions((current) => current.map((question) => (question.id === id ? { ...question, ...updates } : question)));
   };
 
@@ -166,7 +178,7 @@ export default function AnamnesePublica() {
     const file = event.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      setError("Envie apenas uma foto real da pr\u00f3pria pessoa, em formato de imagem.");
+      setError("Envie apenas uma foto real da própria pessoa, em formato de imagem.");
       event.target.value = "";
       return;
     }
@@ -183,7 +195,7 @@ export default function AnamnesePublica() {
       setProfilePhotoMimeType("");
       setProfilePhotoFileName("");
       setProfilePhotoPreview("");
-      setError(err?.message || "N\u00e3o foi poss\u00edvel preparar a foto selecionada.");
+      setError(err?.message || "Não foi possível preparar a foto selecionada.");
       event.target.value = "";
     }
   };
@@ -191,9 +203,14 @@ export default function AnamnesePublica() {
   const handleSubmit = async () => {
     if (!anamnesis) return;
 
-    const validationError = validateAnamnesisQuestions(questions);
-    if (validationError) {
-      setError(validationError);
+    const missing = getMissingAnamnesisQuestions(questions);
+    if (missing.length > 0) {
+      setMissingQuestionIds(new Set(missing.map((item) => item.id)));
+      const labels = missing
+        .slice(0, 6)
+        .map((item) => item.followUp ? `${item.text} (complemento)` : item.text)
+        .join("; ");
+      setError(`Falta responder ${missing.length} pergunta(s): ${labels}${missing.length > 6 ? "; ..." : ""}.`);
       return;
     }
 
@@ -208,10 +225,10 @@ export default function AnamnesePublica() {
       setSuccess("");
 
       const answers = Object.fromEntries(
-        questions.flatMap((question) => {
+        visibleQuestions.flatMap((question) => {
           const answer = String(question.answer ?? "");
           const entries: Array<[string, string]> = [[question.id, answer], [question.text, answer]];
-          if (question.followUp) {
+          if (question.followUp && shouldShowFollowUp(question)) {
             const followUpAnswer = String(question.followUpAnswer ?? "");
             entries.push([`${question.id}::__complemento`, followUpAnswer], [`${question.text}::__complemento`, followUpAnswer]);
           }
@@ -223,7 +240,7 @@ export default function AnamnesePublica() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          respondentName: respondentName.trim() || undefined,
+          respondentName: patientDisplayName.trim() || undefined,
           answers,
           profilePhotoBase64: profilePhotoBase64 || undefined,
           profilePhotoMimeType: profilePhotoMimeType || undefined,
@@ -237,6 +254,7 @@ export default function AnamnesePublica() {
         throw new Error(payload?.error || "Não foi possível enviar a anamnese.");
       }
 
+      setMissingQuestionIds(new Set());
       setSuccess("Anamnese enviada com sucesso. A Clínica Glutée já recebeu suas respostas.");
     } catch (err: any) {
       setError(err?.message || "Não foi possível enviar a anamnese.");
@@ -247,9 +265,9 @@ export default function AnamnesePublica() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#090909] text-white flex items-center justify-center px-6">
-        <div className="flex items-center gap-3 rounded-full border border-[#C9A55B]/30 bg-white/5 px-5 py-3">
-          <Loader2 className="h-5 w-5 animate-spin text-[#C9A55B]" />
+      <div className="min-h-screen bg-[#F7F1E6] text-[#1F1A14] flex items-center justify-center px-6">
+        <div className="flex items-center gap-3 rounded-full border border-[#C9A55B]/35 bg-white px-5 py-3 shadow-sm">
+          <Loader2 className="h-5 w-5 animate-spin text-[#B8863B]" />
           <span>Carregando anamnese...</span>
         </div>
       </div>
@@ -258,38 +276,38 @@ export default function AnamnesePublica() {
 
   if (error && !anamnesis) {
     return (
-      <div className="min-h-screen bg-[#090909] text-white flex items-center justify-center px-6">
-        <div className="w-full max-w-xl rounded-[28px] border border-[#C9A55B]/30 bg-[#121212] p-8 text-center shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
+      <div className="min-h-screen bg-[#F7F1E6] text-[#1F1A14] flex items-center justify-center px-6">
+        <div className="w-full max-w-xl rounded-[28px] border border-[#C9A55B]/30 bg-white p-8 text-center shadow-[0_24px_70px_rgba(65,45,20,0.16)]">
           <img src="/glutee-logo.png" alt="Clínica Glutée" className="mx-auto mb-6 w-44 max-w-[70%]" />
           <h1 className="text-3xl font-semibold">Link indisponível</h1>
-          <p className="mt-4 text-base text-white/70">{error}</p>
+          <p className="mt-4 text-base text-[#5F574A]">{error}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(201,165,91,0.18),transparent_22%),linear-gradient(135deg,#050505,#131313_42%,#080808)] px-4 py-8 text-white">
-      <div className="mx-auto w-full max-w-4xl overflow-hidden rounded-[32px] border border-[#C9A55B]/25 bg-[linear-gradient(180deg,rgba(17,17,17,0.96),rgba(9,9,9,0.96))] shadow-[0_30px_90px_rgba(0,0,0,0.45)]">
-        <div className="border-b border-[#C9A55B]/15 bg-[linear-gradient(135deg,rgba(201,165,91,0.18),rgba(201,165,91,0.02))] px-6 py-8 md:px-10">
+    <div className="min-h-screen bg-[#F7F1E6] px-4 py-8 text-[#1F1A14]">
+      <div className="mx-auto w-full max-w-4xl overflow-hidden rounded-[28px] border border-[#D6C29B] bg-[#FFFCF6] shadow-[0_24px_80px_rgba(80,56,23,0.14)]">
+        <div className="border-b border-[#E6D9BD] bg-[#F0E3CC] px-6 py-8 md:px-10">
           <img src="/glutee-logo.png" alt="Clínica Glutée" className="mx-auto mb-6 w-48 max-w-[72%]" />
-          <p className="text-center text-xs uppercase tracking-[0.45em] text-[#E8D3A1]">Clínica Glutée</p>
+          <p className="text-center text-xs uppercase tracking-[0.36em] text-[#8A6526]">Clínica Glutée</p>
           <h1 className="mt-3 text-center text-3xl font-semibold md:text-4xl">{anamnesis?.title || "Preenchimento de anamnese"}</h1>
-          <p className="mx-auto mt-4 max-w-2xl text-center text-sm text-white/72 md:text-base">
-            Preencha todas as informações para adiantar o atendimento. {PRIVACY_NOTICE}
+          <p className="mx-auto mt-4 max-w-2xl text-center text-sm text-[#5F574A] md:text-base">
+            Preencha todas as informações para adiantar o atendimento.
           </p>
-          <div className="mt-5 flex flex-wrap items-center justify-center gap-3 text-xs text-white/70 md:text-sm">
-            <span className="rounded-full border border-[#C9A55B]/20 bg-white/5 px-3 py-1.5">Paciente: {anamnesis?.patientName || "Identificação protegida"}</span>
-            <span className="rounded-full border border-[#C9A55B]/20 bg-white/5 px-3 py-1.5">Perguntas: {questionCount}</span>
-            {anamnesis?.anamnesisDate ? <span className="rounded-full border border-[#C9A55B]/20 bg-white/5 px-3 py-1.5">Data clínica: {new Date(anamnesis.anamnesisDate).toLocaleDateString("pt-BR")}</span> : null}
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-3 text-xs text-[#5F574A] md:text-sm">
+            <span className="rounded-full border border-[#D8C496] bg-white px-3 py-1.5">Paciente: {patientDisplayName}</span>
+            <span className="rounded-full border border-[#D8C496] bg-white px-3 py-1.5">Perguntas: {questionCount}</span>
+            {anamnesis?.anamnesisDate ? <span className="rounded-full border border-[#D8C496] bg-white px-3 py-1.5">Data clínica: {new Date(anamnesis.anamnesisDate).toLocaleDateString("pt-BR")}</span> : null}
           </div>
         </div>
 
         <div className="px-6 py-6 md:px-10 md:py-8">
-          <div className="mb-6 flex items-start gap-3 rounded-2xl border border-[#C9A55B]/20 bg-white/[0.03] p-4 text-sm text-white/72">
-            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#C9A55B]" />
+          <div className="mb-6 flex items-start gap-3 rounded-2xl border border-[#D8C496] bg-white p-4 text-sm text-[#5F574A]">
+            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#B8863B]" />
             <div>
-              <p className="font-medium text-white">Canal seguro da Clínica Glutée</p>
+              <p className="font-medium text-[#1F1A14]">Canal seguro da Clínica Glutée</p>
               <p className="mt-1">{PRIVACY_NOTICE}</p>
               <p className="mt-2">Todas as perguntas são obrigatórias. Se uma resposta exigir complemento, o sistema abrirá o campo correspondente na mesma caixa.</p>
             </div>
@@ -297,124 +315,128 @@ export default function AnamnesePublica() {
 
           <div className="space-y-5">
             <div>
-              <label className="mb-2 block text-sm font-medium text-white/90">Seu nome</label>
-              <input
-                value={respondentName}
-                onChange={(event) => setRespondentName(event.target.value)}
-                placeholder="Digite seu nome completo"
-                className="h-12 w-full rounded-xl border border-[#C9A55B]/20 bg-black/25 px-4 text-white outline-none transition focus:border-[#C9A55B]/55"
-              />
+              <label className="mb-2 block text-sm font-medium text-[#2B241A]">Paciente</label>
+              <div className="min-h-12 rounded-xl border border-[#D8C496] bg-[#F6EFE1] px-4 py-3 text-[#2B241A]">
+                {patientDisplayName}
+              </div>
+              <p className="mt-1 text-xs text-[#776A58]">Nome vinculado ao link enviado pela clínica.</p>
             </div>
 
-            <div className="rounded-2xl border border-[#C9A55B]/15 bg-white/[0.03] p-4 md:p-5">
-              <div className="mb-3 flex items-center gap-2 text-sm font-medium text-white/95">
-                <UserRound className="h-4 w-4 text-[#C9A55B]" />
+            <div className="rounded-2xl border border-[#D8C496] bg-white p-4 md:p-5">
+              <div className="mb-3 flex items-center gap-2 text-sm font-medium text-[#2B241A]">
+                <UserRound className="h-4 w-4 text-[#B8863B]" />
                 Foto opcional do paciente
               </div>
-              <p className="mb-4 text-sm text-white/68">Se desejar, envie uma foto de perfil real da própria pessoa. Não envie desenhos, animais, paisagens ou imagens aleatórias.</p>
-              <input type="file" accept="image/*" onChange={handleProfilePhotoChange} className="block w-full text-sm text-white/75 file:mr-4 file:rounded-full file:border-0 file:bg-[#C9A55B] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-black" />
-              {profilePhotoPreview ? <img src={profilePhotoPreview} alt="Prévia da foto de perfil" className="mt-4 h-36 w-36 rounded-2xl object-cover ring-1 ring-[#C9A55B]/30" /> : null}
-              <label className="mt-4 flex items-start gap-3 text-sm text-white/75">
+              <p className="mb-4 text-sm text-[#5F574A]">Se desejar, envie uma foto de perfil real da própria pessoa. A imagem será redimensionada antes de ser salva.</p>
+              <input type="file" accept="image/*" onChange={handleProfilePhotoChange} className="block w-full text-sm text-[#5F574A] file:mr-4 file:rounded-full file:border-0 file:bg-[#C9A55B] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-black" />
+              {profilePhotoPreview ? <img src={profilePhotoPreview} alt="Prévia da foto de perfil" className="mt-4 h-36 w-36 rounded-2xl object-cover ring-1 ring-[#C9A55B]/45" /> : null}
+              <label className="mt-4 flex items-start gap-3 text-sm text-[#5F574A]">
                 <input type="checkbox" checked={profilePhotoDeclarationAccepted} onChange={(event) => setProfilePhotoDeclarationAccepted(event.target.checked)} className="mt-1 rounded border-[#C9A55B]/40" />
                 <span>Confirmo que, se eu enviar uma foto, ela será da própria pessoa paciente.</span>
               </label>
             </div>
 
-            {questions.map((question) => (
-              <div key={question.id} className="rounded-2xl border border-[#C9A55B]/15 bg-white/[0.03] p-4 md:p-5">
-                <label className="mb-3 block text-sm font-medium text-white/95">{question.text}</label>
+            {visibleQuestions.map((question) => {
+              const isMissing = missingQuestionIds.has(question.id);
+              return (
+                <div key={question.id} className={`rounded-2xl border p-4 md:p-5 ${isMissing ? "border-red-400 bg-red-50" : "border-[#D8C496] bg-white"}`}>
+                  <label className="mb-3 block text-sm font-medium text-[#2B241A]">{question.text}</label>
+                  {isMissing ? <p className="mb-3 text-sm font-medium text-red-700">Resposta obrigatória pendente.</p> : null}
 
-                {question.type === "text" ? (
-                  <textarea
-                    rows={3}
-                    value={question.answer || ""}
-                    onChange={(event) => updateQuestion(question.id, { answer: event.target.value })}
-                    className="w-full rounded-xl border border-[#C9A55B]/20 bg-black/25 px-4 py-3 text-white outline-none transition focus:border-[#C9A55B]/55"
-                    placeholder={question.placeholder || "Digite sua resposta"}
-                  />
-                ) : null}
-
-                {question.type === "radio" ? (
-                  <div className="flex flex-wrap gap-2">
-                    {(question.options || []).map((option) => {
-                      const active = (question.answer || "") === option;
-                      return (
-                        <button
-                          key={option}
-                          type="button"
-                          onClick={() => updateQuestion(question.id, { answer: option, followUpAnswer: active ? question.followUpAnswer : "" })}
-                          className={`rounded-full border px-4 py-2 text-sm transition ${active ? "border-[#D6B160] bg-[#C9A55B] text-black" : "border-[#C9A55B]/20 bg-black/20 text-white/85 hover:border-[#C9A55B]/45"}`}
-                        >
-                          {option}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-
-                {question.type === "checkbox" ? (
-                  <div className="flex flex-wrap gap-2">
-                    {(question.options || []).map((option) => {
-                      const selected = (question.answer || "").split(";").includes(option);
-                      return (
-                        <button
-                          key={option}
-                          type="button"
-                          onClick={() => {
-                            const current = (question.answer || "").split(";").filter(Boolean);
-                            const next = selected ? current.filter((item) => item !== option) : [...current, option];
-                            updateQuestion(question.id, { answer: next.join(";") });
-                          }}
-                          className={`rounded-full border px-4 py-2 text-sm transition ${selected ? "border-[#D6B160] bg-[#C9A55B] text-black" : "border-[#C9A55B]/20 bg-black/20 text-white/85 hover:border-[#C9A55B]/45"}`}
-                        >
-                          {option}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-
-                {question.type === "select" ? (
-                  <select
-                    value={question.answer || ""}
-                    onChange={(event) => updateQuestion(question.id, { answer: event.target.value })}
-                    className="h-12 w-full rounded-xl border border-[#C9A55B]/20 bg-black/25 px-4 text-white outline-none transition focus:border-[#C9A55B]/55"
-                  >
-                    <option value="">Selecione uma opção</option>
-                    {(question.options || []).map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
-                ) : null}
-
-                {shouldShowFollowUp(question) && question.followUp ? (
-                  <div className="mt-4 rounded-xl border border-[#C9A55B]/15 bg-black/20 p-4">
-                    <label className="mb-2 block text-sm font-medium text-white/85">{question.followUp.prompt}</label>
-                    <input
-                      value={question.followUpAnswer || ""}
-                      onChange={(event) => updateQuestion(question.id, { followUpAnswer: event.target.value })}
-                      placeholder={question.followUp.placeholder || "Escreva aqui"}
-                      className="h-11 w-full rounded-xl border border-[#C9A55B]/20 bg-black/25 px-4 text-white outline-none transition focus:border-[#C9A55B]/55"
+                  {question.type === "text" ? (
+                    <textarea
+                      rows={3}
+                      value={question.answer || ""}
+                      onChange={(event) => updateQuestion(question.id, { answer: event.target.value })}
+                      className="w-full rounded-xl border border-[#D8C496] bg-white px-4 py-3 text-[#1F1A14] outline-none transition focus:border-[#B8863B]"
+                      placeholder={question.placeholder || "Digite sua resposta"}
                     />
-                  </div>
-                ) : null}
-              </div>
-            ))}
+                  ) : null}
+
+                  {question.type === "radio" ? (
+                    <div className="flex flex-wrap gap-2">
+                      {(question.options || []).map((option) => {
+                        const active = (question.answer || "") === option;
+                        return (
+                          <button
+                            key={option}
+                            type="button"
+                            onClick={() => updateQuestion(question.id, { answer: option, followUpAnswer: active ? question.followUpAnswer : "" })}
+                            className={`rounded-full border px-4 py-2 text-sm transition ${active ? "border-[#D6B160] bg-[#C9A55B] text-black" : "border-[#D8C496] bg-white text-[#2B241A] hover:border-[#B8863B]"}`}
+                          >
+                            {option}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+
+                  {question.type === "checkbox" ? (
+                    <div className="flex flex-wrap gap-2">
+                      {(question.options || []).map((option) => {
+                        const selected = (question.answer || "").split(";").includes(option);
+                        return (
+                          <button
+                            key={option}
+                            type="button"
+                            onClick={() => {
+                              const current = (question.answer || "").split(";").filter(Boolean);
+                              const next = selected ? current.filter((item) => item !== option) : [...current, option];
+                              updateQuestion(question.id, { answer: next.join(";") });
+                            }}
+                            className={`rounded-full border px-4 py-2 text-sm transition ${selected ? "border-[#D6B160] bg-[#C9A55B] text-black" : "border-[#D8C496] bg-white text-[#2B241A] hover:border-[#B8863B]"}`}
+                          >
+                            {option}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+
+                  {question.type === "select" ? (
+                    <select
+                      value={question.answer || ""}
+                      onChange={(event) => updateQuestion(question.id, { answer: event.target.value })}
+                      className="h-12 w-full rounded-xl border border-[#D8C496] bg-white px-4 text-[#1F1A14] outline-none transition focus:border-[#B8863B]"
+                    >
+                      <option value="">Selecione uma opção</option>
+                      {(question.options || []).map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                  ) : null}
+
+                  {shouldShowFollowUp(question) && question.followUp ? (
+                    <div className="mt-4 rounded-xl border border-[#D8C496] bg-[#F8F2E7] p-4">
+                      <label className="mb-2 block text-sm font-medium text-[#2B241A]">{question.followUp.prompt}</label>
+                      <input
+                        value={question.followUpAnswer || ""}
+                        onChange={(event) => updateQuestion(question.id, { followUpAnswer: event.target.value })}
+                        placeholder={question.followUp.placeholder || "Escreva aqui"}
+                        className="h-11 w-full rounded-xl border border-[#D8C496] bg-white px-4 text-[#1F1A14] outline-none transition focus:border-[#B8863B]"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
 
-          {error ? <div className="mt-6 rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">{error}</div> : null}
-          {success ? <div className="mt-6 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">{success}</div> : null}
+          {error ? <div className="mt-6 rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div> : null}
+          {success ? <div className="mt-6 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{success}</div> : null}
 
           <div className="mt-8 flex flex-col items-stretch gap-3 md:flex-row md:items-center md:justify-between">
-            <p className="text-sm text-white/60">Ao enviar, suas respostas ficam protegidas no prontuário e acessíveis apenas aos perfis autorizados.</p>
+            <p className="text-sm text-[#5F574A]">
+              Ao clicar em Salvar e enviar, declaro que as informações preenchidas acima são verdadeiras.
+            </p>
             <button
               type="button"
               onClick={handleSubmit}
               disabled={submitting || loading}
-              className="inline-flex h-12 items-center justify-center rounded-xl bg-[linear-gradient(90deg,#8A6526,#D7B56B,#B8863B)] px-6 text-sm font-semibold text-black shadow-[0_18px_45px_rgba(201,165,91,0.24)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
+              className="inline-flex h-12 items-center justify-center rounded-xl bg-[linear-gradient(90deg,#8A6526,#D7B56B,#B8863B)] px-6 text-sm font-semibold text-black shadow-[0_14px_35px_rgba(201,165,91,0.26)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-              Enviar anamnese
+              Salvar e enviar
             </button>
           </div>
         </div>

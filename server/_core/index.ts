@@ -537,6 +537,8 @@ async function startServer() {
     }
 
     try {
+      const forwardedFor = req.headers["x-forwarded-for"];
+      const forwardedIp = Array.isArray(forwardedFor) ? forwardedFor[0] : String(forwardedFor || "").split(",")[0].trim();
       await dbComplete.submitAnamnesisShareLink(
         String(req.params.token ?? ""),
         answers as Record<string, string>,
@@ -546,6 +548,12 @@ async function startServer() {
           mimeType: typeof profilePhotoMimeType === "string" ? profilePhotoMimeType : null,
           fileName: typeof profilePhotoFileName === "string" ? profilePhotoFileName : null,
           declarationAccepted: Boolean(profilePhotoDeclarationAccepted),
+        },
+        {
+          ipAddress: forwardedIp || req.socket.remoteAddress || null,
+          userAgent: req.get("user-agent") || null,
+          acceptedAt: new Date().toISOString(),
+          method: "assinatura_eletronica_simples",
         },
       );
       return res.json({ success: true });

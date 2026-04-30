@@ -20,6 +20,7 @@ import {
   mapTemplateSectionsToQuestions,
   serializeAnamnesisQuestions,
   shouldShowFollowUp,
+  shouldShowQuestion,
   validateAnamnesisQuestions,
   type AnamnesisQuestion,
   type AnamnesisTemplate,
@@ -586,8 +587,8 @@ function AnamneseTab({ patientId }: { patientId: number }) {
   }, [customTemplates]);
 
   const defaultTemplate = availableTemplates[0] ?? SYSTEM_ANAMNESIS_TEMPLATES[0];
-  const [selectedTemplateId, setSelectedTemplateId] = useState(defaultTemplate?.id || "anamnesis-feminina-padrao");
-  const [anamnesisTitle, setAnamnesisTitle] = useState(defaultTemplate?.name || "Anamnese feminina padrão");
+  const [selectedTemplateId, setSelectedTemplateId] = useState(defaultTemplate?.id || "anamnesis-inicial-padrao");
+  const [anamnesisTitle, setAnamnesisTitle] = useState(defaultTemplate?.name || "Anamnese inicial");
   const [anamnesisDate, setAnamnesisDate] = useState(new Date().toISOString().slice(0, 10));
   const [questions, setQuestions] = useState<AnamnesisQuestion[]>(cloneAnamnesisQuestions(defaultTemplate?.questions || SYSTEM_ANAMNESIS_TEMPLATES[0].questions));
   const [expandedRecordId, setExpandedRecordId] = useState<number | null>(null);
@@ -706,7 +707,7 @@ function AnamneseTab({ patientId }: { patientId: number }) {
       </Card>
 
       <div className="grid gap-3 lg:grid-cols-2">
-        {questions.map((question) => (
+        {questions.filter((question) => shouldShowQuestion(question, questions)).map((question) => (
           <Card key={question.id} className="border-border/50">
             <CardContent className="space-y-2.5 p-3">
               <div className="flex items-start justify-between gap-3">
