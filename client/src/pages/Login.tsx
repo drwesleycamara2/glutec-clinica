@@ -112,7 +112,7 @@ export default function Login() {
             <div className="mt-6 flex items-start gap-3 rounded-2xl border border-[#d7ba78]/25 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#f1d791]" />
               <p className="text-sm text-[#f8f0dc]">
-                Sua sessão foi bloqueada por 30 minutos de inatividade. Entre novamente para continuar.
+                Sua sessão foi bloqueada por 1 hora de inatividade. Entre novamente para continuar.
               </p>
             </div>
           )}
