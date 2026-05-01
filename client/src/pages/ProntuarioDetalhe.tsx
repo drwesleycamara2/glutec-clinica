@@ -40,6 +40,7 @@ import { generatePremiumPdf } from "@/components/PdfExporter";
 import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
 import { SignatureCertillionButton } from "@/components/SignatureCertillionButton";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { hasModulePermission } from "@/lib/access";
 
 function buildHistorySummary(record: any) {
   return [
@@ -2136,36 +2137,42 @@ export default function ProntuarioDetalhe() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const isReceptionist = user?.role === "recepcionista" || user?.role === "secretaria";
+  const hasFullProntuario = hasModulePermission(user, "prontuarios");
+  const hasAnotacoes = hasModulePermission(user, "prontuarios_anotacoes");
+  const isNotesOnly = !hasFullProntuario && hasAnotacoes;
+  const fallbackTab = isNotesOnly ? "secretaria" : "historico";
   const validTabs = useMemo(
     () =>
-      isReceptionist
-        ? ["historico", "evolucao"]
-        : [
-            "historico",
-            "anamnese",
-            "evolucao",
-            "secretaria",
-            "atestados",
-            "contratos",
-            "prescricoes",
-            "orcamentos",
-            "imagens",
-            "galeria",
-            "anexos",
-            "exames",
-            "procedimentos",
-            "agendamentos",
-          ],
-    [isReceptionist],
+      isNotesOnly
+        ? ["secretaria"]
+        : isReceptionist
+          ? ["historico", "evolucao"]
+          : [
+              "historico",
+              "anamnese",
+              "evolucao",
+              "secretaria",
+              "atestados",
+              "contratos",
+              "prescricoes",
+              "orcamentos",
+              "imagens",
+              "galeria",
+              "anexos",
+              "exames",
+              "procedimentos",
+              "agendamentos",
+            ],
+    [isReceptionist, isNotesOnly],
   );
   const [activeTab, setActiveTab] = useState(() => {
-    if (typeof window === "undefined") return "historico";
+    if (typeof window === "undefined") return fallbackTab;
     const hashTab = window.location.hash.replace("#", "");
-    return validTabs.includes(hashTab) ? hashTab : "historico";
+    return validTabs.includes(hashTab) ? hashTab : fallbackTab;
   });
 
   const { data: patient, isLoading, refetch: refetchPatient } = trpc.patients.getById.useQuery({ id: patientId });
-  const { data: evolutionIndex } = trpc.clinicalEvolution.getByPatient.useQuery({ patientId }, { enabled: !isReceptionist });
+  const { data: evolutionIndex } = trpc.clinicalEvolution.getByPatient.useQuery({ patientId }, { enabled: !isReceptionist && !isNotesOnly });
   const [editPatientOpen, setEditPatientOpen] = useState(false);
   const secretaryRecords = useMemo(
     () => (evolutionIndex ?? []).filter((record: any) => isSecretaryOnlyEvolutionRecord(record)),
@@ -2211,7 +2218,7 @@ export default function ProntuarioDetalhe() {
           <Pencil className="h-4 w-4 mr-1" />
           Editar cadastro
         </Button>
-        {!isReceptionist && <ExportProntuarioButton patientId={patientId} patientName={patient.fullName} />}
+        {!isReceptionist && !isNotesOnly && <ExportProntuarioButton patientId={patientId} patientName={patient.fullName} />}
       </div>
 
       <PatientEditDialog
@@ -2230,7 +2237,7 @@ export default function ProntuarioDetalhe() {
         <p className="text-[10px] text-[#C9A55B]">Prontuário protegido pela LGPD. Todos os acessos são registrados.</p>
       </div>
 
-      {!isReceptionist && latestSecretaryRecord && (
+      {!isReceptionist && !isNotesOnly && latestSecretaryRecord && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300/40 bg-amber-50/70 p-3">
           <div className="space-y-1">
             <p className="text-sm font-semibold text-amber-900">Há registros da secretaria neste prontuário.</p>
@@ -2271,13 +2278,22 @@ export default function ProntuarioDetalhe() {
         className="w-full"
       >
         <TabsList className="w-full justify-start flex-wrap bg-muted/50 h-auto p-1 gap-0.5">
-          <TabsTrigger value="historico" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-            <History className="h-3.5 w-3.5" />Histórico
-          </TabsTrigger>
-          <TabsTrigger value="evolucao" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-            <Activity className="h-3.5 w-3.5" />Evolução
-          </TabsTrigger>
-          {!isReceptionist && (
+          {!isNotesOnly && (
+            <>
+              <TabsTrigger value="historico" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <History className="h-3.5 w-3.5" />Histórico
+              </TabsTrigger>
+              <TabsTrigger value="evolucao" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <Activity className="h-3.5 w-3.5" />Evolução
+              </TabsTrigger>
+            </>
+          )}
+          {isNotesOnly && (
+            <TabsTrigger value="secretaria" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+              <UserCheck className="h-3.5 w-3.5" />Anotações da equipe
+            </TabsTrigger>
+          )}
+          {!isReceptionist && !isNotesOnly && (
             <>
               <TabsTrigger value="anamnese" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
                 <ClipboardList className="h-3.5 w-3.5" />Anamnese
@@ -2319,9 +2335,16 @@ export default function ProntuarioDetalhe() {
           )}
         </TabsList>
 
-        <TabsContent value="historico" className="mt-4"><HistoricoTab patientId={patientId} /></TabsContent>
-        <TabsContent value="evolucao" className="mt-4"><EvolucaoClinicaWorkspace patientId={patientId} patientName={patient.fullName} /></TabsContent>
-        {!isReceptionist && (
+        {!isNotesOnly && (
+          <>
+            <TabsContent value="historico" className="mt-4"><HistoricoTab patientId={patientId} /></TabsContent>
+            <TabsContent value="evolucao" className="mt-4"><EvolucaoClinicaWorkspace patientId={patientId} patientName={patient.fullName} /></TabsContent>
+          </>
+        )}
+        {isNotesOnly && (
+          <TabsContent value="secretaria" className="mt-4"><SecretariaTab patientId={patientId} /></TabsContent>
+        )}
+        {!isReceptionist && !isNotesOnly && (
           <>
             <TabsContent value="anamnese" className="mt-4"><AnamneseTab patientId={patientId} /></TabsContent>
             <TabsContent value="secretaria" className="mt-4"><SecretariaTab patientId={patientId} /></TabsContent>

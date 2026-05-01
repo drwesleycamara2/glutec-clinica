@@ -89,10 +89,10 @@ const menuSections: MenuSection[] = [
       { icon: LayoutDashboard, label: "Dashboard", path: "/" },
       { icon: CalendarDays, label: "Agenda", path: "/agenda", moduleId: "agenda" },
       { icon: Users, label: "Pacientes", path: "/pacientes", moduleId: "pacientes" },
-      { icon: ClipboardList, label: "Prontuários", path: "/prontuarios", moduleId: "prontuarios" },
+      { icon: ClipboardList, label: "Prontuários", path: "/prontuarios", moduleId: "prontuarios_any" },
       { icon: Camera, label: "Imagens", path: "/fotos", moduleId: "fotos" },
-      { icon: Files, label: "Documentos", path: "/documentos", moduleId: "documentos" },
-      { icon: ScrollText, label: "Contratos", path: "/contratos", moduleId: "documentos" },
+      { icon: Files, label: "Documentos", path: "/documentos", moduleId: "documentos_identificacao" },
+      { icon: ScrollText, label: "Contratos", path: "/contratos", moduleId: "contratos_termos" },
       { icon: FileStack, label: "Modelos", path: "/templates", moduleId: "templates" },
       { icon: FileText, label: "Prescrições", path: "/prescricoes", moduleId: "prescricoes" },
       { icon: Stethoscope, label: "Exames", path: "/exames", moduleId: "exames" },
@@ -109,7 +109,7 @@ const menuSections: MenuSection[] = [
       { icon: MessageSquare, label: "CRM", path: "/crm", moduleId: "crm" },
       { icon: BarChart3, label: "Relatórios", path: "/relatorios", adminOnly: true, moduleId: "relatorios" },
       { icon: MessageSquare, label: "Chat", path: "/chat", moduleId: "chat" },
-      { icon: UserCircle2, label: "Perfil", path: "/perfil", moduleId: "perfil" },
+      { icon: UserCircle2, label: "Perfil", path: "/perfil" },
       { icon: ShieldCheck, label: "Usuários", path: "/usuarios", adminOnly: true, moduleId: "usuarios" },
       { icon: Settings, label: "Configurações", path: "/configuracoes", moduleId: "configuracoes" },
     ],
@@ -199,7 +199,7 @@ export default function DashboardLayoutPremium({
             Entrar no sistema
           </Button>
           <p className="text-xs font-medium uppercase tracking-[0.26em] text-text-muted">
-            Glutec Sistema | Wesley Câmara
+            Glutec System | Wesley Câmara
           </p>
         </div>
       </div>
@@ -462,7 +462,7 @@ function DashboardLayoutPremiumContent({
                   </Avatar>
                   <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
                     <p className="truncate text-sm font-semibold text-text-primary">
-                      {user?.name || "Equipe Glutec"}
+                      {user?.name || "Equipe Glutec System"}
                     </p>
                     <p className="mt-1 truncate text-[11px] uppercase tracking-[0.2em] text-text-tertiary">
                       {user?.role === "admin" ? "Administrador" : "Equipe clínica"}
@@ -501,7 +501,7 @@ function DashboardLayoutPremiumContent({
         <header className="app-main-header hidden h-20 items-center justify-between px-6 md:flex">
           <div className="flex min-w-0 items-center gap-4">
             <div className="app-hero-chip rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.28em] text-text-tertiary">
-              {activeMenuItem?.label ?? "Glutec"}
+              {activeMenuItem?.label ?? "Glutec System"}
             </div>
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-[0.34em] text-text-tertiary">
@@ -575,7 +575,7 @@ function DashboardLayoutPremiumContent({
             <div className="flex items-center gap-2">
               <SidebarTrigger className="h-10 w-10 rounded-xl border border-gold/20 bg-white/40 dark:bg-white/5" />
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-text-tertiary">Glutec</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-text-tertiary">Glutec System</p>
                 <p className="text-sm font-medium text-text-primary">{activeMenuItem?.label ?? "Menu"}</p>
               </div>
             </div>

@@ -1,9 +1,11 @@
 export const MODULE_LABELS: Record<string, string> = {
   agenda: "Agenda",
   pacientes: "Pacientes",
-  prontuarios: "Prontuários",
+  prontuarios: "Prontuários (acesso completo)",
+  prontuarios_anotacoes: "Prontuários — anotações da equipe",
   fotos: "Fotos",
-  documentos: "Documentos e termos",
+  documentos_identificacao: "Documentos de identificação",
+  contratos_termos: "Contratos e termos",
   prescricoes: "Prescrições",
   exames: "Exames",
   assinaturas: "Assinaturas",
@@ -13,7 +15,6 @@ export const MODULE_LABELS: Record<string, string> = {
   crm: "CRM",
   relatorios: "Relatórios",
   chat: "Chat",
-  perfil: "Perfil",
   configuracoes: "Configurações",
   usuarios: "Usuários",
   fiscal: "Fiscal",
@@ -25,14 +26,21 @@ export const AVAILABLE_MODULES = Object.entries(MODULE_LABELS).map(([id, label])
   label,
 }));
 
+const LEGACY_MODULE_ALIASES: Record<string, string[]> = {
+  prontuarios: ["prontuarios"],
+  prontuarios_anotacoes: ["prontuarios_anotacoes", "prontuarios"],
+  documentos_identificacao: ["documentos_identificacao", "documentos"],
+  contratos_termos: ["contratos_termos", "documentos"],
+};
+
 const pathModuleMap: Array<{ prefix: string; moduleId: string }> = [
   { prefix: "/agenda", moduleId: "agenda" },
   { prefix: "/pacientes", moduleId: "pacientes" },
-  { prefix: "/prontuarios", moduleId: "prontuarios" },
+  { prefix: "/prontuarios", moduleId: "prontuarios_any" },
   { prefix: "/evolucao", moduleId: "prontuarios" },
   { prefix: "/fotos", moduleId: "fotos" },
-  { prefix: "/documentos", moduleId: "documentos" },
-  { prefix: "/contratos", moduleId: "documentos" },
+  { prefix: "/documentos", moduleId: "documentos_identificacao" },
+  { prefix: "/contratos", moduleId: "contratos_termos" },
   { prefix: "/prescricoes", moduleId: "prescricoes" },
   { prefix: "/exames", moduleId: "exames" },
   { prefix: "/assinaturas", moduleId: "assinaturas" },
@@ -42,7 +50,6 @@ const pathModuleMap: Array<{ prefix: string; moduleId: string }> = [
   { prefix: "/crm", moduleId: "crm" },
   { prefix: "/relatorios", moduleId: "relatorios" },
   { prefix: "/chat", moduleId: "chat" },
-  { prefix: "/perfil", moduleId: "perfil" },
   { prefix: "/configuracoes", moduleId: "configuracoes" },
   { prefix: "/templates", moduleId: "templates" },
   { prefix: "/usuarios", moduleId: "usuarios" },
@@ -66,6 +73,23 @@ export function canAccessModule(
   moduleId?: string | null
 ) {
   if (!moduleId) return true;
+  if (!user) return false;
+  if (user.role === "admin") return true;
+
+  const granted = parsePermissions(user.permissions);
+
+  if (moduleId === "prontuarios_any") {
+    return granted.includes("prontuarios") || granted.includes("prontuarios_anotacoes");
+  }
+
+  const aliases = LEGACY_MODULE_ALIASES[moduleId] ?? [moduleId];
+  return aliases.some((id) => granted.includes(id));
+}
+
+export function hasModulePermission(
+  user: { role?: string | null; permissions?: string | null } | null | undefined,
+  moduleId: string
+) {
   if (!user) return false;
   if (user.role === "admin") return true;
   return parsePermissions(user.permissions).includes(moduleId);

@@ -100,7 +100,7 @@ export default function DashboardLayout({
           <div className="flex flex-col items-center gap-6">
             <img src="/logo-glutee.png" alt="Logo" className="h-20 mb-2" />
             <h1 className="text-3xl font-bold tracking-tight text-center text-[#050505]">
-              Bem-vindo à Glutec
+              Bem-vindo à Glutec System
             </h1>
             <p className="text-base text-[#6B6B6B] text-center max-w-sm">
               Acesse sua conta para gerenciar sua clínica com excelência e sofisticação.
@@ -122,7 +122,7 @@ export default function DashboardLayout({
           </Button>
           
           <div className="mt-4 text-xs text-[#8B8B8B] font-medium">
-            © 2026 Glutec Sistema - Excelência em Gestão. By Wésley Câmara
+            © 2026 Glutec System - Excelência em Gestão. By Wésley Câmara
           </div>
         </div>
       </div>

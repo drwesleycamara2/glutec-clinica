@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
 
 const { authenticator } = otplib as any;
-const APP_NAME = "Glutec Clinica";
+const APP_NAME = "Glutec System";
 
 authenticator.options = {
   window: 1,

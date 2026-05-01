@@ -70,25 +70,23 @@ const LEGACY_ROLE_LABELS: Record<string, string> = {
   user: "Apoio",
 };
 
-const MODULE_META = AVAILABLE_MODULES.map((module) => {
-  if (module.id === "documentos") {
-    return {
-      ...module,
-      label: "Documentos e termos",
-      description: "Documentos de identificação, comprovantes, contratos e termos de consentimento.",
-    };
-  }
+const MODULE_DESCRIPTIONS: Record<string, string> = {
+  prontuarios:
+    "Acesso completo ao prontuário clínico (anamnese, evolução, prescrições, exames, anexos e demais abas).",
+  prontuarios_anotacoes:
+    "Permite somente registrar e visualizar anotações administrativas da equipe (aba Secretaria). Não dá acesso a anamnese, evolução, exames, anexos e demais abas clínicas.",
+  documentos_identificacao:
+    "Documentos de identificação do paciente (RG, CPF, CNH) e comprovantes de endereço.",
+  contratos_termos:
+    "Contratos clínicos e termos de consentimento.",
+  templates:
+    "Modelos de evolução, prescrições, pedidos de exames, atestados e outros modelos clínicos.",
+};
 
-  if (module.id === "templates") {
-    return {
-      ...module,
-      label: "Modelos clínicos",
-      description: "Modelos de evolução, prescrições, pedidos de exames, atestados e outros modelos clínicos.",
-    };
-  }
-
-  return { ...module, description: "" };
-});
+const MODULE_META = AVAILABLE_MODULES.map((module) => ({
+  ...module,
+  description: MODULE_DESCRIPTIONS[module.id] ?? "",
+}));
 
 function normalizeEmail(value?: string | null) {
   return String(value ?? "").trim().toLowerCase();
@@ -576,7 +574,7 @@ export default function UsuariosEquipe() {
                 <div>
                   <label className="mb-2 block text-sm font-medium text-text-primary">Partes do sistema que esse colaborador poderá acessar</label>
                   <p className="mb-3 text-xs leading-6 text-text-secondary">
-                    O acesso é liberado somente ao que você marcar aqui. O grupo <strong>Documentos e termos</strong> cobre documentos de identificação, comprovantes, contratos e termos de consentimento. Os <strong>modelos de evolução, prescrições e pedidos de exames</strong> ficam em <strong>Modelos clínicos</strong>, separados.
+                    O acesso é liberado somente ao que você marcar aqui. <strong>Prontuários (acesso completo)</strong> dá acesso a todas as abas clínicas; <strong>Prontuários — anotações da equipe</strong> libera apenas a aba de anotações administrativas (Secretaria), sem expor anamnese, evolução, exames, anexos e demais conteúdos clínicos. <strong>Documentos de identificação</strong> e <strong>Contratos e termos</strong> agora são opções separadas. O perfil próprio de cada colaborador (incluindo foto e senha) é sempre acessível e não precisa ser marcado aqui.
                   </p>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {MODULE_META.filter(module => module.id !== "usuarios").map(module => (

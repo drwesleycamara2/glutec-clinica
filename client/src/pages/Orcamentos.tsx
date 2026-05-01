@@ -385,9 +385,9 @@ export default function Orcamentos() {
       return;
     }
 
-    const subject = encodeURIComponent("Sua NFS-e - Glutec");
+    const subject = encodeURIComponent("Sua NFS-e - Glutec System");
     const body = encodeURIComponent(
-      `Olá, ${budget.patientName}.\n\nSegue o link da sua nota fiscal de serviço:\n${link}\n\nAtenciosamente,\nGlutec`,
+      `Olá, ${budget.patientName}.\n\nSegue o link da sua nota fiscal de serviço:\n${link}\n\nAtenciosamente,\nGlutec System`,
     );
 
     window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;

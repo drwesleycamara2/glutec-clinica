@@ -79,7 +79,7 @@ function addWatermark(pdf: jsPDF, logoPath: string, opacity: number = 0.15): voi
 }
 
 /**
- * Generate a premium PDF with the Glutec branding
+ * Generate a premium PDF with the Glutec System branding
  */
 export async function generatePremiumPdf(options: PdfExportOptions): Promise<void> {
   const {

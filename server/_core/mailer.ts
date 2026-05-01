@@ -19,7 +19,7 @@ function baseTemplate(content: string): string {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Glutec Clínica</title>
+  <title>Glutec System</title>
 </head>
 <body style="margin:0;padding:0;background:#F7F4EE;font-family:Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#F7F4EE;padding:40px 0;">
@@ -29,7 +29,7 @@ function baseTemplate(content: string): string {
           <!-- Header dourado -->
           <tr>
             <td style="background:linear-gradient(135deg,#8A6526,#C9A55B,#F1D791,#B8863B,#8A6526);padding:32px;text-align:center;">
-              <h1 style="margin:0;color:#FFFFFF;font-size:24px;font-weight:700;letter-spacing:1px;">Glutec Clínica</h1>
+              <h1 style="margin:0;color:#FFFFFF;font-size:24px;font-weight:700;letter-spacing:1px;">Glutec System</h1>
               <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">Sistema de Gestão Médica</p>
             </td>
           </tr>
@@ -42,7 +42,7 @@ function baseTemplate(content: string): string {
           <!-- Rodapé -->
           <tr>
             <td style="padding:24px 48px;background:#F7F4EE;border-top:1px solid #E8E0D0;text-align:center;">
-              <p style="margin:0;font-size:12px;color:#8B8B8B;">© 2026 Glutec Sistema — Excelência em Gestão Médica</p>
+              <p style="margin:0;font-size:12px;color:#8B8B8B;">© 2026 Glutec System — Excelência em Gestão Médica</p>
               <p style="margin:4px 0 0;font-size:11px;color:#AAAAAA;">Este e-mail foi enviado automaticamente. Não responda.</p>
             </td>
           </tr>
@@ -74,7 +74,7 @@ export function inviteEmailTemplate(params: {
   const html = baseTemplate(`
     <h2 style="margin:0 0 8px;color:#050505;font-size:22px;">Você foi convidado!</h2>
     <p style="margin:0 0 24px;color:#555;font-size:15px;">
-      <strong>${params.inviterName}</strong> convidou você para acessar o sistema da <strong>Glutec Clínica</strong> como <strong>${roleLabel}</strong>.
+      <strong>${params.inviterName}</strong> convidou você para acessar o <strong>Glutec System</strong> como <strong>${roleLabel}</strong>.
     </p>
 
     <div style="background:#F7F4EE;border-radius:8px;padding:20px 24px;margin:0 0 28px;">
@@ -99,7 +99,7 @@ export function inviteEmailTemplate(params: {
   `);
 
   return {
-    subject: `Convite para acessar o Glutec Clínica`,
+    subject: `Convite para acessar o Glutec System`,
     html,
   };
 }
@@ -116,7 +116,7 @@ export function passwordResetEmailTemplate(params: {
   const html = baseTemplate(`
     <h2 style="margin:0 0 8px;color:#050505;font-size:22px;">Redefinição de senha</h2>
     <p style="margin:0 0 24px;color:#555;font-size:15px;">
-      ${recipientName}, recebemos uma solicitação para redefinir a senha da sua conta no <strong>Glutec</strong>.
+      ${recipientName}, recebemos uma solicitação para redefinir a senha da sua conta no <strong>Glutec System</strong>.
     </p>
 
     <div style="background:#F7F4EE;border-radius:8px;padding:20px 24px;margin:0 0 28px;">
@@ -141,7 +141,7 @@ export function passwordResetEmailTemplate(params: {
   `);
 
   return {
-    subject: "Recuperação de senha do Glutec",
+    subject: "Recuperação de senha do Glutec System",
     html,
   };
 }

@@ -130,9 +130,9 @@ export default function AceitarConvite() {
       <div className="relative z-10 w-full max-w-md px-4">
         <div className="overflow-hidden rounded-[2rem] border border-gold/20 bg-white/80 shadow-[0_38px_90px_rgba(90,63,18,0.18)] backdrop-blur-xl dark:bg-black/45">
           <div className="bg-[linear-gradient(135deg,#6F4D17_0%,#B8863B_26%,#F1D791_50%,#C89D49_72%,#6F4D17_100%)] px-8 py-7 text-center">
-            <img src="/logo-glutee.svg" alt="Glutec" className="h-12 mx-auto mb-2" />
+            <img src="/logo-glutee.svg" alt="Glutec System" className="h-12 mx-auto mb-2" />
             <h1 className="text-white text-xl font-bold">Ativar Conta</h1>
-            <p className="text-white/80 text-sm mt-1">Glutec Clínica</p>
+            <p className="text-white/80 text-sm mt-1">Glutec System</p>
           </div>
 
           <div className="px-8 py-8">

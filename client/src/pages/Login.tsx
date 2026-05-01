@@ -96,7 +96,7 @@ export default function Login() {
             />
 
             <div className="w-full rounded-[1.4rem] border border-[#d7ba78]/28 bg-[linear-gradient(135deg,rgba(255,214,120,0.12),rgba(255,255,255,0.02),rgba(255,214,120,0.08))] px-6 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] backdrop-blur-md">
-              <h1 className="text-3xl font-semibold tracking-[0.04em] text-[#fff8ea]">Glutec</h1>
+              <h1 className="text-3xl font-semibold tracking-[0.04em] text-[#fff8ea]">Glutec System</h1>
               <p className="mt-2 text-sm font-medium tracking-[0.18em] text-[#f1d791]/80 uppercase">
                 Sistema de atendimento e gestão médica
               </p>

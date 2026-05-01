@@ -149,9 +149,9 @@ export default function AceitarConviteSafe() {
       <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-10">
         <div className="w-full max-w-md overflow-hidden rounded-[2rem] border border-gold/20 bg-white/80 shadow-[0_38px_90px_rgba(90,63,18,0.18)] backdrop-blur-xl dark:bg-black/45">
           <div className="bg-[linear-gradient(135deg,#6F4D17_0%,#B8863B_26%,#F1D791_50%,#C89D49_72%,#6F4D17_100%)] px-8 py-7 text-center">
-            <img src="/logo-glutee.svg" alt="Glutec" className="mx-auto mb-2 h-12" />
+            <img src="/logo-glutee.svg" alt="Glutec System" className="mx-auto mb-2 h-12" />
             <h1 className="text-xl font-bold text-white">Ativar conta</h1>
-            <p className="mt-1 text-sm text-white/80">Glutec Clínica</p>
+            <p className="mt-1 text-sm text-white/80">Glutec System</p>
           </div>
 
           <div className="px-8 py-8">

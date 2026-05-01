@@ -101,7 +101,7 @@ export default function VerificarDoisFatoresSafe() {
           <div className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#8A6526] px-8 py-7 text-center">
             <ShieldCheck className="mx-auto mb-2 h-10 w-10 text-white" />
             <h1 className="text-xl font-bold text-white">Verificação em dois fatores</h1>
-            <p className="mt-1 text-sm text-white/80">Glutec Clínica - acesso seguro</p>
+            <p className="mt-1 text-sm text-white/80">Glutec System - acesso seguro</p>
           </div>
 
           <div className="px-8 py-8">
