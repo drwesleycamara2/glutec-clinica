@@ -58,6 +58,7 @@ export function inviteEmailTemplate(params: {
   name: string;
   inviterName: string;
   role: string;
+  jobTitles?: string[];
   acceptUrl: string;
   expiresIn: string;
 }): { subject: string; html: string } {
@@ -66,6 +67,7 @@ export function inviteEmailTemplate(params: {
     medico: "Médico(a)",
     recepcionista: "Recepcionista",
     enfermeiro: "Enfermeiro(a)",
+    gerente: "Gerente",
     user: "Usuário",
   };
 

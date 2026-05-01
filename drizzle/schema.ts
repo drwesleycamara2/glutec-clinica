@@ -22,7 +22,7 @@ export const users = mysqlTable("users", {
   professionalLicenseType: varchar("professionalLicenseType", { length: 16 }),
   professionalLicenseState: varchar("professionalLicenseState", { length: 2 }),
   phone: varchar("phone", { length: 32 }),
-  role: mysqlEnum("role", ["user", "admin", "medico", "recepcionista", "enfermeiro"]).default("user").notNull(),
+  role: mysqlEnum("role", ["user", "admin", "medico", "recepcionista", "enfermeiro", "gerente"]).default("user").notNull(),
   status: mysqlEnum("status", ["active", "inactive", "pending_password_change"]).default("active").notNull(),
   permissions: text("permissions"), // JSON string of allowed modules
   password: text("password"), // For local password fallback if needed, though Manus uses OAuth

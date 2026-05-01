@@ -135,7 +135,7 @@ export const invitationsRouter = router({
     .input(z.object({
       email: z.string().email(),
       name: z.string().min(2),
-      role: z.enum(["user", "admin", "medico", "recepcionista", "enfermeiro"]),
+      role: z.enum(["user", "admin", "medico", "recepcionista", "enfermeiro", "gerente"]),
     }))
     .mutation(async ({ ctx, input }) => {
       // Apenas admin pode convidar

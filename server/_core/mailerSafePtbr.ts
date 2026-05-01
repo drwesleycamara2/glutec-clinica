@@ -102,7 +102,7 @@ export function inviteEmailTemplate(params: {
         1. Voc&ecirc; cria sua senha.<br />
         2. Configura obrigatoriamente o Google Authenticator.<br />
         3. S&oacute; ent&atilde;o o acesso ao sistema fica liberado.<br />
-        4. Se um dia esquecer a senha, use a op&ccedil;&atilde;o <strong>"Esqueci minha senha"</strong> na tela inicial.
+        4. Se esquecer a senha ou perder o autenticador, solicite a recupera&ccedil;&atilde;o ao administrador da cl&iacute;nica.
       </p>
     </div>
 

@@ -432,7 +432,7 @@ export async function disableUser2FA(userId: number) {
 export async function createInvitation(data: {
   email: string;
   name: string;
-  role: "user" | "admin" | "medico" | "recepcionista" | "enfermeiro";
+  role: "user" | "admin" | "medico" | "recepcionista" | "enfermeiro" | "gerente";
   token: string;
   invitedById: number;
   expiresAt: Date;

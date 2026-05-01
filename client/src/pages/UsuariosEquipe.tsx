@@ -355,7 +355,7 @@ export default function UsuariosEquipe() {
             <p>1. Recebe o convite por e-mail.</p>
             <p>2. Cria a senha.</p>
             <p>3. Configura o Google Authenticator.</p>
-            <p>4. Se esquecer a senha, usa {"“Esqueci minha senha”"} na tela inicial.</p>
+            <p>4. Recuperação de acesso somente com o administrador.</p>
           </div>
         </PremiumCard>
       </div>
@@ -490,8 +490,7 @@ export default function UsuariosEquipe() {
                     <div className="rounded-2xl border border-gold/10 bg-background/55 p-3">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-text-tertiary">Recuperação de senha</p>
                       <p className="mt-2 text-xs leading-6 text-text-secondary">
-                        Se esse colaborador esquecer a senha, ele deve acessar a tela inicial do sistema, clicar em{" "}
-                        <strong>{"“Esqueci minha senha”"}</strong> e seguir o link enviado por e-mail. Depois disso, o login continua exigindo o Google Authenticator.
+                        Se esse colaborador esquecer a senha ou perder o Google Authenticator, a recuperação deve ser feita pelo administrador via procedimento seguro no VPS.
                       </p>
                     </div>
                   </div>
@@ -503,9 +502,9 @@ export default function UsuariosEquipe() {
       </PremiumCard>
 
       {isInviteModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <PremiumCard borderGold className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden">
-            <div className="mb-6 flex items-center justify-between border-b border-gold pb-4">
+        <div className="fixed inset-0 z-50 flex items-stretch justify-center overflow-hidden bg-black/80 p-4 backdrop-blur-sm">
+          <PremiumCard borderGold hover={false} className="flex h-full max-h-[calc(100dvh-2rem)] w-full max-w-5xl flex-col overflow-hidden p-0">
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-gold px-5 py-4 sm:px-6">
               <div>
                 <h2 className="flex items-center gap-3 text-xl font-semibold text-text-primary">
                   <UserPlus className="text-accent" />
@@ -521,7 +520,7 @@ export default function UsuariosEquipe() {
             </div>
 
             <form onSubmit={handleInvite} className="flex min-h-0 flex-1 flex-col">
-              <div className="min-h-0 flex-1 space-y-6 overflow-y-auto pr-2">
+              <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-5 sm:px-6">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <PremiumInput
                     label="Nome completo"
@@ -609,11 +608,11 @@ export default function UsuariosEquipe() {
                 </div>
               </div>
 
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-gold/10 bg-background/80 pt-5">
-                <p className="text-xs leading-5 text-text-secondary">
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-gold/10 bg-background/95 px-5 py-4 shadow-[0_-12px_30px_rgba(0,0,0,0.16)] sm:px-6">
+                <p className="max-w-2xl text-xs leading-5 text-text-secondary">
                   Depois do envio, o colaborador receberá um link para criar a senha. O acesso só fica liberado após concluir o Google Authenticator.
                 </p>
-                <div className="flex gap-3">
+                <div className="flex shrink-0 flex-wrap gap-3">
                   <PremiumButton variant="outline" type="button" onClick={() => setIsInviteModalOpen(false)}>
                     Cancelar
                   </PremiumButton>
