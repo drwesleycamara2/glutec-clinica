@@ -34,8 +34,6 @@ import Chat from "./pages/Chat";
 import Perfil from "./pages/Perfil";
 import DashboardLayout from "./components/DashboardLayoutPremium";
 import Login from "./pages/Login";
-import ForgotPassword from "./pages/ForgotPasswordSafe";
-import ResetPassword from "./pages/ResetPasswordSafe";
 import AceitarConvite from "./pages/AceitarConviteSafe";
 import VerificarDoisFatores from "./pages/VerificarDoisFatoresSafe";
 import Configurar2FA from "./pages/Configurar2FASafe";
@@ -47,8 +45,6 @@ import { canAccessModule, getModuleForPath } from "./lib/access";
 
 const publicPaths = [
   "/login",
-  "/esqueci-senha",
-  "/redefinir-senha",
   "/aceitar-convite",
   "/verificar-2fa",
   "/envio-midias",
@@ -240,8 +236,6 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
-      <Route path="/esqueci-senha" component={ForgotPassword} />
-      <Route path="/redefinir-senha/:token" component={ResetPassword} />
       <Route path="/aceitar-convite" component={AceitarConvite} />
       <Route path="/verificar-2fa" component={VerificarDoisFatores} />
       <Route path="/envio-midias/:token" component={EnvioMidiasPaciente} />

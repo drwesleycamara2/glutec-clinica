@@ -171,15 +171,6 @@ export default function Login() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <div className="flex justify-end pt-1">
-                <button
-                  type="button"
-                  onClick={() => setLocation("/esqueci-senha")}
-                  className="text-sm font-medium text-[#f1d791] transition-colors hover:text-[#fff4cf]"
-                >
-                  Esqueci minha senha
-                </button>
-              </div>
             </div>
 
             <Button

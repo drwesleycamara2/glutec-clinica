@@ -1,5 +1,4 @@
 import type { Express } from "express";
-import { randomBytes } from "crypto";
 import {
   COOKIE_NAME,
   MUST_CHANGE_PASSWORD_SESSION_MS,
@@ -7,7 +6,6 @@ import {
 } from "@shared/const";
 import { getSessionCookieOptions } from "./cookies";
 import * as db from "../db";
-import { passwordResetEmailTemplate, sendEmail } from "./mailerSafePtbr";
 import {
   authenticateRequest,
   createSessionToken,
@@ -21,7 +19,6 @@ import { verifyAndConsumeBackupCode, verifyTotpCode } from "./totp";
 const RATE_LIMIT = new Map<string, { count: number; lastReset: number }>();
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60 * 1000;
-const PASSWORD_RESET_WINDOW_MS = 60 * 60 * 1000;
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
@@ -49,147 +46,7 @@ function sanitizeUser(user: any) {
   return safe;
 }
 
-function getRequestBaseUrl(req: any) {
-  const forwardedProto = req.headers["x-forwarded-proto"];
-  const forwardedHost = req.headers["x-forwarded-host"];
-  const host = forwardedHost || req.headers.host || "localhost:3000";
-  const protocol = forwardedProto || (req.secure ? "https" : "http");
-  const safeProtocol = Array.isArray(protocol) ? protocol[0] : protocol;
-  const safeHost = Array.isArray(host) ? host[0] : host;
-  return `${safeProtocol}://${safeHost}`;
-}
-
 export function registerAuthRoutes(app: Express) {
-  app.post("/api/auth/forgot-password", async (req, res) => {
-    const email = String(req.body?.email ?? "").toLowerCase().trim();
-
-    if (!email) {
-      return res.status(400).json({ error: "Informe o e-mail de acesso." });
-    }
-
-    const genericResponse = {
-      message:
-        "Se houver uma conta compatível com esse e-mail, você receberá um link seguro para redefinir a senha.",
-    };
-
-    const smtpSettings = await db.getSmtpSettings();
-    if (!smtpSettings) {
-      return res.json({
-        ...genericResponse,
-        warning:
-          "A recuperação por e-mail ainda não está configurada neste ambiente. Contate o administrador do sistema.",
-      });
-    }
-
-    const user = await db.getUserByEmail(email);
-    const storedPasswordHash = (user as any)?.passwordHash ?? (user as any)?.password;
-    if (!user || !storedPasswordHash || user.status === "inactive") {
-      return res.json(genericResponse);
-    }
-
-    const rawToken = randomBytes(32).toString("hex");
-    const tokenHash = db.hashPasswordResetToken(rawToken);
-    const expiresAt = new Date(Date.now() + PASSWORD_RESET_WINDOW_MS);
-
-    await db.createPasswordResetToken({
-      userId: user.id,
-      tokenHash,
-      expiresAt,
-      requestedIp: req.ip || null,
-      userAgent: String(req.headers["user-agent"] ?? "").slice(0, 255) || null,
-    });
-
-    const resetUrl = `${getRequestBaseUrl(req)}/redefinir-senha/${rawToken}`;
-    const { subject, html } = passwordResetEmailTemplate({
-      name: user.name,
-      resetUrl,
-      expiresIn: "1 hora",
-    });
-
-    const result = await sendEmail({ to: email, subject, html });
-    if (!result.success) {
-      return res.json({
-        ...genericResponse,
-        warning:
-          "Não foi possível enviar o e-mail de recuperação neste momento. Tente novamente em alguns minutos.",
-      });
-    }
-
-    return res.json(genericResponse);
-  });
-
-  app.get("/api/auth/password-reset/:token", async (req, res) => {
-    const rawToken = String(req.params?.token ?? "").trim();
-    if (!rawToken) {
-      return res.status(400).json({ error: "Link de recuperação inválido." });
-    }
-
-    const tokenRecord = await db.getPasswordResetTokenByHash(db.hashPasswordResetToken(rawToken));
-    if (!tokenRecord) {
-      return res.status(404).json({ error: "Link de recuperação inválido ou expirado." });
-    }
-
-    if (tokenRecord.usedAt) {
-      return res.status(410).json({ error: "Esse link já foi utilizado." });
-    }
-
-    if (new Date(tokenRecord.expiresAt).getTime() < Date.now()) {
-      return res.status(410).json({ error: "Esse link expirou. Solicite uma nova recuperação." });
-    }
-
-    if (tokenRecord.userStatus === "inactive") {
-      return res.status(403).json({ error: "A conta vinculada está desativada." });
-    }
-
-    return res.json({ valid: true });
-  });
-
-  app.post("/api/auth/reset-password", async (req, res) => {
-    const { token, newPassword, confirmPassword } = req.body ?? {};
-
-    if (!token || !newPassword || !confirmPassword) {
-      return res.status(400).json({ error: "Token, nova senha e confirmação são obrigatórios." });
-    }
-
-    if (newPassword !== confirmPassword) {
-      return res.status(400).json({ error: "As senhas não coincidem." });
-    }
-
-    if (!isStrongPassword(newPassword)) {
-      return res.status(400).json({
-        error: "A senha deve ter pelo menos 8 caracteres, letra maiúscula, número e caractere especial.",
-      });
-    }
-
-    const tokenRecord = await db.getPasswordResetTokenByHash(db.hashPasswordResetToken(String(token)));
-    if (!tokenRecord) {
-      return res.status(404).json({ error: "Link de recuperação inválido ou expirado." });
-    }
-
-    if (tokenRecord.usedAt) {
-      return res.status(410).json({ error: "Esse link já foi utilizado." });
-    }
-
-    if (new Date(tokenRecord.expiresAt).getTime() < Date.now()) {
-      return res.status(410).json({ error: "Esse link expirou. Solicite uma nova recuperação." });
-    }
-
-    const user = await db.getUserById(Number(tokenRecord.userId));
-    if (!user || user.status === "inactive") {
-      return res.status(404).json({ error: "Conta não encontrada para redefinição." });
-    }
-
-    const passwordHash = await hashPassword(newPassword);
-    await db.updateUserPassword(user.id, passwordHash);
-    await db.markPasswordResetTokenUsed(Number(tokenRecord.id));
-    await db.invalidatePasswordResetTokensForUser(user.id);
-
-    return res.json({
-      success: true,
-      message: "Senha redefinida com sucesso. Faça login novamente para continuar.",
-    });
-  });
-
   app.post("/api/auth/login", async (req, res) => {
     const ip = req.ip || "unknown";
 
