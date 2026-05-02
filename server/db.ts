@@ -340,6 +340,11 @@ export async function inviteUser(data: {
   });
 }
 
+function unwrapExecuteRows<T = any>(result: any): T[] {
+  if (!Array.isArray(result)) return [];
+  if (Array.isArray(result[0])) return result[0] as T[];
+  return result as T[];
+}
 function normalizeUserRow<T extends Record<string, any>>(row: T | undefined | null) {
   if (!row) return row;
   return {
@@ -448,18 +453,19 @@ export async function createInvitation(data: {
 export async function getPendingInvitations() {
   const db = await getDb();
   if (!db) return [];
-  return (await db.execute(
+  const result = await db.execute(
     sql`select * from user_invitations where usedAt is null and expiresAt > now() order by createdAt desc`
-  )) as any[];
+  );
+  return unwrapExecuteRows(result);
 }
 
 export async function getInvitationByToken(token: string) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = (await db.execute(
+  const result = await db.execute(
     sql`select * from user_invitations where token = ${token} limit 1`
-  )) as any[];
-  return result[0] as any;
+  );
+  return unwrapExecuteRows(result)[0] as any;
 }
 
 export async function markInvitationUsed(invitationId: number) {
@@ -522,8 +528,10 @@ export async function createUserFromInvite(data: {
 export async function getSmtpSettings() {
   const db = await getDb();
   if (!db) return null;
-  const result = (await db.execute(sql`select * from smtp_settings limit 1`)) as any[];
-  return (result[0] as any) ?? null;
+  const result = await db.execute(sql`select * from smtp_settings limit 1`);
+  const row = unwrapExecuteRows<any>(result)[0] ?? null;
+  if (!row?.host || !row?.port || !row?.user || !row?.password) return null;
+  return row;
 }
 
 export async function saveSmtpSettings(data: {
@@ -537,17 +545,20 @@ export async function saveSmtpSettings(data: {
 }) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(sql`smtp_settings`);
-  await db.insert(sql`smtp_settings`).values({
-    host: data.host,
-    port: data.port,
-    secure: data.secure ? 1 : 0,
-    user: data.user,
-    password: data.password,
-    fromName: data.fromName ?? null,
-    fromEmail: data.fromEmail ?? null,
-    updatedAt: new Date(),
-  });
+  await db.execute(sql`delete from smtp_settings`);
+  await db.execute(sql`
+    insert into smtp_settings (host, port, secure, user, password, fromName, fromEmail, updatedAt)
+    values (
+      ${data.host},
+      ${data.port},
+      ${data.secure ? 1 : 0},
+      ${data.user},
+      ${data.password},
+      ${data.fromName ?? null},
+      ${data.fromEmail ?? null},
+      ${new Date()}
+    )
+  `);
 }
 
 export function hashPasswordResetToken(token: string) {

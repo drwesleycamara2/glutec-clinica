@@ -136,8 +136,8 @@ const ACCESS_STAGE_CONFIG: Record<
   { label: string; detail: string; className: string; icon: typeof MailCheck }
 > = {
   invite_pending: {
-    label: "Convite enviado",
-    detail: "Aguardando o colaborador aceitar o convite por e-mail.",
+    label: "Convite pendente",
+    detail: "Aguardando aceite do colaborador. Se o e-mail não chegar, envie manualmente o link copiado ao criar o convite.",
     className: "text-amber-800 bg-amber-100/90 border-amber-300/60",
     icon: MailCheck,
   },
@@ -184,7 +184,11 @@ export default function UsuariosEquipe() {
 
   const inviteMutation = trpc.admin.inviteUser.useMutation({
     onSuccess: result => {
-      toast.success(result.emailSent ? "Convite enviado com sucesso." : "Convite criado com link manual.");
+      if (result.emailSent) {
+        toast.success("E-mail de convite enviado pelo SMTP.");
+      } else {
+        toast.warning("Convite criado, mas o e-mail não foi enviado. Use o link manual.");
+      }
       if (result.manualLink) {
         navigator.clipboard?.writeText(result.manualLink);
         toast.info("O link do convite foi copiado para a área de transferência.");

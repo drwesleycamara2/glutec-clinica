@@ -166,15 +166,15 @@ export function passwordResetEmailTemplate(params: {
 
 async function createTransporter(): Promise<Transporter | null> {
   const settings = await db.getSmtpSettings();
-  if (!settings) return null;
+  if (!settings?.host || !settings?.port || !settings?.user || !settings?.password) return null;
 
   return nodemailer.createTransport({
-    host: settings.host,
-    port: settings.port,
-    secure: settings.secure === 1,
+    host: String(settings.host).trim(),
+    port: Number(settings.port),
+    secure: settings.secure === 1 || settings.secure === true || String(settings.secure) === "1",
     auth: {
-      user: settings.user,
-      pass: settings.password,
+      user: String(settings.user).trim(),
+      pass: String(settings.password),
     },
     tls: {
       rejectUnauthorized: false,
@@ -186,27 +186,46 @@ export async function sendEmail(params: {
   to: string;
   subject: string;
   html: string;
-}): Promise<{ success: boolean; error?: string }> {
+}): Promise<{ success: boolean; error?: string; messageId?: string; response?: string }> {
   try {
+    const settings = await db.getSmtpSettings();
     const transporter = await createTransporter();
 
-    if (!transporter) {
-      return { success: false, error: "Configurações de SMTP não encontradas." };
+    if (!settings || !transporter) {
+      return { success: false, error: "SMTP nao configurado. Envie o link do convite manualmente." };
     }
 
-    const settings = await db.getSmtpSettings();
-    const from = settings?.fromName
-      ? `"${settings.fromName}" <${settings.fromEmail || settings.user}>`
-      : settings?.user ?? "noreply@glutec.com.br";
+    const fromAddress = settings.fromEmail || settings.user;
+    const from = settings.fromName
+      ? `"${settings.fromName}" <${fromAddress}>`
+      : fromAddress;
 
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from,
       to: params.to,
       subject: params.subject,
       html: params.html,
     });
 
-    return { success: true };
+    const accepted = Array.isArray((info as any).accepted) ? (info as any).accepted : [];
+    const rejected = Array.isArray((info as any).rejected) ? (info as any).rejected : [];
+
+    if (rejected.length > 0) {
+      return { success: false, error: `SMTP rejeitou o destinatario: ${rejected.join(", ")}.` };
+    }
+
+    if (accepted.length === 0) {
+      return {
+        success: false,
+        error: `SMTP nao confirmou aceite do e-mail. Resposta: ${(info as any).response || "sem resposta"}`,
+      };
+    }
+
+    return {
+      success: true,
+      messageId: (info as any).messageId,
+      response: (info as any).response,
+    };
   } catch (error: any) {
     console.error("[Mailer] Erro ao enviar e-mail:", error);
     return { success: false, error: error.message || "Erro desconhecido" };
