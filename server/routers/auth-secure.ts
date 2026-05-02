@@ -10,6 +10,7 @@ import {
   generateTotpSecret,
   generateQrCodeDataUrl,
   verifyTotpCode,
+  verifyAndConsumeTotpCode,
   generateBackupCodes,
   hashBackupCodes,
 } from "../_core/totp";
@@ -83,9 +84,9 @@ export const twoFactorRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "2FA não está habilitado." });
       }
 
-      const isValid = verifyTotpCode(input.code, user.twoFactorSecret);
+      const isValid = verifyAndConsumeTotpCode(ctx.user.id, input.code, user.twoFactorSecret);
       if (!isValid) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "Código inválido." });
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Código inválido ou já utilizado." });
       }
 
       await db.disableUser2FA(ctx.user.id);
@@ -114,9 +115,9 @@ export const twoFactorRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "2FA não está habilitado." });
       }
 
-      const isValid = verifyTotpCode(input.code, user.twoFactorSecret);
+      const isValid = verifyAndConsumeTotpCode(ctx.user.id, input.code, user.twoFactorSecret);
       if (!isValid) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "Código inválido." });
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Código inválido ou já utilizado." });
       }
 
       const backupCodes = generateBackupCodes();

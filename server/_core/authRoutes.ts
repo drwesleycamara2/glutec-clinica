@@ -14,7 +14,7 @@ import {
   verifyPassword,
   verifyTempTwoFactorToken,
 } from "./auth";
-import { verifyAndConsumeBackupCode, verifyTotpCode } from "./totp";
+import { verifyAndConsumeBackupCode, verifyAndConsumeTotpCode } from "./totp";
 
 const RATE_LIMIT = new Map<string, { count: number; lastReset: number }>();
 const WINDOW_MS = 15 * 60 * 1000;
@@ -189,8 +189,8 @@ export function registerAuthRoutes(app: Express) {
       return res.status(401).json({ error: "Usuário não encontrado." });
     }
 
-    if (!verifyTotpCode(code, user.twoFactorSecret)) {
-      return res.status(401).json({ error: "Código inválido. Verifique o aplicativo autenticador." });
+    if (!verifyAndConsumeTotpCode(user.id, code, user.twoFactorSecret)) {
+      return res.status(401).json({ error: "Código inválido ou já utilizado. Verifique o aplicativo autenticador." });
     }
 
     clearRateLimit(ip, "2fa");

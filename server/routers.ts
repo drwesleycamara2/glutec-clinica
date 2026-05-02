@@ -1,7 +1,20 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
+import { publicProcedure, router, protectedProcedure, requireModule } from "./_core/trpc";
+
+// Aliases para gating por módulo no servidor (defesa contra IDOR/UI bypass).
+// Cada um exige autenticação E pelo menos uma das permissões listadas.
+const pacientesProcedure = requireModule("pacientes", "prontuarios", "prontuarios_anotacoes");
+const prontuariosProcedure = requireModule("prontuarios");
+const anotacoesProcedure = requireModule("prontuarios", "prontuarios_anotacoes");
+const prescricoesProcedure = requireModule("prescricoes", "prontuarios");
+const examesProcedure = requireModule("exames", "prontuarios");
+const fotosProcedure = requireModule("fotos", "prontuarios");
+const documentosIdProcedure = requireModule("documentos_identificacao", "prontuarios");
+const contratosProcedure = requireModule("contratos_termos", "prontuarios");
+const agendaProcedure = requireModule("agenda");
+const orcamentosProcedure = requireModule("orcamentos");
 import { z } from "zod";
 import * as db from "./db";
 import * as dbComplete from "./db_complete";
@@ -10,7 +23,7 @@ import { clinicalEvolutionRouter } from "./routers/clinical-evolution";
 import { twoFactorRouter } from "./routers/auth-secure";
 import { generateSecureToken, verifyPassword } from "./_core/auth";
 import { inviteEmailTemplate, sendEmail } from "./_core/mailer";
-import { verifyTotpCode } from "./_core/totp";
+import { verifyTotpCode, verifyAndConsumeTotpCode } from "./_core/totp";
 import { createAuditLog } from "./features_special";
 import { generateSecureSystemExport } from "./lib/system-export";
 import { createD4SignService, getD4SignIntegrationStatus } from "./lib/d4sign-integration";
@@ -295,10 +308,10 @@ export const appRouter = router({
         }
 
         if (user.twoFactorEnabled) {
-          if (!input.securityCode || !user.twoFactorSecret || !verifyTotpCode(input.securityCode, user.twoFactorSecret)) {
+          if (!input.securityCode || !user.twoFactorSecret || !verifyAndConsumeTotpCode(user.id, input.securityCode, user.twoFactorSecret)) {
             throw new TRPCError({
               code: "UNAUTHORIZED",
-              message: "Informe um código válido do autenticador para exportar os dados.",
+              message: "Informe um código válido do autenticador (não reutilizado) para exportar os dados.",
             });
           }
         }
@@ -569,7 +582,7 @@ export const appRouter = router({
 
   // PATIENTS
   patients: router({
-    list: protectedProcedure
+    list: pacientesProcedure
       .input(
         z.object({
           query: z.string().optional(),
@@ -581,7 +594,7 @@ export const appRouter = router({
         return dbComplete.listPatients(input.query, input.limit, input.sort);
       }),
 
-    create: protectedProcedure
+    create: pacientesProcedure
       .input(z.object({
         fullName: z.string(),
         cpf: z.string(),
@@ -609,13 +622,13 @@ export const appRouter = router({
         return dbComplete.createPatient(input, ctx.user.id);
       }),
 
-    getById: protectedProcedure
+    getById: pacientesProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
         return dbComplete.getPatientById(input.id);
       }),
 
-    update: protectedProcedure
+    update: pacientesProcedure
       .input(z.object({
         id: z.number().int().positive(),
         fullName: z.string().optional(),
@@ -655,7 +668,7 @@ export const appRouter = router({
 
   // APPOINTMENTS
   appointments: router({
-    create: protectedProcedure
+    create: agendaProcedure
       .input(z.object({
         patientId: z.number(),
         doctorId: z.number(),
@@ -671,7 +684,7 @@ export const appRouter = router({
         return dbComplete.createAppointment(input, ctx.user.id);
       }),
 
-    update: protectedProcedure
+    update: agendaProcedure
       .input(z.object({
         appointmentId: z.number(),
         patientId: z.number(),
@@ -687,7 +700,7 @@ export const appRouter = router({
         return dbComplete.updateAppointment(appointmentId, payload, ctx.user.id);
       }),
 
-    getByDate: protectedProcedure
+    getByDate: agendaProcedure
       .input(z.object({
         from: z.string(),
         to: z.string(),
@@ -696,7 +709,7 @@ export const appRouter = router({
         return dbComplete.getAppointmentsByDateRange(input.from, input.to);
       }),
 
-    getByPatient: protectedProcedure
+    getByPatient: pacientesProcedure
       .input(z.object({
         patientId: z.number(),
       }))
@@ -705,7 +718,7 @@ export const appRouter = router({
         return history.appointments ?? [];
       }),
 
-    updateStatus: protectedProcedure
+    updateStatus: agendaProcedure
       .input(z.object({
         appointmentId: z.number(),
         status: z.enum(["agendada", "confirmada", "em_atendimento", "concluida", "cancelada", "falta"]),
@@ -755,7 +768,7 @@ export const appRouter = router({
 
   // PRESCRIPTIONS
   prescriptions: router({
-    create: protectedProcedure
+    create: prescricoesProcedure
       .input(z.object({
         patientId: z.number(),
         type: z.string(),
@@ -767,17 +780,17 @@ export const appRouter = router({
         return dbComplete.createPrescription(input, userId);
       }),
 
-    getByPatient: protectedProcedure
+    getByPatient: prescricoesProcedure
       .input(z.object({ patientId: z.number() }))
       .query(async ({ input }) => {
         return dbComplete.getPrescriptionsByPatient(input.patientId);
       }),
 
-    listTemplates: protectedProcedure.query(async ({ ctx }) => {
+    listTemplates: prescricoesProcedure.query(async ({ ctx }) => {
       return dbComplete.listPrescriptionTemplatesNormalized();
     }),
 
-    createTemplate: protectedProcedure
+    createTemplate: prescricoesProcedure
       .input(z.object({
         name: z.string(),
         content: z.string(),
@@ -787,7 +800,7 @@ export const appRouter = router({
         return dbComplete.createPrescriptionTemplateNormalized(input, ctx.user.id);
       }),
 
-    deleteTemplate: protectedProcedure
+    deleteTemplate: prescricoesProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         return dbComplete.deleteTemplateNormalized(input.id);
@@ -796,7 +809,7 @@ export const appRouter = router({
 
   // EXAM REQUESTS
   exams: router({
-    create: protectedProcedure
+    create: examesProcedure
       .input(z.object({
         patientId: z.number(),
         specialty: z.string().optional(),
@@ -808,17 +821,17 @@ export const appRouter = router({
         return dbComplete.createExamRequest(input, ctx.user.id);
       }),
 
-    getByPatient: protectedProcedure
+    getByPatient: examesProcedure
       .input(z.object({ patientId: z.number() }))
       .query(async ({ input }) => {
         return dbComplete.getExamRequestsByPatient(input.patientId);
       }),
 
-    listTemplates: protectedProcedure.query(async ({ ctx }) => {
+    listTemplates: examesProcedure.query(async ({ ctx }) => {
       return dbComplete.listExamTemplatesNormalized();
     }),
 
-    createTemplate: protectedProcedure
+    createTemplate: examesProcedure
       .input(z.object({
         name: z.string(),
         content: z.string(),
@@ -828,7 +841,7 @@ export const appRouter = router({
         return dbComplete.createExamTemplateNormalized(input, ctx.user.id);
       }),
 
-    deleteTemplate: protectedProcedure
+    deleteTemplate: examesProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         return dbComplete.deleteTemplateNormalized(input.id);
@@ -836,7 +849,7 @@ export const appRouter = router({
   }),
 
   examRequests: router({
-    create: protectedProcedure
+    create: examesProcedure
       .input(z.object({
         patientId: z.number(),
         specialty: z.string().optional(),
@@ -848,17 +861,17 @@ export const appRouter = router({
         return dbComplete.createExamRequest(input, ctx.user.id);
       }),
 
-    getByPatient: protectedProcedure
+    getByPatient: examesProcedure
       .input(z.object({ patientId: z.number() }))
       .query(async ({ input }) => {
         return dbComplete.getExamRequestsByPatient(input.patientId);
       }),
 
-    listTemplates: protectedProcedure.query(async () => {
+    listTemplates: examesProcedure.query(async () => {
       return dbComplete.listExamTemplatesNormalized();
     }),
 
-    createTemplate: protectedProcedure
+    createTemplate: examesProcedure
       .input(z.object({
         name: z.string(),
         content: z.string(),
@@ -1031,7 +1044,7 @@ export const appRouter = router({
 
   // PHOTOS
   photos: router({
-    getByPatient: protectedProcedure
+    getByPatient: fotosProcedure
       .input(z.object({
         patientId: z.number(),
         category: z.string().optional(),
@@ -1041,7 +1054,7 @@ export const appRouter = router({
         return dbComplete.getPatientPhotos(input.patientId, input.category, input.folderId);
       }),
 
-    upload: protectedProcedure
+    upload: fotosProcedure
       .input(z.object({
         patientId: z.number(),
         folderId: z.number().nullable().optional(),
@@ -1059,7 +1072,7 @@ export const appRouter = router({
         return dbComplete.uploadPatientPhoto(payload, ctx.user.id);
       }),
 
-    delete: protectedProcedure
+    delete: fotosProcedure
       .input(z.object({ photoId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         return dbComplete.deletePatientPhoto(input.photoId);
@@ -1252,17 +1265,17 @@ export const appRouter = router({
 
   // BUDGETS
   budgets: router({
-    list: protectedProcedure.query(async ({ ctx }) => {
+    list: orcamentosProcedure.query(async ({ ctx }) => {
       return dbComplete.listBudgets();
     }),
 
-    getByPatient: protectedProcedure
+    getByPatient: orcamentosProcedure
       .input(z.object({ patientId: z.number() }))
       .query(async ({ input }) => {
         return dbComplete.listBudgetsByPatient(input.patientId);
       }),
 
-    create: protectedProcedure
+    create: orcamentosProcedure
       .input(z.object({
         patientId: z.number(),
         clinicalNotes: z.string().optional(),
@@ -1277,19 +1290,19 @@ export const appRouter = router({
         return dbComplete.createBudget(input, ctx.user.id);
       }),
 
-    emit: protectedProcedure
+    emit: orcamentosProcedure
       .input(z.object({ budgetId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         return dbComplete.emitBudget(input.budgetId);
       }),
 
-    approve: protectedProcedure
+    approve: orcamentosProcedure
       .input(z.object({ budgetId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         return dbComplete.approveBudget(input.budgetId);
       }),
 
-    emitNfse: protectedProcedure
+    emitNfse: orcamentosProcedure
       .input(z.object({
         budgetId: z.number(),
         formaPagamento: z.enum(["pix", "dinheiro", "cartao_credito", "cartao_debito", "boleto", "transferencia", "financiamento", "outro"]).default("pix"),
@@ -1881,25 +1894,29 @@ export const appRouter = router({
   }),
   // MEDICAL RECORDS
   medicalRecords: router({
-    listTemplates: protectedProcedure.query(async ({ ctx }) => {
+    listTemplates: prontuariosProcedure.query(async ({ ctx }) => {
       return dbComplete.listMedicalRecordTemplatesNormalized();
     }),
-    getHistory: protectedProcedure
+    getHistory: prontuariosProcedure
       .input(z.object({ patientId: z.number() }))
       .query(async ({ input }) => {
         return dbComplete.getPatientHistory(input.patientId);
       }),
-    getDocuments: protectedProcedure
+    getDocuments: documentosIdProcedure
       .input(z.object({ patientId: z.number() }))
       .query(async ({ input }) => {
         return dbComplete.getPatientDocuments(input.patientId);
       }),
-    listContracts: protectedProcedure
+    listContracts: contratosProcedure
       .input(z.object({ query: z.string().optional(), limit: z.number().optional() }).optional())
       .query(async ({ input }) => {
         return dbComplete.listContractDocuments(input?.query, input?.limit);
       }),
-    uploadDocument: protectedProcedure
+    uploadDocument: requireModule(
+      "documentos_identificacao",
+      "contratos_termos",
+      "prontuarios",
+    )
       .input(z.object({
         patientId: z.number(),
         type: z.string().min(1),
@@ -2282,13 +2299,13 @@ export const appRouter = router({
   }),
 
   anamneses: router({
-    listByPatient: protectedProcedure
+    listByPatient: prontuariosProcedure
       .input(z.object({ patientId: z.number() }))
       .query(async ({ ctx, input }) => {
         return dbComplete.listPatientAnamneses(input.patientId, ctx.user.role);
       }),
 
-    create: protectedProcedure
+    create: prontuariosProcedure
       .input(z.object({
         patientId: z.number(),
         title: z.string().min(1),
