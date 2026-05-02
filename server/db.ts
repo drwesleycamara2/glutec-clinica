@@ -439,14 +439,10 @@ export async function createInvitation(data: {
 }) {
   const db = await getDb();
   if (!db) return;
-  await db.insert(sql`user_invitations`).values({
-    email: data.email,
-    name: data.name,
-    role: data.role,
-    token: data.token,
-    invitedById: data.invitedById,
-    expiresAt: data.expiresAt,
-  });
+  await db.execute(sql`
+    insert into user_invitations (email, name, role, token, invitedById, expiresAt)
+    values (${data.email}, ${data.name}, ${data.role}, ${data.token}, ${data.invitedById}, ${data.expiresAt})
+  `);
 }
 
 export async function getPendingInvitations() {
@@ -469,10 +465,11 @@ export async function getInvitationByToken(token: string) {
 export async function markInvitationUsed(invitationId: number) {
   const db = await getDb();
   if (!db) return;
-  await db
-    .update(sql`user_invitations`)
-    .set({ usedAt: new Date() })
-    .where(eq(sql`id`, invitationId));
+  await db.execute(sql`
+    update user_invitations
+    set usedAt = ${new Date()}
+    where id = ${invitationId}
+  `);
 }
 
 export async function createUserFromInvite(data: {
