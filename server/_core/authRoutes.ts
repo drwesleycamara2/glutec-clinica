@@ -17,19 +17,64 @@ import {
 import { verifyAndConsumeBackupCode, verifyTotpCode } from "./totp";
 
 const RATE_LIMIT = new Map<string, { count: number; lastReset: number }>();
-const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60 * 1000;
+const RATE_LIMIT_BUCKETS = {
+  login: 5,
+  "2fa": 10,
+  backup: 10,
+  "accept-invite": 8,
+} as const;
 
-function checkRateLimit(ip: string): boolean {
+type RateLimitBucket = keyof typeof RATE_LIMIT_BUCKETS;
+
+function checkRateLimit(ip: string, bucket: RateLimitBucket): boolean {
+  const key = `${bucket}:${ip}`;
+  const max = RATE_LIMIT_BUCKETS[bucket];
   const now = Date.now();
-  const entry = RATE_LIMIT.get(ip);
+  const entry = RATE_LIMIT.get(key);
   if (!entry || now - entry.lastReset > WINDOW_MS) {
-    RATE_LIMIT.set(ip, { count: 1, lastReset: now });
+    RATE_LIMIT.set(key, { count: 1, lastReset: now });
     return true;
   }
-  if (entry.count >= MAX_ATTEMPTS) return false;
+  if (entry.count >= max) return false;
   entry.count += 1;
   return true;
+}
+
+function clearRateLimit(ip: string, bucket: RateLimitBucket) {
+  RATE_LIMIT.delete(`${bucket}:${ip}`);
+}
+
+const ALLOWED_ORIGINS = new Set<string>(
+  String(process.env.APP_URL ?? "")
+    .split(/[\s,]+/)
+    .filter(Boolean),
+);
+
+function requestSameOrigin(req: import("express").Request): boolean {
+  const origin = String(req.headers.origin ?? "");
+  if (!origin) {
+    // Sem header Origin: aceita só requisição mesma-origem implícita
+    // (via Referer alinhado ao Host).
+    const referer = String(req.headers.referer ?? "");
+    if (!referer) return true;
+    try {
+      const url = new URL(referer);
+      const host = String(req.headers.host ?? "");
+      return url.host === host;
+    } catch {
+      return false;
+    }
+  }
+  if (ALLOWED_ORIGINS.size > 0 && ALLOWED_ORIGINS.has(origin)) return true;
+  // Fallback: aceitar quando o Origin coincide com o Host do request (mesmo domínio).
+  try {
+    const url = new URL(origin);
+    const host = String(req.headers.host ?? "");
+    return url.host === host;
+  } catch {
+    return false;
+  }
 }
 
 function isStrongPassword(password: string) {
@@ -47,10 +92,22 @@ function sanitizeUser(user: any) {
 }
 
 export function registerAuthRoutes(app: Express) {
+  // Bloqueia POST/PUT/PATCH/DELETE em /api/auth/* vindos de outra origem
+  // (defesa em profundidade contra CSRF, complementando SameSite=lax).
+  app.use("/api/auth", (req, res, next) => {
+    if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
+      return next();
+    }
+    if (!requestSameOrigin(req)) {
+      return res.status(403).json({ error: "Origem da requisição não permitida." });
+    }
+    return next();
+  });
+
   app.post("/api/auth/login", async (req, res) => {
     const ip = req.ip || "unknown";
 
-    if (!checkRateLimit(ip)) {
+    if (!checkRateLimit(ip, "login")) {
       return res.status(429).json({
         error: "Muitas tentativas de login. Aguarde 15 minutos.",
       });
@@ -73,7 +130,7 @@ export function registerAuthRoutes(app: Express) {
     const passwordOk = await verifyPassword(password, storedPasswordHash);
     if (!passwordOk) return res.status(401).json(genericError);
 
-    RATE_LIMIT.delete(ip);
+    clearRateLimit(ip, "login");
     await db.updateUserLastSignedIn(user.id);
 
     if (user.twoFactorEnabled) {
@@ -110,6 +167,13 @@ export function registerAuthRoutes(app: Express) {
   });
 
   app.post("/api/auth/login/2fa", async (req, res) => {
+    const ip = req.ip || "unknown";
+    if (!checkRateLimit(ip, "2fa")) {
+      return res.status(429).json({
+        error: "Muitas tentativas de verificação 2FA. Aguarde 15 minutos.",
+      });
+    }
+
     const { tempToken, code } = req.body ?? {};
     if (!tempToken || !code) {
       return res.status(400).json({ error: "Token e código são obrigatórios." });
@@ -129,6 +193,7 @@ export function registerAuthRoutes(app: Express) {
       return res.status(401).json({ error: "Código inválido. Verifique o aplicativo autenticador." });
     }
 
+    clearRateLimit(ip, "2fa");
     await db.updateUserLastSignedIn(user.id);
 
     const sessionToken = await createSessionToken({
@@ -144,6 +209,13 @@ export function registerAuthRoutes(app: Express) {
   });
 
   app.post("/api/auth/login/backup", async (req, res) => {
+    const ip = req.ip || "unknown";
+    if (!checkRateLimit(ip, "backup")) {
+      return res.status(429).json({
+        error: "Muitas tentativas com códigos de backup. Aguarde 15 minutos.",
+      });
+    }
+
     const { tempToken, backupCode } = req.body ?? {};
     if (!tempToken || !backupCode) {
       return res.status(400).json({ error: "Token e código de backup são obrigatórios." });
@@ -169,6 +241,7 @@ export function registerAuthRoutes(app: Express) {
     }
 
     await db.updateUser2FABackupCodes(user.id, remainingCodesJson);
+    clearRateLimit(ip, "backup");
     await db.updateUserLastSignedIn(user.id);
 
     const sessionToken = await createSessionToken({
@@ -188,6 +261,13 @@ export function registerAuthRoutes(app: Express) {
   });
 
   app.post("/api/auth/accept-invite", async (req, res) => {
+    const ip = req.ip || "unknown";
+    if (!checkRateLimit(ip, "accept-invite")) {
+      return res.status(429).json({
+        error: "Muitas tentativas de uso de convite. Aguarde 15 minutos.",
+      });
+    }
+
     const { token, password, confirmPassword } = req.body ?? {};
 
     if (!token || !password || !confirmPassword) {
@@ -230,6 +310,7 @@ export function registerAuthRoutes(app: Express) {
     }
 
     await db.markInvitationUsed(invitation.id);
+    clearRateLimit(ip, "accept-invite");
 
     const sessionToken = await createSessionToken({
       userId: user.id,

@@ -199,6 +199,14 @@ async function startServer() {
   app.use((req, res, next) => {
     addNoIndexHeaders(res);
     res.setHeader("Referrer-Policy", "same-origin");
+    // Cabeçalhos básicos de segurança (substituem helmet básico).
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("X-XSS-Protection", "0");
+    res.setHeader("Permissions-Policy", "geolocation=(), microphone=(self), camera=(self)");
+    if (process.env.NODE_ENV === "production") {
+      res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    }
     next();
   });
 

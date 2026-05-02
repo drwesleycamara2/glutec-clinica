@@ -73,7 +73,7 @@ export default function Permissoes() {
   const savePerm = (module: string) => {
     if (!selectedUserId) return;
     const perms = permMatrix[module] ?? { canCreate: false, canRead: false, canUpdate: false, canDelete: false };
-    setPermMutation.mutate({ userId: selectedUserId, module, ...perms });
+    setPermMutation.mutate({ userId: selectedUserId, module, permission: perms });
   };
 
   const selectedUser = users?.find((u: any) => u.id === selectedUserId);

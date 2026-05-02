@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AlertCircle, Loader2, ShieldCheck, ArrowLeft, KeyRound } from "lucide-react";
 import { CLINICAL_LOCK_RETURN_TO_KEY } from "@/lib/clinicalSession";
+import { safeReturnTo } from "@/lib/safe-redirect";
 
 export default function VerificarDoisFatores() {
   const [location, setLocation] = useLocation();
@@ -17,7 +18,7 @@ export default function VerificarDoisFatores() {
   // Pegar token da URL
   const params = new URLSearchParams(window.location.search);
   const tempToken = params.get("token") || "";
-  const returnTo = params.get("returnTo") || localStorage.getItem(CLINICAL_LOCK_RETURN_TO_KEY) || "/";
+  const returnTo = safeReturnTo(params.get("returnTo") || localStorage.getItem(CLINICAL_LOCK_RETURN_TO_KEY));
 
   useEffect(() => {
     if (!tempToken) setLocation("/login");

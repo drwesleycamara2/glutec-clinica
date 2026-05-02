@@ -1,10 +1,14 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
 
 const ENCRYPTION_VERSION = "v1";
-const FALLBACK_SECRET = "glutec-fiscal-secret-change-in-production";
 
 function getEncryptionKey() {
-  const secret = process.env.JWT_SECRET || FALLBACK_SECRET;
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error(
+      "JWT_SECRET ausente ou muito curto (mínimo 32 caracteres). secure-storage não pode ser inicializado.",
+    );
+  }
   return createHash("sha256").update(secret).digest();
 }
 

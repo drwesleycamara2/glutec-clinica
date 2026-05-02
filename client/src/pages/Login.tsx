@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Eye, EyeOff, Lock, Mail, AlertCircle, Loader2 } from "lucide-react";
 import { CLINICAL_LOCK_RETURN_TO_KEY } from "@/lib/clinicalSession";
+import { safeReturnTo } from "@/lib/safe-redirect";
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -14,7 +15,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const query = new URLSearchParams(window.location.search);
-  const returnTo = query.get("returnTo") || localStorage.getItem(CLINICAL_LOCK_RETURN_TO_KEY) || "/";
+  const returnTo = safeReturnTo(query.get("returnTo") || localStorage.getItem(CLINICAL_LOCK_RETURN_TO_KEY));
   const locked = query.get("locked") === "1";
 
   const handleSubmit = async (e: React.FormEvent) => {

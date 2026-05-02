@@ -35,7 +35,12 @@ export type LoginResult =
 // ─── Helpers de Secret ────────────────────────────────────────────────────────
 
 function getSecretKey(): Uint8Array {
-  const secret = ENV.cookieSecret || "glutec-fallback-secret-change-in-production";
+  const secret = ENV.cookieSecret;
+  if (!secret || secret.length < 32) {
+    throw new Error(
+      "COOKIE_SECRET ausente ou muito curto. Defina uma string aleatória de pelo menos 32 caracteres em .env (COOKIE_SECRET=...).",
+    );
+  }
   return new TextEncoder().encode(secret);
 }
 

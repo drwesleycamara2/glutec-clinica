@@ -1,6 +1,7 @@
 ﻿import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { patientDisplayName } from "@/lib/patientDisplay";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 import { useEffect } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -260,7 +261,7 @@ export default function Prescricoes() {
                 <CardContent className="space-y-3 pt-0">
                   <div
                     className="rounded-lg border border-border/50 bg-muted/30 p-4 text-sm leading-relaxed"
-                    dangerouslySetInnerHTML={{ __html: rx.content || "<p>Sem conteúdo registrado.</p>" }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(rx.content) || "<p>Sem conteúdo registrado.</p>" }}
                   />
                   {rx.observations ? <p className="text-xs italic text-muted-foreground">{rx.observations}</p> : null}
                 </CardContent>

@@ -41,6 +41,7 @@ import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
 import { SignatureCertillionButton } from "@/components/SignatureCertillionButton";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { hasModulePermission } from "@/lib/access";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 
 function buildHistorySummary(record: any) {
   return [
@@ -1439,7 +1440,7 @@ function PrescricoesTab({ patientId, patientName: _pn }: { patientId: number; pa
             </div>
             <div
               className="rounded-lg border border-border/50 bg-muted/30 p-3 text-sm leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: rx.content || "<p>Sem conteúdo registrado.</p>" }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(rx.content) || "<p>Sem conteúdo registrado.</p>" }}
             />
             {rx.observations && <p className="mt-2 text-xs italic text-muted-foreground">{rx.observations}</p>}
           </CardContent>
@@ -1934,7 +1935,7 @@ function ExamesTab({ patientId }: { patientId: number }) {
             {exam.content && (
               <div
                 className="rounded-lg border border-border/50 bg-muted/30 p-3 text-sm leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: exam.content }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(exam.content) }}
               />
             )}
             {exam.exams && Array.isArray(exam.exams) && exam.exams.length > 0 && (

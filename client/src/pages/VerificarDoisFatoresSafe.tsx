@@ -4,6 +4,7 @@ import { AlertCircle, ArrowLeft, KeyRound, Loader2, ShieldCheck } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CLINICAL_LOCK_RETURN_TO_KEY } from "@/lib/clinicalSession";
+import { safeReturnTo } from "@/lib/safe-redirect";
 
 export default function VerificarDoisFatoresSafe() {
   const [, setLocation] = useLocation();
@@ -16,7 +17,7 @@ export default function VerificarDoisFatoresSafe() {
 
   const params = new URLSearchParams(window.location.search);
   const tempToken = params.get("token") || "";
-  const returnTo = params.get("returnTo") || localStorage.getItem(CLINICAL_LOCK_RETURN_TO_KEY) || "/";
+  const returnTo = safeReturnTo(params.get("returnTo") || localStorage.getItem(CLINICAL_LOCK_RETURN_TO_KEY));
 
   useEffect(() => {
     if (!tempToken) setLocation("/login");

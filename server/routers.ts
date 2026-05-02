@@ -82,19 +82,38 @@ function buildSimplePdfBuffer(title: string, lines: string[]) {
   return Buffer.from(pdf, "latin1");
 }
 
+const ALLOWED_APP_HOSTS = new Set<string>(
+  String(process.env.APP_URL ?? "")
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .map((url) => {
+      try { return new URL(url).host.toLowerCase(); } catch { return ""; }
+    })
+    .filter(Boolean),
+);
+
 function getAppBaseUrl(req: { headers: Record<string, unknown>; secure?: boolean }) {
-  if (process.env.APP_URL) return process.env.APP_URL;
-
-  const forwardedProto = req.headers["x-forwarded-proto"];
-  const forwardedHost = req.headers["x-forwarded-host"];
-  const host = forwardedHost || req.headers.host;
-  const protocol = forwardedProto || (req.secure ? "https" : "http");
-
-  if (Array.isArray(host)) {
-    return `${Array.isArray(protocol) ? protocol[0] : protocol}://${host[0]}`;
+  // Prefere sempre APP_URL — única fonte confiável.
+  // Cabeçalhos Host / X-Forwarded-Host vindos do cliente são manipuláveis e
+  // não devem ser usados sozinhos para construir URLs de convite/recuperação.
+  if (process.env.APP_URL) {
+    const first = String(process.env.APP_URL).split(/[\s,]+/).find(Boolean);
+    if (first) return first.replace(/\/$/, "");
   }
 
-  return `${Array.isArray(protocol) ? protocol[0] : protocol}://${host || "localhost:3000"}`;
+  // Fallback: aceita o Host do request apenas se ele estiver na allowlist.
+  const forwardedHost = req.headers["x-forwarded-host"];
+  const rawHost = forwardedHost || req.headers.host;
+  const host = String((Array.isArray(rawHost) ? rawHost[0] : rawHost) || "").toLowerCase();
+
+  if (ALLOWED_APP_HOSTS.size > 0 && !ALLOWED_APP_HOSTS.has(host)) {
+    return "https://sistema.drwesleycamara.com.br";
+  }
+
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  const protocol = forwardedProto || (req.secure ? "https" : "http");
+  const proto = Array.isArray(protocol) ? protocol[0] : String(protocol);
+  return `${proto}://${host || "sistema.drwesleycamara.com.br"}`;
 }
 
 export const appRouter = router({
@@ -115,6 +134,16 @@ export const appRouter = router({
         phone: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        // Bloqueia que qualquer usuário troque o próprio e-mail para o do
+        // super-administrador (defesa em profundidade contra escalada de
+        // privilégio que dependa de comparação por e-mail).
+        if (input.email) {
+          const newEmail = String(input.email).trim().toLowerCase();
+          const currentEmail = String(ctx.user.email ?? "").toLowerCase();
+          if (newEmail === SUPER_ADMIN_EMAIL && currentEmail !== SUPER_ADMIN_EMAIL) {
+            throw new Error("Esse e-mail está reservado e não pode ser usado.");
+          }
+        }
         await dbComplete.updateUserProfile(ctx.user.id, input);
         const updatedUser = await db.getUserById(ctx.user.id);
         return { success: true, user: updatedUser };

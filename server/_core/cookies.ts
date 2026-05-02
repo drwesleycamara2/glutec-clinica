@@ -21,6 +21,10 @@ function isSecureRequest(req: Request) {
   return protoList.some(proto => proto.trim().toLowerCase() === "https");
 }
 
+function isProduction() {
+  return process.env.NODE_ENV === "production";
+}
+
 export function getSessionCookieOptions(
   req: Request
 ): Pick<CookieOptions, "domain" | "httpOnly" | "path" | "sameSite" | "secure"> {
@@ -43,6 +47,8 @@ export function getSessionCookieOptions(
     httpOnly: true,
     path: "/",
     sameSite: "lax",
-    secure: isSecureRequest(req),
+    // Em produção sempre marcar Secure mesmo se a detecção de proxy falhar.
+    // Isso impede que o cookie seja enviado em conexões HTTP intermediárias.
+    secure: isProduction() ? true : isSecureRequest(req),
   };
 }
