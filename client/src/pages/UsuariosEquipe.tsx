@@ -8,10 +8,12 @@ import {
   BriefcaseBusiness,
   CheckCircle2,
   ClipboardList,
+  Copy,
   Crown,
   Loader2,
   Lock,
   MailCheck,
+  Send,
   Shield,
   Stethoscope,
   Trash2,
@@ -182,6 +184,15 @@ export default function UsuariosEquipe() {
     refetchOnWindowFocus: true,
   });
 
+  const copyInviteLink = async (link: string, successMessage = "Link do convite copiado.") => {
+    try {
+      await navigator.clipboard?.writeText(link);
+      toast.success(successMessage);
+    } catch {
+      toast.warning("Não foi possível copiar automaticamente. Abra o link retornado pelo sistema e copie manualmente.");
+    }
+  };
+
   const inviteMutation = trpc.admin.inviteUser.useMutation({
     onSuccess: result => {
       if (result.emailSent) {
@@ -190,8 +201,7 @@ export default function UsuariosEquipe() {
         toast.warning("Convite criado, mas o e-mail não foi enviado. Use o link manual.");
       }
       if (result.manualLink) {
-        navigator.clipboard?.writeText(result.manualLink);
-        toast.info("O link do convite foi copiado para a área de transferência.");
+        void copyInviteLink(result.manualLink, "O link do convite foi copiado para a área de transferência.");
       }
       if (result.warning) {
         toast.warning(result.warning);
@@ -199,6 +209,30 @@ export default function UsuariosEquipe() {
       setIsInviteModalOpen(false);
       setInviteForm({ email: "", name: "", jobTitles: [], permissions: [] });
       refetch();
+    },
+    onError: err => toast.error(err.message),
+  });
+
+  const resendInvitationMutation = trpc.admin.resendInvitation.useMutation({
+    onSuccess: result => {
+      if (result.emailSent) {
+        toast.success("Convite reenviado por e-mail.");
+      } else {
+        toast.warning(result.warning || "Não foi possível enviar por e-mail. Use o link manual.");
+      }
+      if (result.manualLink) {
+        void copyInviteLink(result.manualLink, "Link atualizado copiado para envio manual.");
+      }
+      refetch();
+    },
+    onError: err => toast.error(err.message),
+  });
+
+  const copyInvitationLinkMutation = trpc.admin.copyInvitationLink.useMutation({
+    onSuccess: result => {
+      if (result.manualLink) {
+        void copyInviteLink(result.manualLink);
+      }
     },
     onError: err => toast.error(err.message),
   });
@@ -279,7 +313,7 @@ export default function UsuariosEquipe() {
     }
 
     inviteMutation.mutate({
-      email: inviteForm.email.trim().toLowerCase(),
+      email: normalizeEmail(inviteForm.email),
       name: inviteForm.name.trim(),
       role: deriveSystemRole(inviteForm.jobTitles),
       permissions: inviteForm.permissions,
@@ -435,6 +469,29 @@ export default function UsuariosEquipe() {
                         Perfil técnico do sistema: {LEGACY_ROLE_LABELS[String(user.role ?? "")] || "Apoio"}
                       </div>
 
+                      {isSuperAdmin && accessStage === "invite_pending" ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <PremiumButton
+                            variant="primary"
+                            size="sm"
+                            icon={<Send size={14} />}
+                            loading={resendInvitationMutation.isPending}
+                            onClick={() => resendInvitationMutation.mutate({ userId: user.id })}
+                          >
+                            Reenviar convite
+                          </PremiumButton>
+                          <PremiumButton
+                            variant="outline"
+                            size="sm"
+                            icon={<Copy size={14} />}
+                            loading={copyInvitationLinkMutation.isPending}
+                            onClick={() => copyInvitationLinkMutation.mutate({ userId: user.id })}
+                          >
+                            Copiar link
+                          </PremiumButton>
+                        </div>
+                      ) : null}
+
                       {isSuperAdmin && !isTargetSuperAdmin ? (
                         <div className="flex flex-wrap items-center gap-2">
                           <PremiumButton
@@ -538,7 +595,7 @@ export default function UsuariosEquipe() {
                     placeholder="joana@exemplo.com"
                     type="email"
                     value={inviteForm.email}
-                    onChange={e => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
+                    onChange={e => setInviteForm(prev => ({ ...prev, email: normalizeEmail(e.target.value) }))}
                     required
                   />
                 </div>

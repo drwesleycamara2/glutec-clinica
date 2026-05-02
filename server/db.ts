@@ -9,6 +9,10 @@ import path from "path";
 let _db: ReturnType<typeof drizzle> | null = null;
 let icd10BootstrapPromise: Promise<void> | null = null;
 
+function normalizeEmailForStorage(value?: string | null) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
@@ -23,6 +27,8 @@ export async function getDb() {
 }
 
 export async function upsertUser(user: InsertUser): Promise<void> {
+  const normalizedInputEmail = user.email ? normalizeEmailForStorage(user.email) : undefined;
+
   if (!user.openId) {
     throw new Error("User openId is required for upsert");
   }
@@ -38,8 +44,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     if (!db) return;
 
     // Check if there's an invited user with this email
-    if (user.email) {
-      const invitedUser = await db.select().from(users).where(eq(users.email, user.email)).limit(1);
+    if (normalizedInputEmail) {
+      const invitedUser = await db.select().from(users).where(eq(users.email, normalizedInputEmail)).limit(1);
       if (invitedUser.length > 0 && invitedUser[0].openId.startsWith('invited_')) {
         // Sync the invited user with the real openId
         await db.update(users).set({ openId: user.openId }).where(eq(users.id, invitedUser[0].id));
@@ -57,7 +63,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     const assignNullable = (field: TextField) => {
       const value = user[field];
       if (value === undefined) return;
-      const normalized = value ?? null;
+      const normalized = field === "email" && value ? normalizeEmailForStorage(value) : value ?? null;
       values[field] = normalized;
       updateSet[field] = normalized;
     };
@@ -71,7 +77,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     // Super Admin Enforcement: Only the specific email can be admin
     const SUPER_ADMIN_EMAIL = "contato@drwesleycamara.com.br";
     
-    if (user.email === SUPER_ADMIN_EMAIL) {
+    if (normalizedInputEmail === SUPER_ADMIN_EMAIL) {
       values.role = 'admin';
       updateSet.role = 'admin';
     } else if (user.role !== undefined) {
@@ -317,18 +323,19 @@ export async function inviteUser(data: {
 }) {
   const db = await getDb();
   if (!db) return;
+  const normalizedEmail = normalizeEmailForStorage(data.email);
   
   // Create a placeholder user that will be synced on first login
   // Since we use OAuth, we don't know the openId yet, but we can pre-authorize the email
   // We'll use a special flag or just check the email during upsert
   await db.insert(users).values({
-    email: data.email,
+    email: normalizedEmail,
     name: data.name,
     role: data.role,
     profession: data.profession ?? null,
     permissions: data.permissions,
     status: 'inactive',
-    openId: `invited_${data.email}`, // Temporary openId
+    openId: `invited_${normalizedEmail}`, // Temporary openId
   }).onDuplicateKeyUpdate({
     set: {
       name: data.name,
@@ -361,7 +368,9 @@ function makeLocalOpenId() {
 export async function getUserByEmail(email: string) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  const normalizedEmail = normalizeEmailForStorage(email);
+  if (!normalizedEmail) return undefined;
+  const result = await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
   return normalizeUserRow(result[0] as any);
 }
 
@@ -444,9 +453,10 @@ export async function createInvitation(data: {
 }) {
   const db = await getDb();
   if (!db) return;
+  const normalizedEmail = normalizeEmailForStorage(data.email);
   await db.execute(sql`
     insert into user_invitations (email, name, role, token, invitedById, expiresAt)
-    values (${data.email}, ${data.name}, ${data.role}, ${data.token}, ${data.invitedById}, ${data.expiresAt})
+    values (${normalizedEmail}, ${data.name}, ${data.role}, ${data.token}, ${data.invitedById}, ${data.expiresAt})
   `);
 }
 
@@ -457,6 +467,29 @@ export async function getPendingInvitations() {
     sql`select * from user_invitations where usedAt is null and expiresAt > now() order by createdAt desc`
   );
   return unwrapExecuteRows(result);
+}
+
+export async function getLatestPendingInvitationByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const normalizedEmail = normalizeEmailForStorage(email);
+  if (!normalizedEmail) return undefined;
+  const result = await db.execute(
+    sql`select * from user_invitations where email = ${normalizedEmail} and usedAt is null and expiresAt > now() order by createdAt desc limit 1`
+  );
+  return unwrapExecuteRows(result)[0] as any;
+}
+
+export async function expirePendingInvitationsByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return;
+  const normalizedEmail = normalizeEmailForStorage(email);
+  if (!normalizedEmail) return;
+  await db.execute(sql`
+    update user_invitations
+    set expiresAt = ${new Date()}
+    where email = ${normalizedEmail} and usedAt is null and expiresAt > now()
+  `);
 }
 
 export async function getInvitationByToken(token: string) {
@@ -488,12 +521,14 @@ export async function createUserFromInvite(data: {
   const db = await getDb();
   if (!db) return null;
 
-  const existing = await getUserByEmail(data.email);
+  const normalizedEmail = normalizeEmailForStorage(data.email);
+  const existing = await getUserByEmail(normalizedEmail);
   if (existing) {
     await db
       .update(users)
       .set({
         name: data.name,
+        email: normalizedEmail,
         role: data.role,
         profession: data.profession ?? existing.profession ?? null,
         status: "active",
@@ -509,7 +544,7 @@ export async function createUserFromInvite(data: {
   await db.insert(users).values({
     openId,
     name: data.name,
-    email: data.email,
+    email: normalizedEmail,
     loginMethod: "local",
     role: data.role,
     profession: data.profession ?? null,
@@ -522,7 +557,7 @@ export async function createUserFromInvite(data: {
     lastSignedIn: new Date(),
   });
 
-  return getUserByEmail(data.email);
+  return getUserByEmail(normalizedEmail);
 }
 
 export async function getSmtpSettings() {

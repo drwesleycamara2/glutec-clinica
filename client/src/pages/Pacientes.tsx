@@ -398,7 +398,7 @@ export default function Pacientes() {
                 </div>
                 <div>
                   <Label>E-mail</Label>
-                  <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@exemplo.com" className="mt-1" />
+                  <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value.trim().toLowerCase() })} placeholder="email@exemplo.com" className="mt-1" />
                 </div>
                 <div>
                   <Label>Nome Social</Label>

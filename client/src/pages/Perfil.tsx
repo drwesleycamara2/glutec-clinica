@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -147,7 +147,7 @@ export default function Perfil() {
 
     updateMutation.mutate({
       name: form.name.trim(),
-      email: form.email.trim(),
+      email: form.email.trim().toLowerCase(),
       specialty: form.specialty.trim() || undefined,
       profession: form.profession.trim() || undefined,
       crm: form.crm.trim() || undefined,
@@ -252,7 +252,7 @@ export default function Perfil() {
                 <Input
                   type="email"
                   value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  onChange={(e) => setForm({ ...form, email: e.target.value.trim().toLowerCase() })}
                   placeholder="seuemail@dominio.com"
                   className="mt-1"
                 />

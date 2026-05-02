@@ -19,6 +19,16 @@ import { createD4SignService as createSignatureDispatchService, SAFE_MAP } from 
 import { createCloudSignatureClient, documentHash, type CloudSignatureProvider } from "./lib/cloud-signature";
 
 const SUPER_ADMIN_EMAIL = "contato@drwesleycamara.com.br";
+const INVITE_ROLES = ["user", "admin", "medico", "recepcionista", "enfermeiro", "gerente"] as const;
+type InviteRole = (typeof INVITE_ROLES)[number];
+
+function normalizeEmailForStorage(value?: string | null) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function normalizeInviteRole(value?: string | null): InviteRole {
+  return INVITE_ROLES.includes(value as InviteRole) ? (value as InviteRole) : "user";
+}
 
 function stripHtmlForSignature(value?: string | null) {
   return String(value ?? "")
@@ -138,13 +148,16 @@ export const appRouter = router({
         // super-administrador (defesa em profundidade contra escalada de
         // privilégio que dependa de comparação por e-mail).
         if (input.email) {
-          const newEmail = String(input.email).trim().toLowerCase();
+          const newEmail = normalizeEmailForStorage(input.email);
           const currentEmail = String(ctx.user.email ?? "").toLowerCase();
           if (newEmail === SUPER_ADMIN_EMAIL && currentEmail !== SUPER_ADMIN_EMAIL) {
             throw new Error("Esse e-mail está reservado e não pode ser usado.");
           }
         }
-        await dbComplete.updateUserProfile(ctx.user.id, input);
+        await dbComplete.updateUserProfile(ctx.user.id, {
+          ...input,
+          email: input.email ? normalizeEmailForStorage(input.email) : undefined,
+        });
         const updatedUser = await db.getUserById(ctx.user.id);
         return { success: true, user: updatedUser };
       }),
@@ -335,7 +348,7 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
 
-        const normalizedEmail = input.email.toLowerCase().trim();
+        const normalizedEmail = normalizeEmailForStorage(input.email);
         const existingUser = await db.getUserByEmail(normalizedEmail);
         if (existingUser && existingUser.status === 'active' && ((existingUser as any).passwordHash || (existingUser as any).password)) {
           throw new TRPCError({ code: 'CONFLICT', message: 'Já existe um usuário ativo com este e-mail.' });
@@ -361,6 +374,7 @@ export const appRouter = router({
 
         const token = generateSecureToken(32);
         const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+        await db.expirePendingInvitationsByEmail(normalizedEmail);
         await db.createInvitation({
           email: normalizedEmail,
           name: input.name,
@@ -389,6 +403,87 @@ export const appRouter = router({
         };
       }),
 
+    resendInvitation: protectedProcedure
+      .input(z.object({ userId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+
+        const user = await db.getUserById(input.userId);
+        if (!user || !String((user as any).openId ?? '').startsWith('invited_')) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Este usuário não possui convite pendente.' });
+        }
+
+        const normalizedEmail = normalizeEmailForStorage((user as any).email);
+        if (!normalizedEmail) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'O usuário pendente não possui e-mail cadastrado.' });
+        }
+
+        await db.expirePendingInvitationsByEmail(normalizedEmail);
+        const token = generateSecureToken(32);
+        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+        const role = normalizeInviteRole((user as any).role);
+
+        await db.createInvitation({
+          email: normalizedEmail,
+          name: String((user as any).name || normalizedEmail),
+          role,
+          token,
+          invitedById: ctx.user.id,
+          expiresAt,
+        });
+
+        const acceptUrl = `${getAppBaseUrl(ctx.req)}/aceitar-convite?token=${token}`;
+        const { subject, html } = inviteEmailTemplate({
+          name: String((user as any).name || normalizedEmail),
+          inviterName: ctx.user.name || 'Administrador',
+          role,
+          acceptUrl,
+          expiresIn: '48 horas',
+        });
+
+        const emailResult = await sendEmail({ to: normalizedEmail, subject, html });
+        return {
+          success: true,
+          emailSent: emailResult.success,
+          manualLink: acceptUrl,
+          warning: emailResult.success ? null : `E-mail não enviado: ${emailResult.error}`,
+        };
+      }),
+
+    copyInvitationLink: protectedProcedure
+      .input(z.object({ userId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+
+        const user = await db.getUserById(input.userId);
+        if (!user || !String((user as any).openId ?? '').startsWith('invited_')) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Este usuário não possui convite pendente.' });
+        }
+
+        const normalizedEmail = normalizeEmailForStorage((user as any).email);
+        if (!normalizedEmail) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'O usuário pendente não possui e-mail cadastrado.' });
+        }
+
+        let invitation = await db.getLatestPendingInvitationByEmail(normalizedEmail);
+        if (!invitation) {
+          const token = generateSecureToken(32);
+          await db.createInvitation({
+            email: normalizedEmail,
+            name: String((user as any).name || normalizedEmail),
+            role: normalizeInviteRole((user as any).role),
+            token,
+            invitedById: ctx.user.id,
+            expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+          });
+          invitation = await db.getLatestPendingInvitationByEmail(normalizedEmail);
+        }
+
+        return {
+          success: true,
+          manualLink: `${getAppBaseUrl(ctx.req)}/aceitar-convite?token=${String((invitation as any).token)}`,
+        };
+      }),
     updateUserStatus: protectedProcedure
       .input(z.object({
         userId: z.number(),
