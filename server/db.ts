@@ -1,5 +1,10 @@
 import { asc, eq, sql, or, like, and, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import { createHash } from "crypto";
+
+function hashInvitationToken(token: string): string {
+  return createHash("sha256").update(String(token)).digest("hex");
+}
 import { InsertUser, users, icd10Codes, userFavoriteIcds, audioTranscriptions, InsertIcd10Code, InsertUserFavoriteIcd, InsertAudioTranscription } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { createHash, randomBytes } from "crypto";
@@ -454,9 +459,10 @@ export async function createInvitation(data: {
   const db = await getDb();
   if (!db) return;
   const normalizedEmail = normalizeEmailForStorage(data.email);
+  const tokenHash = hashInvitationToken(data.token);
   await db.execute(sql`
-    insert into user_invitations (email, name, role, token, invitedById, expiresAt)
-    values (${normalizedEmail}, ${data.name}, ${data.role}, ${data.token}, ${data.invitedById}, ${data.expiresAt})
+    insert into user_invitations (email, name, role, token, tokenHash, invitedById, expiresAt)
+    values (${normalizedEmail}, ${data.name}, ${data.role}, ${data.token}, ${tokenHash}, ${data.invitedById}, ${data.expiresAt})
   `);
 }
 
@@ -492,11 +498,22 @@ export async function expirePendingInvitationsByEmail(email: string) {
   `);
 }
 
+/**
+ * Incrementa users.sessionEpoch para invalidar todos os JWTs já emitidos
+ * para esse usuário (efeito "sair de todos os dispositivos").
+ */
+export async function bumpUserSessionEpoch(userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.execute(sql`update users set sessionEpoch = coalesce(sessionEpoch, 0) + 1 where id = ${userId}`);
+}
+
 export async function getInvitationByToken(token: string) {
   const db = await getDb();
   if (!db) return undefined;
+  const tokenHash = hashInvitationToken(token);
   const result = await db.execute(
-    sql`select * from user_invitations where token = ${token} limit 1`
+    sql`select * from user_invitations where tokenHash = ${tokenHash} limit 1`
   );
   return unwrapExecuteRows(result)[0] as any;
 }

@@ -64,6 +64,7 @@ export const twoFactorRouter = router({
         email: refreshedUser.email!,
         role: refreshedUser.role,
         twoFactorVerified: true,
+        sessionEpoch: Number((refreshedUser as any).sessionEpoch ?? 0),
       });
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: SESSION_DURATION_MS });

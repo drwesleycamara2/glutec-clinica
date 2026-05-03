@@ -2404,11 +2404,10 @@ export async function createPatientMediaUploadLink(
   const expiresAt = new Date(Date.now() + Math.max(1, Number(data.expiresInDays || 7)) * 24 * 60 * 60 * 1000);
 
   const result = await db.execute(sql`
-    insert into patient_media_upload_links (patientId, folderId, token, tokenHash, title, allowVideos, expiresAt, createdBy)
+    insert into patient_media_upload_links (patientId, folderId, tokenHash, title, allowVideos, expiresAt, createdBy)
     values (
       ${data.patientId},
       ${data.folderId ?? null},
-      ${token},
       ${tokenHash},
       ${data.title ?? "Envio de imagens do paciente"},
       ${data.allowVideos === false ? 0 : 1},
@@ -2465,7 +2464,7 @@ export async function revokePatientMediaUploadLink(linkId: number) {
   return { success: true };
 }
 
-function hashToken(token: string): string {
+export function hashToken(token: string): string {
   return crypto.createHash("sha256").update(String(token)).digest("hex");
 }
 
@@ -2482,7 +2481,7 @@ export async function getPatientMediaUploadLinkByToken(token: string) {
     from patient_media_upload_links l
     inner join patients p on p.id = l.patientId
     left join photo_folders f on f.id = l.folderId
-    where (l.tokenHash = ${tokenHash} or (l.tokenHash is null and l.token = ${token}))
+    where l.tokenHash = ${tokenHash}
       and l.isActive = 1
       and l.expiresAt > now()
     limit 1
@@ -2510,10 +2509,9 @@ export async function createAnamnesisShareLink(
   const tokenHash = hashToken(token);
   const expiresAt = new Date(Date.now() + Math.max(1, Number(data.expiresInDays || 7)) * 24 * 60 * 60 * 1000);
   const result = await db.execute(sql`
-    insert into anamnesis_share_links (patientId, token, tokenHash, title, templateName, anamnesisDate, questionsJson, expiresAt, createdBy, source)
+    insert into anamnesis_share_links (patientId, tokenHash, title, templateName, anamnesisDate, questionsJson, expiresAt, createdBy, source)
     values (
       ${data.patientId},
-      ${token},
       ${tokenHash},
       ${data.title ?? "Preencher anamnese da Clínica Glutée"},
       ${data.templateName ?? null},
@@ -2559,7 +2557,7 @@ export async function getAnamnesisShareLinkByToken(token: string) {
     select l.*, p.fullName as patientName
     from anamnesis_share_links l
     inner join patients p on p.id = l.patientId
-    where (l.tokenHash = ${tokenHash} or (l.tokenHash is null and l.token = ${token}))
+    where l.tokenHash = ${tokenHash}
       and l.isActive = 1
       and l.expiresAt > now()
     limit 1
@@ -2840,7 +2838,6 @@ export async function createPatientAnamnesis(
   const result = await db.execute(sql`
     insert into anamnesis_share_links (
       patientId,
-      token,
       tokenHash,
       title,
       templateName,
@@ -2859,7 +2856,6 @@ export async function createPatientAnamnesis(
     )
     values (
       ${data.patientId},
-      ${token},
       ${tokenHash},
       ${data.title},
       ${data.templateName ?? null},

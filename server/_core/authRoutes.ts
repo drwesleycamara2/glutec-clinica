@@ -144,6 +144,7 @@ export function registerAuthRoutes(app: Express) {
         email: user.email!,
         role: user.role,
         twoFactorVerified: false,
+      sessionEpoch: Number((user as any).sessionEpoch ?? 0),
       },
       user.mustChangePassword
         ? MUST_CHANGE_PASSWORD_SESSION_MS
@@ -201,6 +202,7 @@ export function registerAuthRoutes(app: Express) {
       email: user.email!,
       role: user.role,
       twoFactorVerified: true,
+      sessionEpoch: Number((user as any).sessionEpoch ?? 0),
     });
 
     const cookieOptions = getSessionCookieOptions(req);
@@ -249,6 +251,7 @@ export function registerAuthRoutes(app: Express) {
       email: user.email!,
       role: user.role,
       twoFactorVerified: true,
+      sessionEpoch: Number((user as any).sessionEpoch ?? 0),
     });
 
     const cookieOptions = getSessionCookieOptions(req);
@@ -317,6 +320,7 @@ export function registerAuthRoutes(app: Express) {
       email: user.email!,
       role: user.role,
       twoFactorVerified: false,
+      sessionEpoch: Number((user as any).sessionEpoch ?? 0),
     });
 
     const cookieOptions = getSessionCookieOptions(req);
@@ -364,6 +368,7 @@ export function registerAuthRoutes(app: Express) {
       email: updatedUser.email!,
       role: updatedUser.role,
       twoFactorVerified: false,
+      sessionEpoch: Number((updatedUser as any).sessionEpoch ?? 0),
     });
 
     const cookieOptions = getSessionCookieOptions(req);
@@ -375,6 +380,17 @@ export function registerAuthRoutes(app: Express) {
   });
 
   app.post("/api/auth/logout", (req, res) => {
+    const cookieOptions = getSessionCookieOptions(req);
+    res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+    return res.json({ success: true });
+  });
+
+  app.post("/api/auth/logout-all", async (req, res) => {
+    const user = await authenticateRequest(req);
+    if (!user) {
+      return res.status(401).json({ error: "Sessão inválida." });
+    }
+    await db.bumpUserSessionEpoch(user.id);
     const cookieOptions = getSessionCookieOptions(req);
     res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
     return res.json({ success: true });

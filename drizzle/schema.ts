@@ -30,6 +30,8 @@ export const users = mysqlTable("users", {
   twoFactorSecret: text("twoFactorSecret"),
   twoFactorEnabled: int("twoFactorEnabled").default(0).notNull(),
   twoFactorBackupCodes: text("twoFactorBackupCodes"),
+  // incrementado quando o usuário pede "sair de todos os dispositivos"
+  sessionEpoch: int("sessionEpoch").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),

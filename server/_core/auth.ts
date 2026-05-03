@@ -24,6 +24,12 @@ export type LocalSessionPayload = {
   email: string;
   role: string;
   twoFactorVerified: boolean;
+  /**
+   * Quando o usuário pede "sair de todos os dispositivos", incrementamos
+   * `users.sessionEpoch`. Tokens emitidos com epoch antigo passam a ser
+   * recusados na próxima autenticação, sem precisar de blacklist.
+   */
+  sessionEpoch: number;
 };
 
 export type LoginResult =
@@ -108,6 +114,7 @@ export async function verifySessionToken(
       email: payload.email as string,
       role: payload.role as string,
       twoFactorVerified: payload.twoFactorVerified as boolean,
+      sessionEpoch: typeof payload.sessionEpoch === "number" ? payload.sessionEpoch : 0,
     };
   } catch {
     return null;
@@ -133,9 +140,23 @@ export async function authenticateRequest(req: Request): Promise<User | null> {
 
   if (user.twoFactorEnabled && !session.twoFactorVerified) return null;
 
+  // Sessão revogada via "Sair de todos os dispositivos"? compara o epoch do
+  // JWT com o atual no banco; se diverge, recusa.
+  const currentEpoch = Number((user as any).sessionEpoch ?? 0);
+  if (Number(session.sessionEpoch ?? 0) !== currentEpoch) return null;
+
   // Bloqueia usuários inativos (exceto super admin)
   const SUPER_ADMIN_EMAIL = "contato@drwesleycamara.com.br";
   if (user.email !== SUPER_ADMIN_EMAIL && user.status === "inactive") return null;
 
   return user;
+}
+
+/**
+ * Helper para resolver o epoch atual de um usuário a partir do banco.
+ * Mantido aqui para que callers de createSessionToken não precisem fazer
+ * o cast manualmente.
+ */
+export function epochOf(user: { sessionEpoch?: number | null } | null | undefined): number {
+  return Number(user?.sessionEpoch ?? 0);
 }

@@ -15,7 +15,9 @@ import {
   RotateCcw,
   ChevronLeft,
   ChevronRight,
+  Download,
 } from "lucide-react";
+import { toast } from "sonner";
 
 const ACTION_LABELS: Record<string, string> = {
   // Eventos novos (LGPD - leituras de PHI)
@@ -90,6 +92,82 @@ export default function Auditoria() {
 
   const { data, isLoading, isFetching } = trpc.admin.listAuditLogs.useQuery(queryInput);
   const { data: actions = [] } = trpc.admin.listAuditLogActions.useQuery();
+  const utils = trpc.useUtils();
+  const [exporting, setExporting] = useState(false);
+
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const PAGE = 500;
+      const all: any[] = [];
+      let offset = 0;
+      while (true) {
+        const chunk = await utils.admin.listAuditLogs.fetch({
+          ...queryInput,
+          limit: PAGE,
+          offset,
+        });
+        const rows = ((chunk as any)?.rows ?? []) as any[];
+        all.push(...rows);
+        if (rows.length < PAGE) break;
+        offset += PAGE;
+        if (all.length >= 50000) break; // proteção contra runaway
+      }
+
+      const escape = (v: unknown) => {
+        const s = v == null ? "" : String(v);
+        if (/[",\n;\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+        return s;
+      };
+      const header = [
+        "id",
+        "createdAt",
+        "userId",
+        "userEmail",
+        "userRole",
+        "action",
+        "resourceType",
+        "resourceId",
+        "patientId",
+        "ipAddress",
+        "metadata",
+      ];
+      const lines = [header.join(",")];
+      for (const r of all) {
+        lines.push(
+          [
+            r.id,
+            r.createdAt ? new Date(r.createdAt).toISOString() : "",
+            r.userId ?? "",
+            r.userEmail ?? "",
+            r.userRole ?? "",
+            r.action ?? "",
+            r.resourceType ?? "",
+            r.resourceId ?? "",
+            r.patientId ?? "",
+            r.ipAddress ?? "",
+            r.metadata ?? "",
+          ].map(escape).join(","),
+        );
+      }
+      const csv = "﻿" + lines.join("\r\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 16);
+      a.download = `auditoria-glutec-${stamp}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(`${all.length.toLocaleString("pt-BR")} registros exportados.`);
+    } catch (err: any) {
+      toast.error(err?.message || "Falha ao exportar CSV.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const rows = (data as any)?.rows ?? [];
   const total = Number((data as any)?.total ?? 0);
@@ -194,6 +272,16 @@ export default function Auditoria() {
             <Button variant="outline" onClick={resetFilters} className="gap-2">
               <RotateCcw className="h-4 w-4" />
               Limpar
+            </Button>
+            <Button
+              variant="outline"
+              onClick={exportCsv}
+              disabled={exporting || total === 0}
+              className="gap-2"
+              title="Exportar todos os registros desta busca em CSV"
+            >
+              {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              Exportar CSV
             </Button>
             <span className="text-xs text-muted-foreground ml-auto">
               {total.toLocaleString("pt-BR")} registro{total === 1 ? "" : "s"}

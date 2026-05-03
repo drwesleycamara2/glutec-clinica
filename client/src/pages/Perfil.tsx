@@ -14,6 +14,7 @@ import {
   FileKey,
   KeyRound,
   Loader2,
+  LogOut,
   Save,
   Shield,
   ShieldCheck,
@@ -194,6 +195,27 @@ export default function Perfil() {
                 >
                   <KeyRound className="mr-1 h-3 w-3" />
                   Alterar senha
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-destructive hover:bg-destructive/10"
+                  onClick={async () => {
+                    if (!window.confirm(
+                      "Encerrar todas as sessões em todos os dispositivos? Você precisará fazer login novamente em cada um.",
+                    )) return;
+                    try {
+                      const res = await fetch("/api/auth/logout-all", { method: "POST", credentials: "include" });
+                      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                      toast.success("Sessões encerradas. Redirecionando para o login...");
+                      setTimeout(() => { window.location.href = "/login"; }, 600);
+                    } catch (err: any) {
+                      toast.error(err?.message || "Não foi possível encerrar as sessões.");
+                    }
+                  }}
+                >
+                  <LogOut className="mr-1 h-3 w-3" />
+                  Sair de todos os dispositivos
                 </Button>
               </div>
             ) : (
