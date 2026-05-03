@@ -25,6 +25,7 @@ import { generateSecureToken, verifyPassword } from "./_core/auth";
 import { inviteEmailTemplate, sendEmail } from "./_core/mailer";
 import { verifyTotpCode, verifyAndConsumeTotpCode } from "./_core/totp";
 import { createAuditLog } from "./features_special";
+import { auditPatientRead } from "./_core/auditLog";
 import { generateSecureSystemExport } from "./lib/system-export";
 import { createD4SignService, getD4SignIntegrationStatus } from "./lib/d4sign-integration";
 import { createWhatsAppService } from "./whatsapp";
@@ -624,7 +625,8 @@ export const appRouter = router({
 
     getById: pacientesProcedure
       .input(z.object({ id: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        void auditPatientRead(ctx, input.id, "patient_view");
         return dbComplete.getPatientById(input.id);
       }),
 
@@ -713,7 +715,8 @@ export const appRouter = router({
       .input(z.object({
         patientId: z.number(),
       }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        void auditPatientRead(ctx, input.patientId, "patient_appointments_read");
         const history = await dbComplete.getPatientHistory(input.patientId);
         return history.appointments ?? [];
       }),
@@ -782,7 +785,8 @@ export const appRouter = router({
 
     getByPatient: prescricoesProcedure
       .input(z.object({ patientId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        void auditPatientRead(ctx, input.patientId, "patient_prescriptions_read");
         return dbComplete.getPrescriptionsByPatient(input.patientId);
       }),
 
@@ -823,7 +827,8 @@ export const appRouter = router({
 
     getByPatient: examesProcedure
       .input(z.object({ patientId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        void auditPatientRead(ctx, input.patientId, "patient_exam_requests_read");
         return dbComplete.getExamRequestsByPatient(input.patientId);
       }),
 
@@ -863,7 +868,8 @@ export const appRouter = router({
 
     getByPatient: examesProcedure
       .input(z.object({ patientId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        void auditPatientRead(ctx, input.patientId, "patient_exam_requests_read");
         return dbComplete.getExamRequestsByPatient(input.patientId);
       }),
 
@@ -1050,7 +1056,11 @@ export const appRouter = router({
         category: z.string().optional(),
         folderId: z.number().nullable().optional(),
       }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        void auditPatientRead(ctx, input.patientId, "patient_photos_read", {
+          category: input.category ?? null,
+          folderId: input.folderId ?? null,
+        });
         return dbComplete.getPatientPhotos(input.patientId, input.category, input.folderId);
       }),
 
@@ -1271,7 +1281,8 @@ export const appRouter = router({
 
     getByPatient: orcamentosProcedure
       .input(z.object({ patientId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        void auditPatientRead(ctx, input.patientId, "patient_budgets_read");
         return dbComplete.listBudgetsByPatient(input.patientId);
       }),
 
@@ -1899,17 +1910,23 @@ export const appRouter = router({
     }),
     getHistory: prontuariosProcedure
       .input(z.object({ patientId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        void auditPatientRead(ctx, input.patientId, "patient_history_read");
         return dbComplete.getPatientHistory(input.patientId);
       }),
     getDocuments: documentosIdProcedure
       .input(z.object({ patientId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        void auditPatientRead(ctx, input.patientId, "patient_documents_read");
         return dbComplete.getPatientDocuments(input.patientId);
       }),
     listContracts: contratosProcedure
       .input(z.object({ query: z.string().optional(), limit: z.number().optional() }).optional())
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        void auditPatientRead(ctx, null, "contracts_list_read", {
+          query: input?.query ?? null,
+          limit: input?.limit ?? null,
+        });
         return dbComplete.listContractDocuments(input?.query, input?.limit);
       }),
     uploadDocument: requireModule(
@@ -2302,6 +2319,7 @@ export const appRouter = router({
     listByPatient: prontuariosProcedure
       .input(z.object({ patientId: z.number() }))
       .query(async ({ ctx, input }) => {
+        void auditPatientRead(ctx, input.patientId, "patient_anamneses_read");
         return dbComplete.listPatientAnamneses(input.patientId, ctx.user.role);
       }),
 

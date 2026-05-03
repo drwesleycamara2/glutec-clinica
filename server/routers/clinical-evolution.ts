@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { protectedProcedure, router, requireModule } from "../_core/trpc";
+import { auditPatientRead } from "../_core/auditLog";
 
 // Aliases locais para gating por módulo
 const prontuariosProcedure = requireModule("prontuarios");
@@ -141,6 +142,7 @@ export const clinicalEvolutionRouter = router({
   getByPatient: anotacoesProcedure
     .input(z.object({ patientId: z.number() }))
     .query(async ({ ctx, input }) => {
+      void auditPatientRead(ctx, input.patientId, "clinical_evolution_list_read");
       return db.getClinicalEvolutionsByPatient(input.patientId, ctx.user?.role, ctx.user?.id);
     }),
 
