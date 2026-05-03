@@ -286,6 +286,26 @@ export const appRouter = router({
         return dbComplete.getAuditLogs(input.limit);
       }),
 
+    listAuditLogs: protectedProcedure
+      .input(z.object({
+        userId: z.number().int().positive().nullable().optional(),
+        patientId: z.number().int().positive().nullable().optional(),
+        action: z.string().max(100).nullable().optional(),
+        dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+        dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+        limit: z.number().int().min(1).max(500).optional(),
+        offset: z.number().int().min(0).max(100000).optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+        return dbComplete.listAuditLogs(input);
+      }),
+
+    listAuditLogActions: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+      return dbComplete.listAuditLogActions();
+    }),
+
     generateSystemExport: protectedProcedure
       .input(z.object({
         currentPassword: z.string().min(1),

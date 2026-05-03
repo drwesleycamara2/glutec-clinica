@@ -4404,6 +4404,64 @@ export async function getAuditLogs(limit: number = 100) {
   `));
 }
 
+export type AuditLogFilters = {
+  userId?: number | null;
+  patientId?: number | null;
+  action?: string | null;
+  dateFrom?: string | null;  // ISO yyyy-mm-dd
+  dateTo?: string | null;    // ISO yyyy-mm-dd
+  limit?: number | null;
+  offset?: number | null;
+};
+
+export async function listAuditLogs(filters: AuditLogFilters = {}) {
+  const db = await getDb();
+  if (!db) return { rows: [], total: 0 };
+
+  const safeLimit = Math.max(1, Math.min(Number(filters.limit) || 100, 500));
+  const safeOffset = Math.max(0, Math.min(Number(filters.offset) || 0, 100000));
+  const userId = filters.userId ?? null;
+  const patientId = filters.patientId ?? null;
+  const action = filters.action ? String(filters.action).slice(0, 100) : null;
+  const dateFrom = filters.dateFrom ? String(filters.dateFrom).slice(0, 32) : null;
+  const dateTo = filters.dateTo ? String(filters.dateTo).slice(0, 32) : null;
+
+  const where = sql`
+    where 1=1
+      and (${userId} is null or userId = ${userId})
+      and (${patientId} is null or patientId = ${patientId})
+      and (${action} is null or action = ${action})
+      and (${dateFrom} is null or createdAt >= ${dateFrom})
+      and (${dateTo} is null or createdAt < date_add(${dateTo}, interval 1 day))
+  `;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select id, userId, userEmail, userRole, action, resourceType, resourceId, patientId, metadata, ipAddress, createdAt
+    from audit_logs
+    ${where}
+    order by createdAt desc, id desc
+    limit ${safeLimit} offset ${safeOffset}
+  `));
+
+  const totalRows = unwrapRows<{ total: number }>(await db.execute(sql`
+    select count(*) as total
+    from audit_logs
+    ${where}
+  `));
+  const total = Number((totalRows?.[0] as any)?.total ?? 0);
+
+  return { rows, total };
+}
+
+export async function listAuditLogActions(): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = unwrapRows<{ action: string }>(await db.execute(sql`
+    select distinct action from audit_logs order by action asc limit 200
+  `));
+  return rows.map((row) => String((row as any).action)).filter(Boolean);
+}
+
 export async function getUserPermissions(userId: number) {
   const db = await getDb();
   if (!db) return [];

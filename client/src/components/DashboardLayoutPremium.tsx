@@ -108,6 +108,7 @@ const menuSections: MenuSection[] = [
       { icon: Package, label: "Estoque", path: "/estoque", moduleId: "estoque" },
       { icon: MessageSquare, label: "CRM", path: "/crm", moduleId: "crm" },
       { icon: BarChart3, label: "Relatórios", path: "/relatorios", adminOnly: true, moduleId: "relatorios" },
+      { icon: ShieldCheck, label: "Auditoria", path: "/auditoria", adminOnly: true },
       { icon: MessageSquare, label: "Chat", path: "/chat", moduleId: "chat" },
       { icon: UserCircle2, label: "Perfil", path: "/perfil" },
       { icon: ShieldCheck, label: "Usuários", path: "/usuarios", adminOnly: true, moduleId: "usuarios" },

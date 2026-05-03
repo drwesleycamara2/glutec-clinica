@@ -32,6 +32,7 @@ import RelatorioProntuario from "./pages/RelatorioProntuario";
 import PortabilidadeDados from "./pages/PortabilidadeDados";
 import Chat from "./pages/Chat";
 import Perfil from "./pages/Perfil";
+import Auditoria from "./pages/Auditoria";
 import DashboardLayout from "./components/DashboardLayoutPremium";
 import Login from "./pages/Login";
 import AceitarConvite from "./pages/AceitarConviteSafe";
@@ -108,6 +109,7 @@ function ProtectedRoutes() {
         <Route path="/relatorios/prontuario">{() => <AdminOnly component={RelatorioProntuario} />}</Route>
         <Route path="/relatorios/portabilidade">{() => <AdminOnly component={PortabilidadeDados} />}</Route>
         <Route path="/relatorios">{() => <AdminOnly component={Relatorios} />}</Route>
+        <Route path="/auditoria">{() => <AdminOnly component={Auditoria} />}</Route>
         <Route path="/chat" component={Chat} />
         <Route path="/perfil" component={Perfil} />
         <Route path="/configuracoes" component={Configuracoes} />
