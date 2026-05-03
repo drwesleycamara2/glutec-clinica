@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { protectedProcedure, router, requireModule } from "../_core/trpc";
+
+// Aliases locais para gating por módulo
+const prontuariosProcedure = requireModule("prontuarios");
+const anotacoesProcedure = requireModule("prontuarios", "prontuarios_anotacoes");
 import { TRPCError } from "@trpc/server";
 import * as db from "../db_clinical_evolution";
 import * as coreDb from "../db";
@@ -44,7 +48,7 @@ function buildClinicalEvolutionHtmlFromSections(sections: {
 
 export const clinicalEvolutionRouter = router({
   // Create clinical evolution
-  create: protectedProcedure
+  create: prontuariosProcedure
     .input(
       z.object({
         patientId: z.number(),
@@ -123,22 +127,25 @@ export const clinicalEvolutionRouter = router({
       }
     }),
 
-  // Get clinical evolution by ID
-  getById: protectedProcedure
+  // Get clinical evolution by ID — handler já filtra por role; mantemos aberto
+  // para quem tem prontuarios OU prontuarios_anotacoes (handler retorna apenas
+  // o que cada role pode ver).
+  getById: anotacoesProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ ctx, input }) => {
       return db.getClinicalEvolutionById(input.id, ctx.user?.role, ctx.user?.id);
     }),
 
-  // Get clinical evolutions by patient
-  getByPatient: protectedProcedure
+  // Get clinical evolutions by patient — idem: handler filtra registros
+  // clínicos vs administrativos a partir do role do usuário.
+  getByPatient: anotacoesProcedure
     .input(z.object({ patientId: z.number() }))
     .query(async ({ ctx, input }) => {
       return db.getClinicalEvolutionsByPatient(input.patientId, ctx.user?.role, ctx.user?.id);
     }),
 
   // Update clinical evolution
-  update: protectedProcedure
+  update: prontuariosProcedure
     .input(
       z.object({
         id: z.number(),
@@ -262,7 +269,7 @@ export const clinicalEvolutionRouter = router({
       }
     }),
 
-  updateSecretaryNotes: protectedProcedure
+  updateSecretaryNotes: anotacoesProcedure
     .input(
       z.object({
         id: z.number().optional(),
@@ -344,7 +351,7 @@ export const clinicalEvolutionRouter = router({
     }),
 
   // Lista histórico de edições auditáveis de uma evolução
-  incorporateTranscription: protectedProcedure
+  incorporateTranscription: prontuariosProcedure
     .input(
       z.object({
         transcription: z.string().min(1),
@@ -366,7 +373,7 @@ export const clinicalEvolutionRouter = router({
       };
     }),
 
-  getEditHistory: protectedProcedure
+  getEditHistory: prontuariosProcedure
     .input(z.object({ evolutionId: z.number() }))
     .query(async ({ input }) => {
       return db.getClinicalEvolutionEditLogs(input.evolutionId);
@@ -386,7 +393,7 @@ export const clinicalEvolutionRouter = router({
   }),
 
   // Delete clinical evolution
-  delete: protectedProcedure
+  delete: prontuariosProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
@@ -427,7 +434,7 @@ export const clinicalEvolutionRouter = router({
     }),
 
   // Sign clinical evolution
-  sign: protectedProcedure
+  sign: prontuariosProcedure
     .input(
       z.object({
         id: z.number(),
@@ -498,20 +505,20 @@ export const clinicalEvolutionRouter = router({
     }),
 
   // Get signature audit log
-  getSignatureAuditLog: protectedProcedure
+  getSignatureAuditLog: prontuariosProcedure
     .input(z.object({ evolutionId: z.number() }))
     .query(async ({ input }) => {
       return db.getSignatureAuditLog(input.evolutionId);
     }),
 
   // Get pending signatures for doctor
-  getPendingSignatures: protectedProcedure.query(async ({ ctx }) => {
+  getPendingSignatures: prontuariosProcedure.query(async ({ ctx }) => {
     if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
     return db.getPendingSignatures(ctx.user.id);
   }),
 
   // Verify signature
-  verifySignature: protectedProcedure
+  verifySignature: prontuariosProcedure
     .input(
       z.object({
         evolutionId: z.number(),

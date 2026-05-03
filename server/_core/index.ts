@@ -198,7 +198,14 @@ async function startServer() {
 
   app.use((req, res, next) => {
     addNoIndexHeaders(res);
-    res.setHeader("Referrer-Policy", "same-origin");
+    // Páginas/endpoints públicos com token na URL (anamnese, envio de mídia)
+    // não devem vazar o token via header Referer para recursos externos.
+    const path = req.path || req.url || "";
+    const isPublicTokenRoute =
+      path.startsWith("/anamnese-publica/") ||
+      path.startsWith("/envio-midias/") ||
+      path.startsWith("/api/public/");
+    res.setHeader("Referrer-Policy", isPublicTokenRoute ? "no-referrer" : "same-origin");
     // Cabeçalhos básicos de segurança (substituem helmet básico).
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
@@ -208,6 +215,27 @@ async function startServer() {
       res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     }
     next();
+  });
+
+  // Rate limit em endpoints públicos com token na URL: tokens podem ser
+  // enumerados/probados sem autenticação. Limita 60 requisições por IP a cada
+  // 15 minutos para o conjunto /api/public/*.
+  const PUBLIC_RATE = new Map<string, { count: number; ts: number }>();
+  const PUBLIC_WINDOW_MS = 15 * 60 * 1000;
+  const PUBLIC_MAX = 60;
+  app.use("/api/public", (req, res, next) => {
+    const ip = req.ip || req.socket?.remoteAddress || "unknown";
+    const now = Date.now();
+    const entry = PUBLIC_RATE.get(ip);
+    if (!entry || now - entry.ts > PUBLIC_WINDOW_MS) {
+      PUBLIC_RATE.set(ip, { count: 1, ts: now });
+      return next();
+    }
+    if (entry.count >= PUBLIC_MAX) {
+      return res.status(429).json({ error: "Muitas requisições. Aguarde alguns minutos." });
+    }
+    entry.count += 1;
+    return next();
   });
 
   // Configure body parser with larger size limit for file uploads
