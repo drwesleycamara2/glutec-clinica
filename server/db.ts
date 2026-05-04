@@ -144,10 +144,17 @@ export async function searchIcd10(query: string, limit = 50) {
     return listIcd10(limit);
   }
   const q = `%${normalizedQuery}%`;
+  const compactCodeQuery = normalizedQuery.replace(/[.\s-]/g, "");
+  const compactQ = `%${compactCodeQuery}%`;
   return db
     .select()
     .from(icd10Codes)
-    .where(or(like(icd10Codes.code, q), like(icd10Codes.description, q), like(icd10Codes.descriptionAbbrev, q)))
+    .where(or(
+      like(icd10Codes.code, q),
+      compactCodeQuery ? sql`replace(replace(replace(${icd10Codes.code}, '.', ''), '-', ''), ' ', '') like ${compactQ}` : undefined,
+      like(icd10Codes.description, q),
+      like(icd10Codes.descriptionAbbrev, q),
+    ))
     .orderBy(asc(icd10Codes.code))
     .limit(Math.min(Math.max(limit, 10), 200));
 }

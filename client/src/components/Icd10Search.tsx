@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -67,7 +66,6 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [dropdownStyle, setDropdownStyle] = useState<CSSProperties>({});
   const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const normalizedQuery = query.trim();
@@ -151,41 +149,6 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const updateDropdownPosition = () => {
-      const rect = searchInputRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const viewportPadding = 12;
-      const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - viewportPadding);
-      const spaceAbove = Math.max(0, rect.top - viewportPadding);
-      const openAbove = spaceBelow < 260 && spaceAbove > spaceBelow;
-      const maxHeight = Math.min(420, Math.max(180, (openAbove ? spaceAbove : spaceBelow) - 8));
-      const desiredWidth = Math.max(rect.width, 520);
-      const width = Math.min(desiredWidth, window.innerWidth - viewportPadding * 2);
-      const left = Math.min(Math.max(viewportPadding, rect.left), window.innerWidth - viewportPadding - width);
-      setDropdownStyle({
-        position: "fixed",
-        left,
-        top: openAbove
-          ? Math.max(viewportPadding, rect.top - maxHeight - 8)
-          : Math.min(rect.bottom + 8, window.innerHeight - viewportPadding - maxHeight),
-        width,
-        maxHeight,
-        zIndex: 2147483647,
-      });
-    };
-
-    updateDropdownPosition();
-    window.addEventListener("resize", updateDropdownPosition);
-    window.addEventListener("scroll", updateDropdownPosition, true);
-    return () => {
-      window.removeEventListener("resize", updateDropdownPosition);
-      window.removeEventListener("scroll", updateDropdownPosition, true);
-    };
-  }, [isOpen]);
-
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (!isOpen) {
       if (event.key === "ArrowDown") {
@@ -226,9 +189,9 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
   const renderDropdown = () => (
     <div
       ref={dropdownRef}
-      style={dropdownStyle}
       role="listbox"
-      className="overflow-y-auto overscroll-contain rounded-xl border border-border bg-background pr-1 shadow-2xl ring-1 ring-black/5"
+      style={{ maxHeight: "22rem", zIndex: 1000 }}
+      className="absolute left-0 top-full mt-2 w-full overflow-y-auto overscroll-contain rounded-xl border border-border bg-background pr-1 shadow-2xl ring-1 ring-black/5"
     >
       {loadingItems ? (
         <div className="flex items-center justify-center py-8">
@@ -377,7 +340,7 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
         </div>
       ) : null}
 
-      {isOpen && typeof document !== "undefined" ? createPortal(renderDropdown(), document.body) : null}
+      {isOpen ? renderDropdown() : null}
     </div>
   );
 }
