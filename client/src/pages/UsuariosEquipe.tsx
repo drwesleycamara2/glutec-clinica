@@ -172,6 +172,10 @@ export default function UsuariosEquipe() {
     jobTitles: [] as TeamJobId[],
     permissions: [] as string[],
   });
+  const [pendingInviteAction, setPendingInviteAction] = useState<{
+    type: "resend" | "copy";
+    userId: number;
+  } | null>(null);
   const previousStagesRef = useRef<Record<number, AccessStage>>({});
   const hasLoadedRef = useRef(false);
 
@@ -236,6 +240,24 @@ export default function UsuariosEquipe() {
     },
     onError: err => toast.error(err.message),
   });
+
+  const handleResendInvitation = (userId: number) => {
+    if (pendingInviteAction) return;
+    setPendingInviteAction({ type: "resend", userId });
+    resendInvitationMutation.mutate(
+      { userId },
+      { onSettled: () => setPendingInviteAction(null) },
+    );
+  };
+
+  const handleCopyInvitationLink = (userId: number) => {
+    if (pendingInviteAction) return;
+    setPendingInviteAction({ type: "copy", userId });
+    copyInvitationLinkMutation.mutate(
+      { userId },
+      { onSettled: () => setPendingInviteAction(null) },
+    );
+  };
 
   const updateStatusMutation = trpc.admin.updateUserStatus.useMutation({
     onSuccess: () => {
@@ -423,6 +445,9 @@ export default function UsuariosEquipe() {
               const isTargetSuperAdmin = normalizeEmail(user.email) === superAdminEmail;
               const jobTitles = parseJobTitles(user);
               const modulePermissions = parseModulePermissions(user.permissions);
+              const isResendingThisInvite = pendingInviteAction?.type === "resend" && pendingInviteAction.userId === user.id;
+              const isCopyingThisInvite = pendingInviteAction?.type === "copy" && pendingInviteAction.userId === user.id;
+              const isAnotherInviteActionRunning = Boolean(pendingInviteAction) && pendingInviteAction.userId !== user.id;
 
               return (
                 <PremiumCard key={user.id} borderGold className="group">
@@ -475,8 +500,9 @@ export default function UsuariosEquipe() {
                             variant="primary"
                             size="sm"
                             icon={<Send size={14} />}
-                            loading={resendInvitationMutation.isPending}
-                            onClick={() => resendInvitationMutation.mutate({ userId: user.id })}
+                            loading={isResendingThisInvite}
+                            disabled={isAnotherInviteActionRunning || isCopyingThisInvite}
+                            onClick={() => handleResendInvitation(user.id)}
                           >
                             Reenviar convite
                           </PremiumButton>
@@ -484,8 +510,9 @@ export default function UsuariosEquipe() {
                             variant="outline"
                             size="sm"
                             icon={<Copy size={14} />}
-                            loading={copyInvitationLinkMutation.isPending}
-                            onClick={() => copyInvitationLinkMutation.mutate({ userId: user.id })}
+                            loading={isCopyingThisInvite}
+                            disabled={isAnotherInviteActionRunning || isResendingThisInvite}
+                            onClick={() => handleCopyInvitationLink(user.id)}
                           >
                             Copiar link
                           </PremiumButton>
