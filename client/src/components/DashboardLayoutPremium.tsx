@@ -327,7 +327,7 @@ function DashboardLayoutPremiumContent({
       }
       inactivityTimeoutRef.current = window.setTimeout(() => {
         void handleTimeout();
-      }, 20 * 60 * 1000);
+      }, 60 * 60 * 1000);
     };
 
     const events: Array<keyof WindowEventMap> = ["mousemove", "mousedown", "keydown", "scroll", "touchstart"];
@@ -677,6 +677,7 @@ function DashboardLayoutPremiumContent({
                 const nextPath = pendingNavigationPath;
                 setPendingNavigationPath(null);
                 if (nextPath) {
+                  revertingNavigationRef.current = true;
                   setLocation(nextPath);
                 }
               }}

@@ -1,9 +1,11 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import FontFamily from "@tiptap/extension-font-family";
 import { TextStyle } from "@tiptap/extension-text-style";
+import Underline from "@tiptap/extension-underline";
 import { Button } from "@/components/ui/button";
+import { normalizeRichTextPaste } from "@/lib/richTextPaste";
 import {
   AlignCenter,
   AlignLeft,
@@ -13,6 +15,7 @@ import {
   List,
   ListOrdered,
   Redo2,
+  Underline as UnderlineIcon,
   Undo2,
 } from "lucide-react";
 import {
@@ -31,10 +34,13 @@ interface RichTextEditorProps {
   minHeight?: string;
 }
 
-function renderTextStyleAttrs(attributes: { color?: string | null; fontSize?: string | null }) {
+function renderTextStyleAttrs(attributes: { color?: string | null; fontSize?: string | null; fontFamily?: string | null }) {
   const styles: string[] = [];
   if (attributes.color) {
     styles.push(`color: ${attributes.color}`);
+  }
+  if (attributes.fontFamily) {
+    styles.push(`font-family: ${attributes.fontFamily}`);
   }
   if (attributes.fontSize) {
     styles.push(`font-size: ${attributes.fontSize}`);
@@ -55,6 +61,11 @@ const StyledText = TextStyle.extend({
         parseHTML: (element) => element.style.fontSize || null,
         renderHTML: (attributes) => renderTextStyleAttrs(attributes),
       },
+      fontFamily: {
+        default: null,
+        parseHTML: (element) => element.style.fontFamily || null,
+        renderHTML: (attributes) => renderTextStyleAttrs(attributes),
+      },
     };
   },
 });
@@ -69,6 +80,7 @@ export function RichTextEditor({
   const [textColor, setTextColor] = useState("#111827");
   const [textAlign, setTextAlign] = useState<"left" | "center" | "right" | "justify">("left");
   const [lastSelection, setLastSelection] = useState<{ from: number; to: number } | null>(null);
+  const editorRef = useRef<ReturnType<typeof useEditor>>(null);
 
   const editor = useEditor({
     extensions: [
@@ -76,6 +88,7 @@ export function RichTextEditor({
         heading: { levels: [1, 2, 3] },
       }),
       StyledText,
+      Underline,
       FontFamily.configure({
         types: ["textStyle"],
       }),
@@ -85,6 +98,20 @@ export function RichTextEditor({
       onChange(currentEditor.getHTML());
     },
     editorProps: {
+      handlePaste: (_view, event) => {
+        const clipboard = event.clipboardData;
+        if (!clipboard) return false;
+        const html = clipboard.getData("text/html");
+        const text = clipboard.getData("text/plain");
+        const normalized = normalizeRichTextPaste(html, text);
+        if (!normalized) return false;
+        event.preventDefault();
+        editorRef.current?.chain().focus().insertContent(normalized).setMark("textStyle", {
+          fontFamily: "Montserrat, sans-serif",
+          fontSize: "14px",
+        }).run();
+        return true;
+      },
       attributes: {
         class:
           "prose prose-sm max-w-none focus:outline-none p-4 rounded-lg border border-input bg-background text-foreground",
@@ -93,6 +120,10 @@ export function RichTextEditor({
       },
     },
   });
+
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
 
   useEffect(() => {
     if (!editor) return;
@@ -175,6 +206,15 @@ export function RichTextEditor({
           title="Itálico"
         >
           <Italic className="h-4 w-4" />
+        </Button>
+        <Button
+          size="sm"
+          variant={editor.isActive("underline") ? "default" : "outline"}
+          onClick={() => editor.chain().focus().toggleUnderline().run()}
+          className="h-9 w-9 p-0"
+          title="Sublinhado"
+        >
+          <UnderlineIcon className="h-4 w-4" />
         </Button>
 
         <div className="h-6 w-px bg-border" />

@@ -2592,10 +2592,52 @@ export async function getAnamnesisShareLinkByToken(token: string) {
  * pela clínica) a partir de `anamnesis_share_links`.
  *
  * Fichas de atendimento importadas do Prontu?rio Verde / OneDoctor que
- * possuem o campo `anamnesis` preenchido S?O evolu??es, não anamneses, e
+ * possuem o campo `anamnesis` preenchido SÃO evoluções, não anamneses, e
  * aparecem em `getClinicalEvolutionsByPatient` (que mescla legacy). Portanto
- * não s?o mais retornadas aqui (antes eram, o que misturava as duas coisas).
+ * não são mais retornadas aqui (antes eram, o que misturava as duas coisas).
  */
+function normalizeAnamnesisForDedupe(value: unknown) {
+  return String(value ?? "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\u00a0/g, " ")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function anamnesisDateKey(row: Record<string, any>) {
+  const value = row?.anamnesisDate || row?.submittedAt || row?.createdAt;
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+  return date.toISOString().slice(0, 10);
+}
+
+function dedupeAnamnesisRows<T extends Record<string, any>>(rows: T[]) {
+  const bySignature = new Map<string, T>();
+
+  for (const row of rows) {
+    const answers = normalizeAnamnesisForDedupe(row.submittedAnswers);
+    const questions = normalizeAnamnesisForDedupe(row.questionsJson);
+    const signature = [row.patientId, anamnesisDateKey(row), answers || questions, normalizeAnamnesisForDedupe(row.title)].join("|");
+    const current = bySignature.get(signature);
+    if (!current) {
+      bySignature.set(signature, row);
+      continue;
+    }
+
+    const currentScore = normalizeAnamnesisForDedupe(current.submittedAnswers).length + Number(current.id ?? 0) / 1_000_000;
+    const nextScore = answers.length + Number(row.id ?? 0) / 1_000_000;
+    if (nextScore > currentScore) {
+      bySignature.set(signature, row);
+    }
+  }
+
+  return Array.from(bySignature.values());
+}
 export async function listPatientAnamneses(patientId: number, viewerRole?: string | null) {
   const db = await getDb();
   if (!db) return [];
@@ -2612,7 +2654,7 @@ export async function listPatientAnamneses(patientId: number, viewerRole?: strin
     order by coalesce(l.anamnesisDate, l.submittedAt, l.createdAt) desc, l.id desc
   `));
 
-  return rows.map((row) => {
+  return dedupeAnamnesisRows(rows).map((row) => {
     let questions: Array<Record<string, any>> = [];
     let answers: Record<string, string> | null = null;
     try {
@@ -2642,7 +2684,7 @@ export async function patientHasAnyAnamnesis(patientId: number) {
 
   // Apenas question?rios reais (anamnesis_share_links). Os registros antigos
   // de `medical_records.anamnesis` eram, em sua maior parte, evolu??es
-  // importadas e agora s?o expostos como evolu??o clínica legada.
+  // importadas e agora são expostos como evolução clínica legada.
   const submittedRows = unwrapRows<any>(await db.execute(sql`
     select count(*) as count
     from anamnesis_share_links
@@ -2949,7 +2991,7 @@ export async function submitAnamnesisShareLink(
     ipAddress: signature?.ipAddress ?? null,
     userAgent: signature?.userAgent ?? null,
     acceptedAt: signature?.acceptedAt ?? signedAt.toISOString(),
-    declaration: "Paciente declarou que as informa??es preenchidas na anamnese s?o verdadeiras ao salvar e enviar o formul?rio.",
+    declaration: "Paciente declarou que as informações preenchidas na anamnese são verdadeiras ao salvar e enviar o formulário.",
     answerKeys: Object.keys(answers ?? {}).sort(),
   };
   const signatureHash = crypto

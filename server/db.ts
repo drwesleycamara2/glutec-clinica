@@ -1,15 +1,14 @@
 import { asc, eq, sql, or, like, and, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { createHash } from "crypto";
-
-function hashInvitationToken(token: string): string {
-  return createHash("sha256").update(String(token)).digest("hex");
-}
 import { InsertUser, users, icd10Codes, userFavoriteIcds, audioTranscriptions, InsertIcd10Code, InsertUserFavoriteIcd, InsertAudioTranscription } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { createHash, randomBytes } from "crypto";
 import fs from "fs/promises";
 import path from "path";
+
+function hashInvitationToken(token: string): string {
+  return createHash("sha256").update(String(token)).digest("hex");
+}
 
 let _db: ReturnType<typeof drizzle> | null = null;
 let icd10BootstrapPromise: Promise<void> | null = null;

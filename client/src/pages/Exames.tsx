@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
 import { SignatureCertillionButton } from "@/components/SignatureCertillionButton";
@@ -259,11 +260,11 @@ export default function Exames() {
                 </div>
               )}
 
-              <Textarea 
-                value={form.content} 
-                onChange={(e) => setForm({ ...form, content: e.target.value })} 
-                placeholder="Liste os exames e instruções aqui..." 
-                className="mt-1 min-h-[200px] font-mono text-sm" 
+              <RichTextEditor
+                value={form.content}
+                onChange={(content) => setForm({ ...form, content })}
+                placeholder="Liste os exames e instruções aqui..."
+                minHeight="220px"
               />
             </div>
 

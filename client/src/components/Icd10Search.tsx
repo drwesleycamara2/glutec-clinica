@@ -20,6 +20,24 @@ type Icd10Item = {
   descriptionAbbrev?: string | null;
 };
 
+function normalizeIcdText(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLocaleLowerCase("pt-BR");
+}
+
+function matchesIcdQuery(item: Icd10Item, query: string) {
+  const normalizedQuery = normalizeIcdText(query);
+  if (!normalizedQuery) return true;
+  return [
+    item.code,
+    item.description,
+    item.descriptionAbbrev,
+  ].some((value) => normalizeIcdText(value).includes(normalizedQuery));
+}
+
 function dedupeIcd10Items(items: Icd10Item[] = []) {
   const byCode = new Map<string, Icd10Item>();
 
@@ -54,13 +72,13 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
   const dropdownRef = useRef<HTMLDivElement>(null);
   const normalizedQuery = query.trim();
 
-  const { data: searchResults, isLoading: isSearching } = trpc.icd10.search.useQuery(
+  const { data: searchResults, isLoading: isSearching, isError: searchFailed } = trpc.icd10.search.useQuery(
     { query: normalizedQuery, limit: 80 },
-    { enabled: isOpen && normalizedQuery.length > 0 },
+    { enabled: normalizedQuery.length > 0 },
   );
 
-  const { data: catalogItems, isLoading: isLoadingCatalog } = trpc.icd10.list.useQuery(
-    { limit: 100 },
+  const { data: catalogItems, isLoading: isLoadingCatalog, isError: catalogFailed } = trpc.icd10.list.useQuery(
+    { limit: 160 },
     { enabled: isOpen && normalizedQuery.length === 0 },
   );
 
@@ -92,12 +110,14 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
     onError: (err) => toast.error(err.message || "Não foi possível remover o CID."),
   });
 
+  const favoriteMatches = normalizedQuery.length > 0 ? favorites.filter((item) => matchesIcdQuery(item, normalizedQuery)) : favorites;
   const catalogDisplayItems = dedupeIcd10Items(normalizedQuery.length > 0 ? searchResults || [] : catalogItems || []);
-  const favoriteCodes = new Set(favorites.map((item) => String(item.code ?? "").trim().toUpperCase()).filter(Boolean));
+  const favoriteCodes = new Set(favoriteMatches.map((item) => String(item.code ?? "").trim().toUpperCase()).filter(Boolean));
   const nonFavoriteCatalogItems = catalogDisplayItems.filter((item) => !favoriteCodes.has(String(item.code ?? "").trim().toUpperCase()));
-  const displayItems = dedupeIcd10Items(showFavorites ? [...favorites, ...nonFavoriteCatalogItems] : catalogDisplayItems);
-  const favoriteCount = showFavorites ? favorites.length : 0;
-  const loadingItems = isSearching || isLoadingCatalog;
+  const displayItems = dedupeIcd10Items(showFavorites ? [...favoriteMatches, ...nonFavoriteCatalogItems] : catalogDisplayItems);
+  const favoriteCount = showFavorites ? favoriteMatches.length : 0;
+  const loadingItems = isSearching || (normalizedQuery.length === 0 && isLoadingCatalog);
+  const hasLoadError = normalizedQuery.length > 0 ? searchFailed : catalogFailed;
 
   const handleToggleFavorite = (item: { id: number; code: string; description: string }) => {
     if (!item || item.id <= 0) return;
@@ -142,10 +162,12 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
       const spaceAbove = Math.max(0, rect.top - viewportPadding);
       const openAbove = spaceBelow < 260 && spaceAbove > spaceBelow;
       const maxHeight = Math.min(420, Math.max(180, (openAbove ? spaceAbove : spaceBelow) - 8));
-      const width = Math.min(rect.width, window.innerWidth - viewportPadding * 2);
+      const desiredWidth = Math.max(rect.width, 520);
+      const width = Math.min(desiredWidth, window.innerWidth - viewportPadding * 2);
+      const left = Math.min(Math.max(viewportPadding, rect.left), window.innerWidth - viewportPadding - width);
       setDropdownStyle({
         position: "fixed",
-        left: Math.max(viewportPadding, rect.left),
+        left,
         top: openAbove
           ? Math.max(viewportPadding, rect.top - maxHeight - 8)
           : Math.min(rect.bottom + 8, window.innerHeight - viewportPadding - maxHeight),
@@ -205,6 +227,7 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
     <div
       ref={dropdownRef}
       style={dropdownStyle}
+      role="listbox"
       className="overflow-y-auto overscroll-contain rounded-xl border border-border bg-background pr-1 shadow-2xl ring-1 ring-black/5"
     >
       {loadingItems ? (
@@ -213,11 +236,15 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
         </div>
       ) : null}
 
-      {!loadingItems && displayItems.length === 0 && normalizedQuery.length > 0 ? (
+      {!loadingItems && hasLoadError ? (
+        <div className="p-4 text-center text-sm text-destructive">Não foi possível carregar a lista de CID-10. Tente digitar novamente.</div>
+      ) : null}
+
+      {!loadingItems && !hasLoadError && displayItems.length === 0 && normalizedQuery.length > 0 ? (
         <div className="p-4 text-center text-sm text-muted-foreground">Nenhum CID-10 encontrado para "{query}"</div>
       ) : null}
 
-      {!loadingItems && displayItems.length === 0 && normalizedQuery.length === 0 ? (
+      {!loadingItems && !hasLoadError && displayItems.length === 0 && normalizedQuery.length === 0 ? (
         <div className="p-4 text-center text-sm text-muted-foreground">
           Nenhum CID-10 disponível. Comece a digitar para pesquisar por código ou descrição.
         </div>
@@ -294,6 +321,7 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
             setSelectedIndex(-1);
           }}
           onFocus={() => setIsOpen(true)}
+          onClick={() => setIsOpen(true)}
           onKeyDown={handleKeyDown}
           className="pl-9"
         />

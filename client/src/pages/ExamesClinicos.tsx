@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { FileText, FlaskConical, Loader2, Plus, Search, Sparkles, X } from "lucide-react";
@@ -28,9 +29,20 @@ const URGENCY_LABELS: Record<SelectedExam["urgency"], string> = {
   emergencia: "Emergência",
 };
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function buildExamRequestContent(exams: SelectedExam[], freeText: string) {
-  const catalogSection = exams.map((exam) => `- [${exam.code}] ${exam.name} (${URGENCY_LABELS[exam.urgency]})`).join("\n");
-  return [catalogSection, freeText.trim()].filter(Boolean).join("\n\n");
+  const catalogSection = exams.length
+    ? `<ul>${exams.map((exam) => `<li><strong>[${escapeHtml(exam.code)}]</strong> ${escapeHtml(exam.name)} (${escapeHtml(URGENCY_LABELS[exam.urgency])})</li>`).join("")}</ul>`
+    : "";
+  return [catalogSection, freeText.trim()].filter(Boolean).join("");
 }
 
 export default function ExamesClinicos() {
@@ -395,11 +407,11 @@ export default function ExamesClinicos() {
                     )}
                   </div>
                 ) : null}
-                <Textarea
+                <RichTextEditor
                   value={freeText}
-                  onChange={(event) => setFreeText(event.target.value)}
+                  onChange={setFreeText}
                   placeholder="Adicione orientações, preparo, observações de coleta ou detalhes complementares."
-                  rows={6}
+                  minHeight="180px"
                 />
                 <Textarea
                   value={observations}

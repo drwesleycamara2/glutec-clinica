@@ -54,6 +54,78 @@ function attachRelatedActivities<T extends Record<string, any>>(records: T[], re
   }));
 }
 
+function normalizeEvolutionTextForDedupe(value: unknown) {
+  return String(value ?? "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\u00a0/g, " ")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function evolutionDateKey(record: Record<string, any>) {
+  return toDateKey(record?.startedAt || record?.date || record?.createdAt || record?.finalizedAt);
+}
+
+function canonicalLegacySource(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace("ondoctor", "onedoctor");
+}
+
+function evolutionRecordCompleteness(record: Record<string, any>) {
+  const clinicalText = normalizeEvolutionTextForDedupe(record?.clinicalNotes);
+  return clinicalText.length
+    + (record?.icdCode ? 120 : 0)
+    + (record?.relatedExams?.length ? 80 : 0)
+    + (record?.relatedPrescriptions?.length ? 80 : 0)
+    + (record?.relatedDocuments?.length ? 80 : 0)
+    + (record?.legacySourceLabel ? 20 : 0);
+}
+
+function areDuplicateEvolutionRecords(a: Record<string, any>, b: Record<string, any>) {
+  const aDate = evolutionDateKey(a);
+  const bDate = evolutionDateKey(b);
+  if (!aDate || aDate !== bDate) return false;
+
+  const aSourceId = String(a?.legacySourceId ?? a?.sourceId ?? "").trim();
+  const bSourceId = String(b?.legacySourceId ?? b?.sourceId ?? "").trim();
+  const aSource = canonicalLegacySource(a?.legacySource ?? a?.sourceSystem);
+  const bSource = canonicalLegacySource(b?.legacySource ?? b?.sourceSystem);
+  if (aSourceId && bSourceId && aSourceId === bSourceId && aSource === bSource) return true;
+
+  const aText = normalizeEvolutionTextForDedupe(a?.clinicalNotes);
+  const bText = normalizeEvolutionTextForDedupe(b?.clinicalNotes);
+  if (!aText || !bText) return false;
+  if (aText === bText) return true;
+
+  const shortest = Math.min(aText.length, bText.length);
+  if (shortest < 220) return false;
+  return aText.includes(bText) || bText.includes(aText);
+}
+
+function dedupeClinicalEvolutionDisplayRecords<T extends Record<string, any>>(records: T[]) {
+  const kept: T[] = [];
+
+  for (const record of records) {
+    const duplicateIndex = kept.findIndex((candidate) => areDuplicateEvolutionRecords(candidate, record));
+    if (duplicateIndex === -1) {
+      kept.push(record);
+      continue;
+    }
+
+    const current = kept[duplicateIndex];
+    if (evolutionRecordCompleteness(record) > evolutionRecordCompleteness(current)) {
+      kept[duplicateIndex] = record;
+    }
+  }
+
+  return kept;
+}
 async function getRelatedClinicalActivities(patientId: number): Promise<RelatedClinicalActivities> {
   const db = await getDb();
   if (!db) return { exams: [], prescriptions: [], documents: [] };
@@ -223,7 +295,8 @@ export async function getClinicalEvolutionsByPatient(
   const related = isReceptionDeskRole(viewerRole)
     ? { exams: [], prescriptions: [], documents: [] }
     : await getRelatedClinicalActivities(patientId);
-  return attachRelatedActivities([...visibleCurrent, ...visibleLegacy], related)
+  const dedupedRecords = dedupeClinicalEvolutionDisplayRecords([...visibleCurrent, ...visibleLegacy]);
+  return attachRelatedActivities(dedupedRecords, related)
     .map((record) => redactClinicalFieldsForViewer(record, viewerRole))
     .sort((a: any, b: any) => {
     const da = new Date(a.startedAt ?? a.createdAt ?? 0).getTime();
@@ -335,6 +408,7 @@ export async function getLegacyEvolutionsFromMedicalRecords(
       isSecretaryRecord: false,
       isLegacy: true,
       legacySource: r.sourceSystem ?? null,
+      legacySourceId: r.sourceId ?? null,
       legacySourceLabel: sourceLabel,
       attachmentsRaw: r.attachments ?? null,
     };
