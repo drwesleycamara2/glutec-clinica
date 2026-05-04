@@ -51,7 +51,7 @@ export function SimplesNacionalReminder() {
   };
 
   const handleGoToFiscal = () => {
-    setLocation("/configuracoes-fiscais");
+    setLocation("/fiscal");
   };
 
   return (

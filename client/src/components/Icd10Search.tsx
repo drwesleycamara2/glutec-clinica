@@ -190,7 +190,7 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
     <div
       ref={dropdownRef}
       role="listbox"
-      style={{ maxHeight: "22rem", zIndex: 1000 }}
+      style={{ minHeight: "16rem", maxHeight: "28rem", zIndex: 1000 }}
       className="absolute left-0 top-full mt-2 w-full overflow-y-auto overscroll-contain rounded-xl border border-border bg-background pr-1 shadow-2xl ring-1 ring-black/5"
     >
       {loadingItems ? (

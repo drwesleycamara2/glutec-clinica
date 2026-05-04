@@ -347,13 +347,46 @@ function HistoricoTab({ patientId }: { patientId: number }) {
   const isReceptionist = user?.role === "recepcionista" || user?.role === "secretaria";
   const [expandedHistoryItems, setExpandedHistoryItems] = useState<Record<string, boolean>>({});
   const { data: evolutions, isLoading } = trpc.clinicalEvolution.getByPatient.useQuery({ patientId });
-  const visibleEvolutions = useMemo(
-    () =>
-      (evolutions ?? []).filter((record: any) =>
-        isReceptionist ? isSecretaryOnlyEvolutionRecord(record) : !isSecretaryOnlyEvolutionRecord(record),
-      ),
-    [evolutions, isReceptionist],
-  );
+  const visibleEvolutions = useMemo(() => {
+    const filtered = (evolutions ?? []).filter((record: any) =>
+      isReceptionist ? isSecretaryOnlyEvolutionRecord(record) : !isSecretaryOnlyEvolutionRecord(record),
+    );
+
+    // Deduplica registros importados duplicados (Prontuário Verde / OnDoctor):
+    // mesmo paciente, mesma data/hora truncada ao minuto e mesmo conteúdo
+    // clínico → mantém o mais completo / id mais alto.
+    const dedupeKey = (record: any) => {
+      const ts = new Date(record.startedAt ?? record.createdAt ?? 0).getTime();
+      const minute = ts ? Math.floor(ts / 60000) : 0;
+      const fp = formatImportedText(record.clinicalNotes ?? record.anamnesis ?? record.evolution ?? "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 200)
+        .toLocaleLowerCase("pt-BR");
+      return `${minute}:${fp}`;
+    };
+    const score = (record: any) =>
+      formatImportedText(record.clinicalNotes ?? "").length +
+      formatImportedText(record.anamnesis ?? "").length +
+      formatImportedText(record.evolution ?? "").length;
+    const groups = new Map<string, any>();
+    for (const rec of filtered) {
+      const k = dedupeKey(rec);
+      if (!k.split(":")[1]) {
+        groups.set(`${k}-${rec.id}`, rec);
+        continue;
+      }
+      const cur = groups.get(k);
+      if (!cur || score(rec) > score(cur) || (score(rec) === score(cur) && Number(rec.id) > Number(cur.id))) {
+        groups.set(k, rec);
+      }
+    }
+    return Array.from(groups.values()).sort((l: any, r: any) => {
+      const lt = new Date(l.startedAt ?? l.createdAt ?? 0).getTime();
+      const rt = new Date(r.startedAt ?? r.createdAt ?? 0).getTime();
+      return rt - lt;
+    });
+  }, [evolutions, isReceptionist]);
 
   if (isLoading) {
     return (

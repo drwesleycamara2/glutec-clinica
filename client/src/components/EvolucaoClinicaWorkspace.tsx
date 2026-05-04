@@ -467,18 +467,50 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
     return !specialty || specialty.includes("evolu") || specialty.includes("prontu") || specialty.includes("consulta");
   });
 
-  const visibleSavedEvolutions = useMemo(
-    () =>
-      (evolutionQuery.data ?? [])
-        .filter((record: any) => !isSecretaryOnlyRecord(record))
-        .slice()
-        .sort((left: any, right: any) => {
-          const l = new Date(left.startedAt ?? left.createdAt ?? 0).getTime();
-          const r = new Date(right.startedAt ?? right.createdAt ?? 0).getTime();
-          return r - l;
-        }),
-    [evolutionQuery.data],
-  );
+  const visibleSavedEvolutions = useMemo(() => {
+    const all = (evolutionQuery.data ?? []).filter((record: any) => !isSecretaryOnlyRecord(record));
+    // Deduplica registros importados que vieram repetidos da migração (ex.: o
+    // mesmo atendimento criado duas vezes pelo importer ou presente nas tabelas
+    // legacy + clinical_evolution). Chave: (data/hora truncada ao minuto +
+    // fingerprint dos primeiros caracteres da nota clínica). Mantém o mais
+    // novo (id maior) e prioriza o que tem mais conteúdo.
+    const dedupeKey = (record: any) => {
+      const ts = new Date(record.startedAt ?? record.createdAt ?? 0).getTime();
+      const minute = ts ? Math.floor(ts / 60000) : 0;
+      const fingerprint = stripHtml(record.clinicalNotes ?? record.anamnesis ?? record.evolution ?? "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 200)
+        .toLocaleLowerCase("pt-BR");
+      return `${minute}:${fingerprint}`;
+    };
+    const score = (record: any) =>
+      stripHtml(record.clinicalNotes ?? "").length +
+      stripHtml(record.anamnesis ?? "").length +
+      stripHtml(record.evolution ?? "").length;
+    const groups = new Map<string, any>();
+    for (const rec of all) {
+      const k = dedupeKey(rec);
+      if (!k.split(":")[1]) {
+        groups.set(`${k}-${rec.id}`, rec); // sem fingerprint útil → não dedupe
+        continue;
+      }
+      const existing = groups.get(k);
+      if (!existing) {
+        groups.set(k, rec);
+        continue;
+      }
+      // Prefere o que tem mais conteúdo; em empate, o id mais alto (mais novo).
+      if (score(rec) > score(existing) || (score(rec) === score(existing) && Number(rec.id) > Number(existing.id))) {
+        groups.set(k, rec);
+      }
+    }
+    return Array.from(groups.values()).sort((left: any, right: any) => {
+      const l = new Date(left.startedAt ?? left.createdAt ?? 0).getTime();
+      const r = new Date(right.startedAt ?? right.createdAt ?? 0).getTime();
+      return r - l;
+    });
+  }, [evolutionQuery.data]);
 
   const buildPayload = (status: "rascunho" | "finalizado") => {
     if (!form.attendanceType) {
