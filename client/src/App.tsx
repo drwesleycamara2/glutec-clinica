@@ -8,6 +8,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Dashboard from "./pages/Dashboard.premium";
 import Usuarios from "./pages/UsuariosEquipe";
 import Agenda from "./pages/Agenda";
+import SalaEspera from "./pages/SalaEspera";
 import Pacientes from "./pages/Pacientes";
 import Prontuarios from "./pages/Prontuarios";
 import PacienteDetalhe from "./pages/PacienteDetalhe";
@@ -51,6 +52,7 @@ const publicPaths = [
   "/envio-midias",
   "/anamnese-publica",
   "/anamnese-preencher",
+  "/formulario-seguro",
 ];
 const sessionSetupPaths = ["/configurar-2fa", "/trocar-senha"];
 const INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000;
@@ -89,6 +91,7 @@ function ProtectedRoutes() {
         <Route path="/" component={Dashboard} />
         <Route path="/usuarios" component={Usuarios} />
         <Route path="/agenda" component={Agenda} />
+        <Route path="/sala-espera" component={SalaEspera} />
         <Route path="/pacientes" component={Pacientes} />
         <Route path="/pacientes/:id" component={PacienteDetalhe} />
         <Route path="/prontuarios" component={Prontuarios} />
@@ -242,6 +245,7 @@ function Router() {
       <Route path="/verificar-2fa" component={VerificarDoisFatores} />
       <Route path="/envio-midias/:token" component={EnvioMidiasPaciente} />
       <Route path="/anamnese-preencher/:token" component={AnamnesePublica} />
+      <Route path="/formulario-seguro/preencher/:token" component={AnamnesePublica} />
       <Route path="/configurar-2fa" component={Configurar2FA} />
       <Route path="/trocar-senha" component={TrocarSenha} />
       <Route component={ProtectedEntry} />

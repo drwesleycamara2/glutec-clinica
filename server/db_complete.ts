@@ -74,6 +74,7 @@ const tableColumnCache = new Map<string, Promise<Map<string, string>>>();
 let ensurePrescriptionSchemaPromise: Promise<void> | null = null;
 let ensureCloudSignatureUserColumnsPromise: Promise<void> | null = null;
 let ensureOptionalModuleTablesPromise: Promise<void> | null = null;
+let ensureAppointmentFlowSchemaPromise: Promise<void> | null = null;
 
 function clearTableColumnCache(tableName: string) {
   tableColumnCache.delete(tableName);
@@ -109,6 +110,37 @@ async function getTableColumns(tableName: string) {
   return cached;
 }
 
+async function ensureAppointmentFlowSchema(db: any) {
+  if (!ensureAppointmentFlowSchemaPromise) {
+    ensureAppointmentFlowSchemaPromise = (async () => {
+      const columns = await getTableColumns("appointments");
+      const alterations: string[] = [];
+      const statusType = columns.get("status") || "";
+
+      if (statusType && !statusType.includes("aguardando")) {
+        alterations.push(
+          "MODIFY COLUMN `status` ENUM('agendada','confirmada','aguardando','em_atendimento','concluida','cancelada','falta') NOT NULL DEFAULT 'agendada'",
+        );
+      }
+
+      if (!columns.has("arrivedAt")) {
+        alterations.push("ADD COLUMN `arrivedAt` DATETIME NULL");
+      }
+
+      if (alterations.length > 0) {
+        await db.execute(sql.raw(`ALTER TABLE appointments ${alterations.join(", ")}`));
+        clearTableColumnCache("appointments");
+      }
+    })();
+  }
+
+  try {
+    await ensureAppointmentFlowSchemaPromise;
+  } catch (error) {
+    ensureAppointmentFlowSchemaPromise = null;
+    throw error;
+  }
+}
 async function ensurePrescriptionSchema(db: any) {
   if (!ensurePrescriptionSchemaPromise) {
     ensurePrescriptionSchemaPromise = (async () => {
@@ -1299,6 +1331,7 @@ function dedupeAppointmentsForDisplay(rows: any[]) {
 export async function createAppointment(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+  await ensureAppointmentFlowSchema(db);
 
   const scheduledAt = new Date(data.scheduledAt);
   if (Number.isNaN(scheduledAt.getTime())) {
@@ -1331,7 +1364,7 @@ export async function createAppointment(data: any, userId: number) {
   const conflictingAppointments = unwrapRows<any>(await db.execute(sql`
     select *
     from appointments
-    where status not in ('cancelada', 'falta')
+    where status not in ('cancelada', 'falta', 'concluida')
       and room = ${room}
       and scheduledAt < ${endsAt}
       and date_add(scheduledAt, interval duration minute) > ${scheduledAt}
@@ -1366,10 +1399,8 @@ export async function createAppointment(data: any, userId: number) {
     )
   `);
 
-  const insertedId =
-    typeof result[0] === "number"
-      ? result[0]
-      : result[0]?.insertId ?? result[0]?.id;
+  const resultHeader = (result as any)?.[0] ?? result;
+  const insertedId = typeof resultHeader === "number" ? resultHeader : resultHeader?.insertId ?? resultHeader?.id;
 
   const rows = unwrapRows<any>(await db.execute(sql`
     select *
@@ -1384,6 +1415,7 @@ export async function createAppointment(data: any, userId: number) {
 export async function updateAppointment(appointmentId: number, data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+  await ensureAppointmentFlowSchema(db);
 
   const scheduledAt = new Date(data.scheduledAt);
   if (Number.isNaN(scheduledAt.getTime())) {
@@ -1428,7 +1460,7 @@ export async function updateAppointment(appointmentId: number, data: any, userId
     select *
     from appointments
     where id <> ${appointmentId}
-      and status not in ('cancelada', 'falta')
+      and status not in ('cancelada', 'falta', 'concluida')
       and room = ${room}
       and scheduledAt < ${endsAt}
       and date_add(scheduledAt, interval duration minute) > ${scheduledAt}
@@ -1466,6 +1498,7 @@ export async function updateAppointment(appointmentId: number, data: any, userId
 export async function getAppointmentsByDateRange(from: string, to: string) {
   const db = await getDb();
   if (!db) return [];
+  await ensureAppointmentFlowSchema(db);
 
   const rows = unwrapRows<any>(await db.execute(sql`
     select
@@ -1493,10 +1526,12 @@ export async function updateAppointmentStatus(
     status: string;
     cancelledBy?: AppointmentCancellationSource;
     note?: string;
+    arrivedAt?: string | null;
   },
 ) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+  await ensureAppointmentFlowSchema(db);
 
   const currentRows = unwrapRows<any>(await db.execute(sql`
     select id, status, cancelReason
@@ -1510,8 +1545,9 @@ export async function updateAppointmentStatus(
   }
 
   const normalizedStatus = String(data.status ?? "").trim();
-  if (!normalizedStatus) {
-    throw new Error("Status do agendamento não informado.");
+  const validStatuses = new Set(["agendada", "confirmada", "aguardando", "em_atendimento", "concluida", "cancelada", "falta"]);
+  if (!validStatuses.has(normalizedStatus)) {
+    throw new Error("Status do agendamento inválido.");
   }
 
   const cancelReason =
@@ -1519,18 +1555,30 @@ export async function updateAppointmentStatus(
       ? buildAppointmentCancellationReason(data.cancelledBy ?? "clinica", data.note)
       : null;
 
+  let arrivedAt: Date | null = null;
+  if (normalizedStatus === "aguardando") {
+    const parsed = data.arrivedAt ? new Date(data.arrivedAt) : new Date();
+    arrivedAt = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  }
+
+  const columns = await getTableColumns("appointments");
+  const assignments = [
+    sql`status = ${normalizedStatus}`,
+    sql`cancelReason = ${cancelReason}`,
+    sql`updatedAt = NOW()`,
+  ];
+  if (columns.has("arrivedAt") && normalizedStatus === "aguardando") {
+    assignments.push(sql`arrivedAt = ${arrivedAt}`);
+  }
+
   await db.execute(sql`
     update appointments
-    set
-      status = ${normalizedStatus},
-      cancelReason = ${cancelReason},
-      updatedAt = NOW()
+    set ${sql.join(assignments, sql`, `)}
     where id = ${appointmentId}
   `);
 
   return { success: true };
 }
-
 export async function listAppointmentBlocks(from: string, to: string) {
   const db = await getDb();
   if (!db) return [];
@@ -1577,10 +1625,8 @@ export async function createAppointmentBlock(data: any, userId: number) {
     )
   `);
 
-  const insertedId =
-    typeof result[0] === "number"
-      ? result[0]
-      : result[0]?.insertId ?? result[0]?.id;
+  const resultHeader = (result as any)?.[0] ?? result;
+  const insertedId = typeof resultHeader === "number" ? resultHeader : resultHeader?.insertId ?? resultHeader?.id;
 
   const rows = unwrapRows<any>(await db.execute(sql`
     select *
@@ -1661,10 +1707,8 @@ export async function createPrescription(data: any, userId: number) {
     VALUES (${sql.join(colValues, sql`, `)})
   `);
 
-  const insertedId =
-    typeof result[0] === "number"
-      ? result[0]
-      : result[0]?.insertId ?? result[0]?.id;
+  const resultHeader = (result as any)?.[0] ?? result;
+  const insertedId = typeof resultHeader === "number" ? resultHeader : resultHeader?.insertId ?? resultHeader?.id;
 
   if (!insertedId) {
     return { success: true };
@@ -2543,8 +2587,8 @@ export async function createAnamnesisShareLink(
 
   return {
     ...link,
-    shareUrl: `${baseUrl.replace(/\/$/, "")}/anamnese-publica/${token}`,
-    fillUrl: `${baseUrl.replace(/\/$/, "")}/anamnese-preencher/${token}`,
+    shareUrl: `${baseUrl.replace(/\/$/, "")}/formulario-seguro/${token}`,
+    fillUrl: `${baseUrl.replace(/\/$/, "")}/formulario-seguro/preencher/${token}`,
   };
 }
 
@@ -2559,7 +2603,7 @@ export async function getAnamnesisShareLinkByToken(token: string) {
     inner join patients p on p.id = l.patientId
     where l.tokenHash = ${tokenHash}
       and l.isActive = 1
-      and l.expiresAt > now()
+      and (l.expiresAt > now() or coalesce(l.submittedAnswers, '') <> '')
     limit 1
   `));
 
@@ -2956,6 +3000,10 @@ export async function submitAnamnesisShareLink(
     throw new Error("Link da anamnese não encontrado ou expirado.");
   }
 
+  if (link.submittedAt || link.answers || String(link.submittedAnswers ?? "").trim()) {
+    throw new Error("Esta anamnese já foi enviada. Em caso de erro no preenchimento, comunique a clínica para receber um novo link.");
+  }
+
   let profilePhotoUrl = link.profilePhotoUrl ?? null;
   let profilePhotoMimeType = link.profilePhotoMimeType ?? null;
   let declarationAccepted = Number(link.profilePhotoDeclarationAccepted ?? 0) === 1;
@@ -2991,7 +3039,7 @@ export async function submitAnamnesisShareLink(
     ipAddress: signature?.ipAddress ?? null,
     userAgent: signature?.userAgent ?? null,
     acceptedAt: signature?.acceptedAt ?? signedAt.toISOString(),
-    declaration: "Paciente declarou que as informações preenchidas na anamnese são verdadeiras ao salvar e enviar o formulário.",
+    declaration: "Confirmo que li, conferi e autorizo o envio das informações acima. Declaro que as informações preenchidas neste formulário são verdadeiras e foram fornecidas por mim, de forma livre e consciente, para fins de atendimento pela Clínica Glutée.",
     answerKeys: Object.keys(answers ?? {}).sort(),
   };
   const signatureHash = crypto
@@ -4382,17 +4430,87 @@ export async function invokeAI(messages: any[]) {
 }
 
 // --- ADMIN --------------------------------------------------------------------
+const AGENDA_ENABLED_PERMISSION = "agenda_propria";
+const AGENDA_DISABLED_PERMISSION = "sem_agenda_propria";
+const SUPER_ADMIN_EMAIL = "contato@drwesleycamara.com.br";
+
+function parseAgendaPermissionList(rawPermissions?: string | null) {
+  if (!rawPermissions) return [] as string[];
+  try {
+    const parsed = JSON.parse(String(rawPermissions));
+    return Array.isArray(parsed) ? parsed.map((item) => String(item)).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function normalizeAgendaText(value?: string | null) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+export function userHasOwnAgendaEnabled(user: any) {
+  const permissions = parseAgendaPermissionList(user?.permissions);
+  if (permissions.includes(AGENDA_DISABLED_PERMISSION)) return false;
+  if (permissions.includes(AGENDA_ENABLED_PERMISSION)) return true;
+
+  const email = String(user?.email ?? "").trim().toLowerCase();
+  const role = normalizeAgendaText(user?.role);
+  const profession = normalizeAgendaText(user?.profession);
+  const specialty = normalizeAgendaText(user?.specialty);
+  const licenseType = normalizeAgendaText(user?.professionalLicenseType);
+  const combined = `${role} ${profession} ${specialty} ${licenseType}`;
+
+  return (
+    email === SUPER_ADMIN_EMAIL ||
+    role === "medico" ||
+    combined.includes("medic") ||
+    combined.includes("crm") ||
+    combined.includes("cirurg") ||
+    combined.includes("massoterapeuta")
+  );
+}
+
+export async function setUserAgendaEnabled(userId: number, enabled: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select id, permissions
+    from users
+    where id = ${userId}
+    limit 1
+  `));
+  const user = rows[0];
+  if (!user) throw new Error("Usuário não encontrado.");
+
+  const current = parseAgendaPermissionList(user.permissions);
+  const next = current.filter((permission) => permission !== AGENDA_ENABLED_PERMISSION && permission !== AGENDA_DISABLED_PERMISSION);
+  next.push(enabled ? AGENDA_ENABLED_PERMISSION : AGENDA_DISABLED_PERMISSION);
+
+  await db.execute(sql`
+    update users
+    set permissions = ${JSON.stringify(next)}, updatedAt = NOW()
+    where id = ${userId}
+  `);
+
+  return { success: true, agendaEnabled: enabled, permissions: next };
+}
+
 export async function getDoctors() {
   const db = await getDb();
   if (!db) return [];
 
-  return unwrapRows<any>(await db.execute(sql`
+  const users = unwrapRows<any>(await db.execute(sql`
     select *
     from users
-    where (role = 'medico' or role = 'admin')
-      and status = 'active'
+    where status = 'active'
     order by name asc
   `));
+
+  return users.filter((user) => userHasOwnAgendaEnabled(user));
 }
 
 export async function getDashboardStats() {

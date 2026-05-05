@@ -1,6 +1,6 @@
-﻿import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { useParams } from "wouter";
-import { Loader2, Send, ShieldCheck, UserRound } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2, Send, ShieldCheck, UserRound } from "lucide-react";
 import {
   type AnamnesisQuestion,
   getMissingAnamnesisQuestions,
@@ -9,6 +9,7 @@ import {
 } from "@/lib/anamnesis";
 
 const PRIVACY_NOTICE = "Seus dados são protegidos por sigilo médico-paciente. As respostas são usadas para seu atendimento e não ficam expostas a toda a equipe da clínica.";
+const TRUTH_DECLARATION = "Confirmo que li, conferi e autorizo o envio das informações acima. Declaro que as informações preenchidas neste formulário são verdadeiras e foram fornecidas por mim, de forma livre e consciente, para fins de atendimento pela Clínica Glutée.";
 
 const PROFILE_PHOTO_MAX_SIDE = 900;
 const PROFILE_PHOTO_QUALITY = 0.82;
@@ -75,7 +76,7 @@ type PublicAnamnesisResponse = {
   expiresAt?: string;
   submittedAt?: string | null;
   questions: Array<AnamnesisQuestion>;
-  answers?: Record<string, string>;
+  answers?: Record<string, string> | null;
   profilePhotoUrl?: string | null;
 };
 
@@ -94,14 +95,33 @@ function makeUniqueQuestionId(question: AnamnesisQuestion, index: number, usedId
   return candidate;
 }
 
+function getQuestionAnswer(question: AnamnesisQuestion) {
+  const answer = String(question.answer ?? "").trim();
+  return answer || "Sem resposta";
+}
+
+function buildSummaryEntries(questions: AnamnesisQuestion[]) {
+  return questions.flatMap((question) => {
+    const entries = [{ key: question.id, question: question.text, answer: getQuestionAnswer(question) }];
+    if (question.followUp && shouldShowFollowUp(question)) {
+      entries.push({
+        key: `${question.id}::__complemento`,
+        question: question.followUp.prompt,
+        answer: String(question.followUpAnswer ?? "").trim() || "Sem complemento",
+      });
+    }
+    return entries;
+  });
+}
+
 export default function AnamnesePublica() {
   const { token } = useParams<{ token: string }>();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [reviewMode, setReviewMode] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [anamnesis, setAnamnesis] = useState<PublicAnamnesisResponse | null>(null);
-  const [respondentName, setRespondentName] = useState("");
   const [questions, setQuestions] = useState<Array<AnamnesisQuestion>>([]);
   const [missingQuestionIds, setMissingQuestionIds] = useState<Set<string>>(new Set());
   const [profilePhotoPreview, setProfilePhotoPreview] = useState("");
@@ -109,6 +129,7 @@ export default function AnamnesePublica() {
   const [profilePhotoMimeType, setProfilePhotoMimeType] = useState("");
   const [profilePhotoFileName, setProfilePhotoFileName] = useState("");
   const [profilePhotoDeclarationAccepted, setProfilePhotoDeclarationAccepted] = useState(false);
+  const [truthDeclarationAccepted, setTruthDeclarationAccepted] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -136,18 +157,13 @@ export default function AnamnesePublica() {
         }));
 
         setAnamnesis(payload);
-        setRespondentName(payload.patientName || "");
         setQuestions(hydratedQuestions);
         setProfilePhotoPreview(payload.profilePhotoUrl || "");
-        setSuccess(payload.submittedAt ? "Esta anamnese já foi enviada anteriormente e pode ser atualizada, se necessário." : "");
+        setSuccess("");
       } catch (err: any) {
-        if (!cancelled) {
-          setError(err?.message || "Não foi possível carregar a anamnese.");
-        }
+        if (!cancelled) setError(err?.message || "Não foi possível carregar a anamnese.");
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     }
 
@@ -157,14 +173,15 @@ export default function AnamnesePublica() {
     };
   }, [token]);
 
-  const visibleQuestions = useMemo(
-    () => questions.filter((question) => shouldShowQuestion(question, questions)),
-    [questions],
-  );
+  const visibleQuestions = useMemo(() => questions.filter((question) => shouldShowQuestion(question, questions)), [questions]);
   const questionCount = visibleQuestions.length;
-  const patientDisplayName = anamnesis?.patientName || respondentName || "Paciente";
+  const patientDisplayName = anamnesis?.patientName || "Paciente";
+  const alreadySubmitted = Boolean(anamnesis?.submittedAt);
+  const showingSummary = reviewMode || alreadySubmitted;
+  const summaryEntries = useMemo(() => buildSummaryEntries(visibleQuestions), [visibleQuestions]);
 
   const updateQuestion = (id: string, updates: Partial<AnamnesisQuestion>) => {
+    if (alreadySubmitted) return;
     setError("");
     setMissingQuestionIds((current) => {
       const next = new Set(current);
@@ -173,6 +190,18 @@ export default function AnamnesePublica() {
     });
     setQuestions((current) => current.map((question) => (question.id === id ? { ...question, ...updates } : question)));
   };
+
+  const buildAnswersPayload = () => Object.fromEntries(
+    visibleQuestions.flatMap((question) => {
+      const answer = String(question.answer ?? "");
+      const entries: Array<[string, string]> = [[question.id, answer], [question.text, answer]];
+      if (question.followUp && shouldShowFollowUp(question)) {
+        const followUpAnswer = String(question.followUpAnswer ?? "");
+        entries.push([`${question.id}::__complemento`, followUpAnswer], [`${question.text}::__complemento`, followUpAnswer]);
+      }
+      return entries;
+    }),
+  );
 
   const handleProfilePhotoChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -200,16 +229,13 @@ export default function AnamnesePublica() {
     }
   };
 
-  const handleSubmit = async () => {
-    if (!anamnesis) return;
+  const handleSubmit = () => {
+    if (!anamnesis || alreadySubmitted) return;
 
     const missing = getMissingAnamnesisQuestions(questions);
     if (missing.length > 0) {
       setMissingQuestionIds(new Set(missing.map((item) => item.id)));
-      const labels = missing
-        .slice(0, 6)
-        .map((item) => item.followUp ? `${item.text} (complemento)` : item.text)
-        .join("; ");
+      const labels = missing.slice(0, 6).map((item) => item.followUp ? `${item.text} (complemento)` : item.text).join("; ");
       setError(`Falta responder ${missing.length} pergunta(s): ${labels}${missing.length > 6 ? "; ..." : ""}.`);
       return;
     }
@@ -219,33 +245,34 @@ export default function AnamnesePublica() {
       return;
     }
 
+    if (!truthDeclarationAccepted) {
+      setError("Confirme a declaração de veracidade antes de salvar e enviar.");
+      return;
+    }
+
+    setError("");
+    setReviewMode(true);
+  };
+
+  const confirmSubmit = async () => {
+    if (!anamnesis || alreadySubmitted) return;
+
     try {
       setSubmitting(true);
       setError("");
       setSuccess("");
 
-      const answers = Object.fromEntries(
-        visibleQuestions.flatMap((question) => {
-          const answer = String(question.answer ?? "");
-          const entries: Array<[string, string]> = [[question.id, answer], [question.text, answer]];
-          if (question.followUp && shouldShowFollowUp(question)) {
-            const followUpAnswer = String(question.followUpAnswer ?? "");
-            entries.push([`${question.id}::__complemento`, followUpAnswer], [`${question.text}::__complemento`, followUpAnswer]);
-          }
-          return entries;
-        }),
-      );
-
       const response = await fetch(`/api/public/anamnese/${token}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          respondentName: patientDisplayName.trim() || undefined,
-          answers,
+          respondentName: patientDisplayName,
+          answers: buildAnswersPayload(),
           profilePhotoBase64: profilePhotoBase64 || undefined,
           profilePhotoMimeType: profilePhotoMimeType || undefined,
           profilePhotoFileName: profilePhotoFileName || undefined,
           profilePhotoDeclarationAccepted,
+          truthDeclarationAccepted,
         }),
       });
 
@@ -255,7 +282,9 @@ export default function AnamnesePublica() {
       }
 
       setMissingQuestionIds(new Set());
+      setReviewMode(false);
       setSuccess("Anamnese enviada com sucesso. A Clínica Glutée já recebeu suas respostas.");
+      setAnamnesis((current) => current ? { ...current, submittedAt: new Date().toISOString(), answers: buildAnswersPayload() } : current);
     } catch (err: any) {
       setError(err?.message || "Não foi possível enviar a anamnese.");
     } finally {
@@ -293,9 +322,7 @@ export default function AnamnesePublica() {
           <img src="/glutee-logo.png" alt="Clínica Glutée" className="mx-auto mb-6 w-48 max-w-[72%]" />
           <p className="text-center text-xs uppercase tracking-[0.36em] text-[#8A6526]">Clínica Glutée</p>
           <h1 className="mt-3 text-center text-3xl font-semibold md:text-4xl">{anamnesis?.title || "Preenchimento de anamnese"}</h1>
-          <p className="mx-auto mt-4 max-w-2xl text-center text-sm text-[#5F574A] md:text-base">
-            Preencha todas as informações para adiantar o atendimento.
-          </p>
+          <p className="mx-auto mt-4 max-w-2xl text-center text-sm text-[#5F574A] md:text-base">Preencha todas as informações para adiantar o atendimento.</p>
           <div className="mt-5 flex flex-wrap items-center justify-center gap-3 text-xs text-[#5F574A] md:text-sm">
             <span className="rounded-full border border-[#D8C496] bg-white px-3 py-1.5">Paciente: {patientDisplayName}</span>
             <span className="rounded-full border border-[#D8C496] bg-white px-3 py-1.5">Perguntas: {questionCount}</span>
@@ -316,129 +343,89 @@ export default function AnamnesePublica() {
           <div className="space-y-5">
             <div>
               <label className="mb-2 block text-sm font-medium text-[#2B241A]">Paciente</label>
-              <div className="min-h-12 rounded-xl border border-[#D8C496] bg-[#F6EFE1] px-4 py-3 text-[#2B241A]">
-                {patientDisplayName}
-              </div>
+              <div className="min-h-12 rounded-xl border border-[#D8C496] bg-[#F6EFE1] px-4 py-3 text-[#2B241A]">{patientDisplayName}</div>
               <p className="mt-1 text-xs text-[#776A58]">Nome vinculado ao link enviado pela clínica.</p>
             </div>
 
-            <div className="rounded-2xl border border-[#D8C496] bg-white p-4 md:p-5">
-              <div className="mb-3 flex items-center gap-2 text-sm font-medium text-[#2B241A]">
-                <UserRound className="h-4 w-4 text-[#B8863B]" />
-                Foto opcional do paciente
-              </div>
-              <p className="mb-4 text-sm text-[#5F574A]">Se desejar, envie uma foto de perfil real da própria pessoa. A imagem será redimensionada antes de ser salva.</p>
-              <input type="file" accept="image/*" onChange={handleProfilePhotoChange} className="block w-full text-sm text-[#5F574A] file:mr-4 file:rounded-full file:border-0 file:bg-[#C9A55B] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-black" />
-              {profilePhotoPreview ? <img src={profilePhotoPreview} alt="Prévia da foto de perfil" className="mt-4 h-36 w-36 rounded-2xl object-cover ring-1 ring-[#C9A55B]/45" /> : null}
-              <label className="mt-4 flex items-start gap-3 text-sm text-[#5F574A]">
-                <input type="checkbox" checked={profilePhotoDeclarationAccepted} onChange={(event) => setProfilePhotoDeclarationAccepted(event.target.checked)} className="mt-1 rounded border-[#C9A55B]/40" />
-                <span>Confirmo que, se eu enviar uma foto, ela será da própria pessoa paciente.</span>
-              </label>
-            </div>
-
-            {visibleQuestions.map((question) => {
-              const isMissing = missingQuestionIds.has(question.id);
-              return (
-                <div key={question.id} className={`rounded-2xl border p-4 md:p-5 ${isMissing ? "border-red-400 bg-red-50" : "border-[#D8C496] bg-white"}`}>
-                  <label className="mb-3 block text-sm font-medium text-[#2B241A]">{question.text}</label>
-                  {isMissing ? <p className="mb-3 text-sm font-medium text-red-700">Resposta obrigatória pendente.</p> : null}
-
-                  {question.type === "text" ? (
-                    <textarea
-                      rows={3}
-                      value={question.answer || ""}
-                      onChange={(event) => updateQuestion(question.id, { answer: event.target.value })}
-                      className="w-full rounded-xl border border-[#D8C496] bg-white px-4 py-3 text-[#1F1A14] outline-none transition focus:border-[#B8863B]"
-                      placeholder={question.placeholder || "Digite sua resposta"}
-                    />
-                  ) : null}
-
-                  {question.type === "radio" ? (
-                    <div className="flex flex-wrap gap-2">
-                      {(question.options || []).map((option) => {
-                        const active = (question.answer || "") === option;
-                        return (
-                          <button
-                            key={option}
-                            type="button"
-                            onClick={() => updateQuestion(question.id, { answer: option, followUpAnswer: active ? question.followUpAnswer : "" })}
-                            className={`rounded-full border px-4 py-2 text-sm transition ${active ? "border-[#D6B160] bg-[#C9A55B] text-black" : "border-[#D8C496] bg-white text-[#2B241A] hover:border-[#B8863B]"}`}
-                          >
-                            {option}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-
-                  {question.type === "checkbox" ? (
-                    <div className="flex flex-wrap gap-2">
-                      {(question.options || []).map((option) => {
-                        const selected = (question.answer || "").split(";").includes(option);
-                        return (
-                          <button
-                            key={option}
-                            type="button"
-                            onClick={() => {
-                              const current = (question.answer || "").split(";").filter(Boolean);
-                              const next = selected ? current.filter((item) => item !== option) : [...current, option];
-                              updateQuestion(question.id, { answer: next.join(";") });
-                            }}
-                            className={`rounded-full border px-4 py-2 text-sm transition ${selected ? "border-[#D6B160] bg-[#C9A55B] text-black" : "border-[#D8C496] bg-white text-[#2B241A] hover:border-[#B8863B]"}`}
-                          >
-                            {option}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-
-                  {question.type === "select" ? (
-                    <select
-                      value={question.answer || ""}
-                      onChange={(event) => updateQuestion(question.id, { answer: event.target.value })}
-                      className="h-12 w-full rounded-xl border border-[#D8C496] bg-white px-4 text-[#1F1A14] outline-none transition focus:border-[#B8863B]"
-                    >
-                      <option value="">Selecione uma opção</option>
-                      {(question.options || []).map((option) => (
-                        <option key={option} value={option}>{option}</option>
-                      ))}
-                    </select>
-                  ) : null}
-
-                  {shouldShowFollowUp(question) && question.followUp ? (
-                    <div className="mt-4 rounded-xl border border-[#D8C496] bg-[#F8F2E7] p-4">
-                      <label className="mb-2 block text-sm font-medium text-[#2B241A]">{question.followUp.prompt}</label>
-                      <input
-                        value={question.followUpAnswer || ""}
-                        onChange={(event) => updateQuestion(question.id, { followUpAnswer: event.target.value })}
-                        placeholder={question.followUp.placeholder || "Escreva aqui"}
-                        className="h-11 w-full rounded-xl border border-[#D8C496] bg-white px-4 text-[#1F1A14] outline-none transition focus:border-[#B8863B]"
-                      />
-                    </div>
-                  ) : null}
+            {showingSummary ? (
+              <div className="rounded-2xl border border-[#D8C496] bg-white p-5">
+                <div className="mb-5 flex items-start gap-3">
+                  {alreadySubmitted ? <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" /> : <ShieldCheck className="mt-0.5 h-5 w-5 text-[#B8863B]" />}
+                  <div>
+                    <h2 className="text-lg font-semibold text-[#1F1A14]">{alreadySubmitted ? "Anamnese já enviada" : "Confira antes de enviar"}</h2>
+                    <p className="mt-1 text-sm text-[#5F574A]">
+                      {alreadySubmitted
+                        ? "Esta anamnese já foi preenchida e enviada. Em caso de erro, comunique a clínica para que seja enviado outro link."
+                        : "Revise as respostas abaixo. Ao confirmar, a anamnese será arquivada no prontuário e não poderá ser alterada por este link."}
+                    </p>
+                  </div>
                 </div>
-              );
-            })}
+                <div className="space-y-3">
+                  {summaryEntries.map((entry) => (
+                    <div key={entry.key} className="rounded-xl border border-[#E6D9BD] bg-[#FFFCF6] p-4">
+                      <p className="text-sm font-semibold text-[#2B241A]">{entry.question}</p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-[#5F574A]">{entry.answer}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="rounded-2xl border border-[#D8C496] bg-white p-4 md:p-5">
+                  <div className="mb-3 flex items-center gap-2 text-sm font-medium text-[#2B241A]"><UserRound className="h-4 w-4 text-[#B8863B]" />Foto opcional do paciente</div>
+                  <p className="mb-4 text-sm text-[#5F574A]">Se desejar, envie uma foto de perfil real da própria pessoa. A imagem será redimensionada antes de ser salva.</p>
+                  <input type="file" accept="image/*" onChange={handleProfilePhotoChange} className="block w-full text-sm text-[#5F574A] file:mr-4 file:rounded-full file:border-0 file:bg-[#C9A55B] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-black" />
+                  {profilePhotoPreview ? <img src={profilePhotoPreview} alt="Prévia da foto de perfil" className="mt-4 h-36 w-36 rounded-2xl object-cover ring-1 ring-[#C9A55B]/45" /> : null}
+                  <label className="mt-4 flex items-start gap-3 text-sm text-[#5F574A]"><input type="checkbox" checked={profilePhotoDeclarationAccepted} onChange={(event) => setProfilePhotoDeclarationAccepted(event.target.checked)} className="mt-1 rounded border-[#C9A55B]/40" /><span>Confirmo que, se eu enviar uma foto, ela será da própria pessoa paciente.</span></label>
+                </div>
+
+                {visibleQuestions.map((question) => {
+                  const isMissing = missingQuestionIds.has(question.id);
+                  return (
+                    <div key={question.id} className={`rounded-2xl border p-4 md:p-5 ${isMissing ? "border-red-400 bg-red-50" : "border-[#D8C496] bg-white"}`}>
+                      <label className="mb-3 block text-sm font-medium text-[#2B241A]">{question.text}</label>
+                      {isMissing ? <p className="mb-3 text-sm font-medium text-red-700">Resposta obrigatória pendente.</p> : null}
+
+                      {question.type === "text" ? <textarea rows={3} value={question.answer || ""} onChange={(event) => updateQuestion(question.id, { answer: event.target.value })} className="w-full rounded-xl border border-[#D8C496] bg-white px-4 py-3 text-[#1F1A14] outline-none transition focus:border-[#B8863B]" placeholder={question.placeholder || "Digite sua resposta"} /> : null}
+
+                      {question.type === "radio" ? <div className="flex flex-wrap gap-2">{(question.options || []).map((option) => { const active = (question.answer || "") === option; return <button key={option} type="button" onClick={() => updateQuestion(question.id, { answer: option, followUpAnswer: active ? question.followUpAnswer : "" })} className={`rounded-full border px-4 py-2 text-sm transition ${active ? "border-[#D6B160] bg-[#C9A55B] text-black" : "border-[#D8C496] bg-white text-[#2B241A] hover:border-[#B8863B]"}`}>{option}</button>; })}</div> : null}
+
+                      {question.type === "checkbox" ? <div className="flex flex-wrap gap-2">{(question.options || []).map((option) => { const selected = (question.answer || "").split(";").includes(option); return <button key={option} type="button" onClick={() => { const current = (question.answer || "").split(";").filter(Boolean); const next = selected ? current.filter((item) => item !== option) : [...current, option]; updateQuestion(question.id, { answer: next.join(";") }); }} className={`rounded-full border px-4 py-2 text-sm transition ${selected ? "border-[#D6B160] bg-[#C9A55B] text-black" : "border-[#D8C496] bg-white text-[#2B241A] hover:border-[#B8863B]"}`}>{option}</button>; })}</div> : null}
+
+                      {question.type === "select" ? <select value={question.answer || ""} onChange={(event) => updateQuestion(question.id, { answer: event.target.value })} className="h-12 w-full rounded-xl border border-[#D8C496] bg-white px-4 text-[#1F1A14] outline-none transition focus:border-[#B8863B]"><option value="">Selecione uma opção</option>{(question.options || []).map((option) => <option key={option} value={option}>{option}</option>)}</select> : null}
+
+                      {shouldShowFollowUp(question) && question.followUp ? (
+                        <div className="mt-4 rounded-xl border border-[#D8C496] bg-[#F8F2E7] p-4">
+                          <label className="mb-2 block text-sm font-medium text-[#2B241A]">{question.followUp.prompt}</label>
+                          <input value={question.followUpAnswer || ""} onChange={(event) => updateQuestion(question.id, { followUpAnswer: event.target.value })} placeholder={question.followUp.placeholder || "Escreva aqui"} className="h-11 w-full rounded-xl border border-[#D8C496] bg-white px-4 text-[#1F1A14] outline-none transition focus:border-[#B8863B]" />
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+
+                <label className="flex items-start gap-3 rounded-2xl border border-[#D8C496] bg-white p-4 text-sm text-[#5F574A]">
+                  <input type="checkbox" checked={truthDeclarationAccepted} onChange={(event) => setTruthDeclarationAccepted(event.target.checked)} className="mt-1 rounded border-[#C9A55B]/40" />
+                  <span>{TRUTH_DECLARATION}</span>
+                </label>
+              </>
+            )}
           </div>
 
           {error ? <div className="mt-6 rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div> : null}
           {success ? <div className="mt-6 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{success}</div> : null}
 
-          <div className="mt-8 flex flex-col items-stretch gap-3 md:flex-row md:items-center md:justify-between">
-            <p className="text-sm text-[#5F574A]">
-              Ao clicar em Salvar e enviar, declaro que as informações preenchidas acima são verdadeiras.
-            </p>
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={submitting || loading}
-              className="inline-flex h-12 items-center justify-center rounded-xl bg-[linear-gradient(90deg,#8A6526,#D7B56B,#B8863B)] px-6 text-sm font-semibold text-black shadow-[0_14px_35px_rgba(201,165,91,0.26)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-              Salvar e enviar
-            </button>
-          </div>
+          {!alreadySubmitted ? (
+            <div className="mt-8 flex flex-col items-stretch gap-3 md:flex-row md:items-center md:justify-between">
+              {reviewMode ? (
+                <button type="button" onClick={() => setReviewMode(false)} className="inline-flex h-12 items-center justify-center rounded-xl border border-[#D8C496] bg-white px-6 text-sm font-semibold text-[#2B241A]"><ArrowLeft className="mr-2 h-4 w-4" />Voltar e corrigir</button>
+              ) : <p className="text-sm text-[#5F574A]">Antes de enviar, confira todas as respostas e confirme a declaração de veracidade.</p>}
+              <button type="button" onClick={reviewMode ? confirmSubmit : handleSubmit} disabled={submitting || loading} className="inline-flex h-12 items-center justify-center rounded-xl bg-[linear-gradient(90deg,#8A6526,#D7B56B,#B8863B)] px-6 text-sm font-semibold text-black shadow-[0_14px_35px_rgba(201,165,91,0.26)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70">
+                {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                {reviewMode ? "Confirmar envio" : "Salvar e enviar"}
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

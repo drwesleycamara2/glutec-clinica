@@ -1,9 +1,8 @@
-﻿import otplib from "otplib";
+import { authenticator } from "otplib";
 import QRCode from "qrcode";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
 
-const { authenticator } = otplib as any;
 const APP_NAME = "Glutec System";
 
 authenticator.options = {

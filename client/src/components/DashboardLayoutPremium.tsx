@@ -37,6 +37,7 @@ import {
   CalendarDays,
   Camera,
   ClipboardList,
+  Clock,
   FileStack,
   FileText,
   Files,
@@ -88,6 +89,7 @@ const menuSections: MenuSection[] = [
     items: [
       { icon: LayoutDashboard, label: "Dashboard", path: "/" },
       { icon: CalendarDays, label: "Agenda", path: "/agenda", moduleId: "agenda" },
+      { icon: Clock, label: "Sala de Espera", path: "/sala-espera", moduleId: "agenda" },
       { icon: Users, label: "Pacientes", path: "/pacientes", moduleId: "pacientes" },
       { icon: ClipboardList, label: "Prontuários", path: "/prontuarios", moduleId: "prontuarios_any" },
       { icon: Camera, label: "Imagens", path: "/fotos", moduleId: "fotos" },

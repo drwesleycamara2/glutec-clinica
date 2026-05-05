@@ -8,6 +8,7 @@ import {
   BriefcaseBusiness,
   CheckCircle2,
   ClipboardList,
+  Clock,
   Copy,
   Crown,
   Loader2,
@@ -85,6 +86,9 @@ const MODULE_DESCRIPTIONS: Record<string, string> = {
     "Modelos de evolução, prescrições, pedidos de exames, atestados e outros modelos clínicos.",
 };
 
+const AGENDA_ENABLED_PERMISSION = "agenda_propria";
+const AGENDA_DISABLED_PERMISSION = "sem_agenda_propria";
+
 const MODULE_META = AVAILABLE_MODULES.map((module) => ({
   ...module,
   description: MODULE_DESCRIPTIONS[module.id] ?? "",
@@ -103,6 +107,23 @@ function parseModulePermissions(rawPermissions?: string | null) {
   } catch {
     return [];
   }
+}
+
+function normalizeAgendaText(value?: string | null) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function hasOwnAgendaEnabled(user: UserRow) {
+  const permissions = parseModulePermissions(user.permissions);
+  if (permissions.includes(AGENDA_DISABLED_PERMISSION)) return false;
+  if (permissions.includes(AGENDA_ENABLED_PERMISSION)) return true;
+
+  const role = normalizeAgendaText(user.role);
+  const profession = normalizeAgendaText(user.profession);
+  return role === "medico" || profession.includes("medic") || profession.includes("massoterapeuta");
 }
 
 function parseJobTitles(user: UserRow) {
@@ -259,6 +280,13 @@ export default function UsuariosEquipe() {
     );
   };
 
+  const setUserAgendaEnabledMutation = trpc.admin.setUserAgendaEnabled.useMutation({
+    onSuccess: () => {
+      toast.success("Configuração de agenda atualizada.");
+      refetch();
+    },
+    onError: err => toast.error(err.message),
+  });
   const updateStatusMutation = trpc.admin.updateUserStatus.useMutation({
     onSuccess: () => {
       toast.success("Status atualizado com sucesso.");
@@ -445,9 +473,11 @@ export default function UsuariosEquipe() {
               const isTargetSuperAdmin = normalizeEmail(user.email) === superAdminEmail;
               const jobTitles = parseJobTitles(user);
               const modulePermissions = parseModulePermissions(user.permissions);
-              const isResendingThisInvite = pendingInviteAction?.type === "resend" && pendingInviteAction.userId === user.id;
-              const isCopyingThisInvite = pendingInviteAction?.type === "copy" && pendingInviteAction.userId === user.id;
-              const isAnotherInviteActionRunning = Boolean(pendingInviteAction) && pendingInviteAction.userId !== user.id;
+              const visibleModulePermissions = modulePermissions.filter(permission => permission !== AGENDA_ENABLED_PERMISSION && permission !== AGENDA_DISABLED_PERMISSION);
+              const agendaEnabled = hasOwnAgendaEnabled(user);
+              const isResendingThisInvite = pendingInviteAction?.type === "resend" && pendingInviteAction?.userId === user.id;
+              const isCopyingThisInvite = pendingInviteAction?.type === "copy" && pendingInviteAction?.userId === user.id;
+              const isAnotherInviteActionRunning = Boolean(pendingInviteAction) && pendingInviteAction?.userId !== user.id;
 
               return (
                 <PremiumCard key={user.id} borderGold className="group">
@@ -493,6 +523,18 @@ export default function UsuariosEquipe() {
                       <div className="rounded-full border border-gold/15 bg-background/70 px-3 py-1 text-xs font-medium text-text-tertiary">
                         Perfil técnico do sistema: {LEGACY_ROLE_LABELS[String(user.role ?? "")] || "Apoio"}
                       </div>
+
+                      {isSuperAdmin ? (
+                        <PremiumButton
+                          variant={agendaEnabled ? "primary" : "outline"}
+                          size="sm"
+                          icon={<Clock size={14} />}
+                          loading={setUserAgendaEnabledMutation.isPending}
+                          onClick={() => setUserAgendaEnabledMutation.mutate({ userId: user.id, enabled: !agendaEnabled })}
+                        >
+                          Agenda própria: {agendaEnabled ? "habilitada" : "desabilitada"}
+                        </PremiumButton>
+                      ) : null}
 
                       {isSuperAdmin && accessStage === "invite_pending" ? (
                         <div className="flex flex-wrap items-center gap-2">

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { patientDisplayName } from "@/lib/patientDisplay";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,13 +34,41 @@ const APPOINTMENT_TYPES = [
   { value: "teleconsulta", label: "Teleconsulta" },
 ];
 
+const DURATION_OPTIONS = [
+  { value: "15", label: "15 minutos" },
+  { value: "30", label: "30 minutos" },
+  { value: "60", label: "1 hora" },
+  { value: "90", label: "1 hora e meia" },
+  { value: "120", label: "2 horas" },
+  { value: "150", label: "2 horas e meia" },
+  { value: "180", label: "3 horas" },
+  { value: "210", label: "3 horas e meia" },
+  { value: "240", label: "4 horas" },
+  { value: "270", label: "4 horas e meia" },
+  { value: "300", label: "5 horas" },
+  { value: "330", label: "5 horas e meia" },
+  { value: "360", label: "6 horas" },
+  { value: "other", label: "Outro" },
+];
+
+function getDurationPreset(durationMinutes: unknown) {
+  const value = String(durationMinutes ?? "30");
+  return DURATION_OPTIONS.some((option) => option.value === value) ? value : "other";
+}
+
+function formatCustomDurationHours(durationMinutes: unknown) {
+  const minutes = Number(durationMinutes ?? 30);
+  if (!Number.isFinite(minutes) || minutes <= 0) return "";
+  return String(Number((minutes / 60).toFixed(2))).replace(".", ",");
+}
 const STATUS_LABELS: Record<string, string> = {
   agendada: "Agendada",
   confirmada: "Confirmada",
+  aguardando: "Aguardando",
   em_atendimento: "Em atendimento",
-  concluida: "Concluída",
+  concluida: "Atendimento concluído",
   cancelada: "Cancelada",
-  falta: "Falta",
+  falta: "Faltou",
 };
 
 const DAY_STATUS_COLORS = {
@@ -68,6 +97,8 @@ const defaultAppointmentForm = {
   doctorId: "",
   scheduledAt: "",
   durationMinutes: "30",
+  durationPreset: "30",
+  customDurationHours: "",
   type: "consulta",
   notes: "",
   room: "",
@@ -158,6 +189,7 @@ function formatImportedText(value?: string | null) {
 const STATUS_BADGE_CLASSES: Record<string, string> = {
   agendada: "border border-yellow-300 bg-yellow-100 text-yellow-700",
   confirmada: "border border-emerald-300 bg-emerald-100 text-emerald-700",
+  aguardando: "border border-amber-300 bg-amber-100 text-amber-800",
   em_atendimento: "border border-sky-300 bg-sky-100 text-sky-700",
   concluida: "border border-gray-200 bg-white text-gray-700",
   cancelada: "border border-rose-300 bg-rose-100 text-rose-700",
@@ -195,9 +227,10 @@ function appointmentDedupeKey(appointment: any) {
 }
 
 const APPOINTMENT_STATUS_PRIORITY: Record<string, number> = {
-  cancelada: 7,
-  concluida: 6,
-  em_atendimento: 5,
+  cancelada: 8,
+  concluida: 7,
+  em_atendimento: 6,
+  aguardando: 5,
   confirmada: 4,
   agendada: 3,
   falta: 2,
@@ -210,6 +243,37 @@ function appointmentStatusPriority(appointment: any) {
 function appointmentUpdatedTime(appointment: any) {
   const date = new Date(appointment?.updatedAt || appointment?.createdAt || appointment?.scheduledAt || 0);
   return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function normalizeAccessText(value?: string | null) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function canManageAppointmentSchedule(user: any) {
+  const role = normalizeAccessText(user?.role);
+  const profession = normalizeAccessText(user?.profession);
+  const text = `${role} ${profession}`;
+  return role === "admin" || role === "gerente" || role === "recepcionista" || text.includes("secretaria") || text.includes("recepc");
+}
+
+function getProfessionalDisplayRole(user: any) {
+  const role = normalizeAccessText(user?.role);
+  const profession = normalizeAccessText(user?.profession);
+  const specialty = normalizeAccessText(user?.specialty);
+  const licenseType = normalizeAccessText(user?.professionalLicenseType);
+  const combined = `${role} ${profession} ${specialty} ${licenseType}`;
+
+  if (combined.includes("massoterapeuta")) return "Massoterapeuta";
+  if (role === "medico" || combined.includes("medic") || combined.includes("crm") || combined.includes("cirurg")) return "Médico";
+  return String(user?.specialty || user?.profession || user?.role || "Profissional").trim();
+}
+
+function formatProfessionalOption(user: any) {
+  const roleLabel = getProfessionalDisplayRole(user);
+  return roleLabel ? `${user?.name ?? "Profissional"} — ${roleLabel}` : String(user?.name ?? "Profissional");
 }
 
 function appointmentMetadataScore(appointment: any) {
@@ -278,6 +342,8 @@ function toDateTimeInputValue(date: Date) {
 
 export default function Agenda() {
   const [, setLocation] = useLocation();
+  const { user: currentUser } = useAuth();
+  const canManageSchedule = canManageAppointmentSchedule(currentUser);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
@@ -288,6 +354,7 @@ export default function Agenda() {
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [appointmentForm, setAppointmentForm] = useState(defaultAppointmentForm);
   const [blockForm, setBlockForm] = useState(defaultBlockForm);
+  const [arrivalTime, setArrivalTime] = useState("");
 
   const broadRangeStart = useMemo(() => new Date(calendarYear - 1, 0, 1, 0, 0, 0, 0), [calendarYear]);
   const broadRangeEnd = useMemo(() => new Date(calendarYear + 1, 11, 31, 23, 59, 59, 999), [calendarYear]);
@@ -499,11 +566,20 @@ export default function Agenda() {
       return;
     }
 
+    const durationMinutes = appointmentForm.durationPreset === "other"
+      ? Math.round(Number(String(appointmentForm.customDurationHours || "").replace(",", ".")) * 60)
+      : Number(appointmentForm.durationPreset || appointmentForm.durationMinutes || "30");
+
+    if (!Number.isFinite(durationMinutes) || durationMinutes < 5) {
+      toast.error("Informe uma duração válida para o atendimento.");
+      return;
+    }
+
     const payload = {
       patientId: Number(appointmentForm.patientId),
       doctorId: Number(appointmentForm.doctorId),
       scheduledAt: appointmentForm.scheduledAt,
-      durationMinutes: Number(appointmentForm.durationMinutes || "30"),
+      durationMinutes,
       room: appointmentForm.room.trim(),
       type: appointmentForm.type,
       notes: appointmentForm.notes,
@@ -519,7 +595,6 @@ export default function Agenda() {
 
     createAppointmentMutation.mutate(payload);
   };
-
   const handleCreateBlock = () => {
     if (!blockForm.title.trim() || !blockForm.startsAt || !blockForm.endsAt) {
       toast.error("Informe título, início e fim do bloqueio.");
@@ -546,15 +621,20 @@ export default function Agenda() {
 
   const openAppointmentDetails = (appointment: any) => {
     setSelectedEvent({ ...appointment, eventType: "appointment" });
+    setArrivalTime(appointment.arrivedAt ? toDateTimeInputValue(new Date(appointment.arrivedAt)) : "");
   };
 
   const openEditAppointment = (appointment: any) => {
+    const duration = String(appointment.duration ?? appointment.durationMinutes ?? 30);
+    const durationPreset = getDurationPreset(duration);
     setAppointmentForm({
       appointmentId: String(appointment.id),
       patientId: String(appointment.patientId),
       doctorId: String(appointment.doctorId),
       scheduledAt: toDateTimeInputValue(new Date(appointment.scheduledAt)),
-      durationMinutes: String(appointment.duration ?? appointment.durationMinutes ?? 30),
+      durationMinutes: duration,
+      durationPreset,
+      customDurationHours: durationPreset === "other" ? formatCustomDurationHours(duration) : "",
       type: appointment.type || "consulta",
       notes: formatImportedText(appointment.notes) || "",
       room: appointment.room || "",
@@ -592,16 +672,18 @@ export default function Agenda() {
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex gap-2">
-            <Button
-              onClick={() => {
-                setAppointmentForm(defaultAppointmentForm);
-                setShowCreateDialog(true);
-              }}
-              className="btn-gold-gradient"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Agendar
-            </Button>
+            {canManageSchedule ? (
+              <Button
+                onClick={() => {
+                  setAppointmentForm(defaultAppointmentForm);
+                  setShowCreateDialog(true);
+                }}
+                className="btn-gold-gradient"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Agendar
+              </Button>
+            ) : null}
             <Button
               variant="outline"
               size="sm"
@@ -1040,7 +1122,7 @@ export default function Agenda() {
               <SelectItem value="all">Todos os profissionais</SelectItem>
               {doctors?.map((doctor) => (
                 <SelectItem key={doctor.id} value={String(doctor.id)}>
-                  {doctor.name}
+                  {formatProfessionalOption(doctor)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -1268,7 +1350,7 @@ export default function Agenda() {
                 <SelectContent>
                   {doctors?.map((doctor) => (
                     <SelectItem key={doctor.id} value={String(doctor.id)}>
-                      {doctor.name}
+                      {formatProfessionalOption(doctor)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1285,7 +1367,7 @@ export default function Agenda() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 md:grid-cols-2">
               <div>
                 <Label className="text-sm font-semibold">Tipo *</Label>
                 <Select value={appointmentForm.type} onValueChange={(value) => setAppointmentForm((current) => ({ ...current, type: value }))}>
@@ -1306,7 +1388,7 @@ export default function Agenda() {
                 <Label className="text-sm font-semibold">Local do atendimento *</Label>
                 <Select value={appointmentForm.room || undefined} onValueChange={(value) => setAppointmentForm((current) => ({ ...current, room: value }))}>
                   <SelectTrigger className="mt-1 border-gray-300">
-                    <SelectValue placeholder="Selecione onde o atendimento acontecerá" />
+                    <SelectValue placeholder="Selecione o local" />
                   </SelectTrigger>
                   <SelectContent>
                     {structuralSectors.map((sector) => (
@@ -1320,14 +1402,37 @@ export default function Agenda() {
             </div>
 
             <div>
-              <Label className="text-sm font-semibold">Duração (minutos)</Label>
-              <Input
-                type="number"
-                min={5}
-                value={appointmentForm.durationMinutes}
-                onChange={(event) => setAppointmentForm((current) => ({ ...current, durationMinutes: event.target.value }))}
-                className="mt-1 border-gray-300"
-              />
+              <Label className="text-sm font-semibold">Duração do procedimento</Label>
+              <Select
+                value={appointmentForm.durationPreset}
+                onValueChange={(value) => setAppointmentForm((current) => ({
+                  ...current,
+                  durationPreset: value,
+                  durationMinutes: value === "other" ? current.durationMinutes : value,
+                  customDurationHours: value === "other" ? current.customDurationHours : "",
+                }))}
+              >
+                <SelectTrigger className="mt-1 min-w-0 border-gray-300">
+                  <SelectValue placeholder="Selecione a duração" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DURATION_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {appointmentForm.durationPreset === "other" ? (
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  value={appointmentForm.customDurationHours}
+                  onChange={(event) => setAppointmentForm((current) => ({ ...current, customDurationHours: event.target.value }))}
+                  placeholder="Informe a duração em horas"
+                  className="mt-2 border-gray-300"
+                />
+              ) : null}
             </div>
 
             <div>
@@ -1378,7 +1483,7 @@ export default function Agenda() {
                   <SelectItem value="all">Todos os profissionais</SelectItem>
                   {doctors?.map((doctor) => (
                     <SelectItem key={doctor.id} value={String(doctor.id)}>
-                      {doctor.name}
+                      {formatProfessionalOption(doctor)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1402,7 +1507,7 @@ export default function Agenda() {
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 md:grid-cols-2">
               <div>
                 <Label className="text-sm font-semibold">Início *</Label>
                 <Input
@@ -1497,8 +1602,25 @@ export default function Agenda() {
                   {STATUS_LABELS[selectedEvent.status] ?? selectedEvent.status}
                 </Badge>
                 <Badge className="border border-gray-200 bg-white text-gray-700">{selectedEvent.type ?? "Consulta"}</Badge>
+                {selectedEvent.arrivedAt ? (
+                  <Badge className="border border-amber-200 bg-amber-50 text-amber-800">
+                    Chegada: {new Date(selectedEvent.arrivedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                  </Badge>
+                ) : null}
               </div>
 
+              {!["cancelada", "concluida", "falta"].includes(String(selectedEvent.status)) ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <Label className="text-xs font-semibold uppercase tracking-[0.22em] text-amber-800">Horário de chegada</Label>
+                  <Input
+                    type="datetime-local"
+                    value={arrivalTime}
+                    onChange={(event) => setArrivalTime(event.target.value)}
+                    className="mt-2 border-amber-200 bg-white"
+                  />
+                  <p className="mt-2 text-xs text-amber-800">Se ficar em branco, o sistema usará o horário exato em que você marcar como aguardando.</p>
+                </div>
+              ) : null}
               {selectedEvent.status === "cancelada" ? (
                 <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-rose-600">Cancelamento</p>
@@ -1548,17 +1670,28 @@ export default function Agenda() {
           <DialogFooter className="flex-wrap gap-2">
             {selectedEvent?.eventType === "appointment" ? (
               <>
-                <Button
-                  variant="outline"
-                  onClick={() => openEditAppointment(selectedEvent)}
-                >
-                  Alterar
-                </Button>
+                {canManageSchedule ? (
+                  <Button variant="outline" onClick={() => openEditAppointment(selectedEvent)}>
+                    Alterar
+                  </Button>
+                ) : null}
                 <Button
                   variant="outline"
                   onClick={() => updateStatusMutation.mutate({ appointmentId: selectedEvent.id, status: "confirmada" })}
                 >
                   Confirmar
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => updateStatusMutation.mutate({ appointmentId: selectedEvent.id, status: "aguardando", arrivedAt: arrivalTime || undefined })}
+                >
+                  Aguardando
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => updateStatusMutation.mutate({ appointmentId: selectedEvent.id, status: "falta" })}
+                >
+                  Faltou
                 </Button>
                 <Button
                   variant="outline"
@@ -1568,9 +1701,12 @@ export default function Agenda() {
                 </Button>
                 <Button
                   className="btn-gold-gradient"
-                  onClick={() => setLocation(`/prontuarios/${selectedEvent.patientId}`)}
+                  onClick={() => updateStatusMutation.mutate(
+                    { appointmentId: selectedEvent.id, status: "em_atendimento" },
+                    { onSuccess: () => setLocation(`/prontuarios/${selectedEvent.patientId}`) },
+                  )}
                 >
-                  Atender
+                  Abrir prontuário
                 </Button>
               </>
             ) : selectedEvent ? (

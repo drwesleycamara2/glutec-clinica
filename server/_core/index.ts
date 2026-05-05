@@ -100,6 +100,8 @@ function renderAnamnesisPreviewPage(params: {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(params.title)}</title>
     <meta name="description" content="${escapeHtml(params.description)}" />
+    <link rel="icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/glutee-logo.png" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="${escapeHtml(params.title)}" />
     <meta property="og:description" content="${escapeHtml(params.description)}" />
@@ -202,7 +204,9 @@ async function startServer() {
     // não devem vazar o token via header Referer para recursos externos.
     const path = req.path || req.url || "";
     const isPublicTokenRoute =
+      path.startsWith("/formulario-seguro/") ||
       path.startsWith("/anamnese-publica/") ||
+      path.startsWith("/anamnese-preencher/") ||
       path.startsWith("/envio-midias/") ||
       path.startsWith("/api/public/");
     res.setHeader("Referrer-Policy", isPublicTokenRoute ? "no-referrer" : "same-origin");
@@ -547,6 +551,11 @@ async function startServer() {
 
   app.get("/anamnese-publica/:token", async (req, res) => {
     addNoIndexHeaders(res);
+    return res.redirect(301, `/formulario-seguro/${encodeURIComponent(String(req.params.token ?? ""))}`);
+  });
+
+  app.get("/formulario-seguro/:token", async (req, res) => {
+    addNoIndexHeaders(res);
 
     const token = String(req.params.token ?? "");
     const link = await dbComplete.getAnamnesisShareLinkByToken(token);
@@ -555,11 +564,11 @@ async function startServer() {
     }
 
     const baseUrl = getRequestBaseUrl(req);
-    const pageUrl = `${baseUrl}/anamnese-publica/${token}`;
-    const redirectUrl = `${baseUrl}/anamnese-preencher/${token}`;
+    const pageUrl = `${baseUrl}/formulario-seguro/${token}`;
+    const redirectUrl = `${baseUrl}/formulario-seguro/preencher/${token}`;
     const imageUrl = `${baseUrl}/glutee-logo.png`;
-    const title = link.title || "Preencher anamnese da Clínica Glutée";
-    const description = `Clique para preencher sua anamnese com segurança antes do atendimento na Clínica Glutée.`;
+    const title = "Formulário seguro | Clínica Glutée";
+    const description = "Preencha suas informações de saúde com segurança antes do atendimento na Clínica Glutée.";
 
     res.type("text/html").send(
       renderAnamnesisPreviewPage({
@@ -603,9 +612,13 @@ async function startServer() {
       profilePhotoMimeType,
       profilePhotoFileName,
       profilePhotoDeclarationAccepted,
+      truthDeclarationAccepted,
     } = req.body ?? {};
     if (!answers || typeof answers !== "object") {
       return res.status(400).json({ error: "Respostas da anamnese não informadas." });
+    }
+    if (!truthDeclarationAccepted) {
+      return res.status(400).json({ error: "Confirme a declaração de veracidade antes de enviar a anamnese." });
     }
 
     try {

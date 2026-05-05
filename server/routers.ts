@@ -44,6 +44,26 @@ function normalizeInviteRole(value?: string | null): InviteRole {
   return INVITE_ROLES.includes(value as InviteRole) ? (value as InviteRole) : "user";
 }
 
+function normalizeAccessText(value?: string | null) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function canManageAppointmentSchedule(user: any) {
+  const role = normalizeAccessText(user?.role);
+  const profession = normalizeAccessText(user?.profession);
+  const text = `${role} ${profession}`;
+  return role === "admin" || role === "gerente" || role === "recepcionista" || text.includes("secretaria") || text.includes("recepc");
+}
+
+function assertCanManageAppointmentSchedule(user: any) {
+  if (!canManageAppointmentSchedule(user)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Apenas secretária, gerente ou administrador podem criar ou alterar agendamentos." });
+  }
+}
+
 function stripHtmlForSignature(value?: string | null) {
   return String(value ?? "")
     .replace(/<br\s*\/?>/gi, "\n")
@@ -262,8 +282,7 @@ export const appRouter = router({
       return db.getAllUsers();
     }),
 
-    getDoctors: protectedProcedure.query(async ({ ctx }) => {
-      if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+    getDoctors: protectedProcedure.query(async () => {
       return dbComplete.getDoctors();
     }),
 
@@ -305,6 +324,22 @@ export const appRouter = router({
       if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
       return dbComplete.listAuditLogActions();
     }),
+
+    backfillLegacyAnamneseQuestions: protectedProcedure
+      .input(z.object({
+        mappingCsv: z.string().max(500_000).optional(),
+        mappingJson: z.record(z.string(), z.string()).optional(),
+        dryRun: z.boolean().default(true),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+        const { runLegacyAnamneseBackfill, parseQuestionMappingCsv } = await import("./lib/legacy-anamnese-backfill");
+        const mapping = input.mappingJson ?? (input.mappingCsv ? parseQuestionMappingCsv(input.mappingCsv) : {});
+        if (Object.keys(mapping).length === 0) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nenhuma pergunta mapeada. Envie um CSV com "questionId,questionText".' });
+        }
+        return runLegacyAnamneseBackfill(mapping, { dryRun: input.dryRun });
+      }),
 
     generateSystemExport: protectedProcedure
       .input(z.object({
@@ -540,6 +575,17 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    setUserAgendaEnabled: protectedProcedure
+      .input(z.object({
+        userId: z.number(),
+        enabled: z.boolean(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const isSuperAdmin = ctx.user.role === 'admin' && normalizeEmailForStorage(ctx.user.email) === SUPER_ADMIN_EMAIL;
+        if (!isSuperAdmin) throw new TRPCError({ code: 'FORBIDDEN' });
+        return dbComplete.setUserAgendaEnabled(input.userId, input.enabled);
+      }),
+
     deleteUser: protectedProcedure
       .input(z.object({ userId: z.number() }))
       .mutation(async ({ ctx, input }) => {
@@ -703,6 +749,7 @@ export const appRouter = router({
         retroactiveJustification: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        assertCanManageAppointmentSchedule(ctx.user);
         return dbComplete.createAppointment(input, ctx.user.id);
       }),
 
@@ -718,6 +765,7 @@ export const appRouter = router({
         notes: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        assertCanManageAppointmentSchedule(ctx.user);
         const { appointmentId, ...payload } = input;
         return dbComplete.updateAppointment(appointmentId, payload, ctx.user.id);
       }),
@@ -744,15 +792,17 @@ export const appRouter = router({
     updateStatus: agendaProcedure
       .input(z.object({
         appointmentId: z.number(),
-        status: z.enum(["agendada", "confirmada", "em_atendimento", "concluida", "cancelada", "falta"]),
+        status: z.enum(["agendada", "confirmada", "aguardando", "em_atendimento", "concluida", "cancelada", "falta"]),
         cancelledBy: z.enum(["clinica", "paciente", "sistema"]).optional(),
         note: z.string().optional(),
+        arrivedAt: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
         return dbComplete.updateAppointmentStatus(input.appointmentId, {
           status: input.status,
           cancelledBy: input.cancelledBy,
           note: input.note,
+          arrivedAt: input.arrivedAt,
         });
       }),
   }),

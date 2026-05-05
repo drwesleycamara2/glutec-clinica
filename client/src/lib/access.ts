@@ -35,6 +35,7 @@ const LEGACY_MODULE_ALIASES: Record<string, string[]> = {
 
 const pathModuleMap: Array<{ prefix: string; moduleId: string }> = [
   { prefix: "/agenda", moduleId: "agenda" },
+  { prefix: "/sala-espera", moduleId: "agenda" },
   { prefix: "/pacientes", moduleId: "pacientes" },
   { prefix: "/prontuarios", moduleId: "prontuarios_any" },
   { prefix: "/evolucao", moduleId: "prontuarios" },
