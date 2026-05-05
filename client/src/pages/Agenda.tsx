@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { PatientAutocomplete } from "@/components/PatientAutocomplete";
 import { toast } from "sonner";
 import {
   Ban,
@@ -1327,18 +1328,24 @@ export default function Agenda() {
           <div className="space-y-4">
             <div>
               <Label className="text-sm font-semibold">Paciente *</Label>
-              <Select value={appointmentForm.patientId || undefined} onValueChange={(value) => setAppointmentForm((current) => ({ ...current, patientId: value }))}>
-                <SelectTrigger className="mt-1 border-gray-300">
-                  <SelectValue placeholder="Selecione um paciente" />
-                </SelectTrigger>
-                <SelectContent>
-                  {patients?.map((patient) => (
-                    <SelectItem key={patient.id} value={String(patient.id)}>
-                      {patientDisplayName(patient)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <PatientAutocomplete
+                className="mt-1"
+                value={
+                  appointmentForm.patientId
+                    ? (patients ?? []).find((item) => String(item.id) === appointmentForm.patientId) ?? {
+                        id: Number(appointmentForm.patientId),
+                        fullName: appointmentForm.patientId,
+                      }
+                    : null
+                }
+                onSelect={(patient) =>
+                  setAppointmentForm((current) => ({
+                    ...current,
+                    patientId: patient ? String(patient.id) : "",
+                  }))
+                }
+                placeholder="Digite o nome, número de prontuário ou telefone…"
+              />
             </div>
 
             <div>

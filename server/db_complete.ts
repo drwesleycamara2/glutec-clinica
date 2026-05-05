@@ -945,24 +945,47 @@ export async function listPatients(
 
   const columns = await getTableColumns("patients");
   const normalizedQuery = query?.trim();
-  const orderByClause =
-    sort === "name_desc"
+  const phoneDigits = normalizedQuery ? normalizedQuery.replace(/\D+/g, "") : "";
+  const phoneTermLike = phoneDigits.length >= 3 ? `%${phoneDigits}%` : null;
+  const isNumericQuery = !!normalizedQuery && /^\d+$/.test(normalizedQuery);
+
+  // Quando há busca, ordena por prefixo do primeiro nome para que digitar
+  // "LET" mostre primeiro "Letícia Maria" e depois "Ana Letícia". Sem busca,
+  // mantém o sort solicitado pelo chamador.
+  const orderByClause = normalizedQuery
+    ? sql`
+        case when p.fullName like ${`${normalizedQuery}%`} then 0 else 1 end,
+        case when p.fullName like ${`% ${normalizedQuery}%`} then 0 else 1 end,
+        ${columns.has("recordNumber") && isNumericQuery
+          ? sql`case when p.recordNumber = ${Number(normalizedQuery)} then 0 else 1 end,`
+          : sql``}
+        p.fullName asc
+      `
+    : sort === "name_desc"
       ? sql`p.fullName desc`
       : sort === "created_desc"
-      ? sql`p.createdAt desc, p.id desc`
-      : sort === "created_asc"
-      ? sql`p.createdAt asc, p.id asc`
-      : sql`p.fullName asc`;
+        ? sql`p.createdAt desc, p.id desc`
+        : sort === "created_asc"
+          ? sql`p.createdAt asc, p.id asc`
+          : sql`p.fullName asc`;
 
   const searchClauses = normalizedQuery
     ? [
         sql`p.fullName like ${`%${normalizedQuery}%`}`,
         sql`p.cpf like ${`%${normalizedQuery}%`}`,
-        sql`p.phone like ${`%${normalizedQuery}%`}`,
+        sql`p.email like ${`%${normalizedQuery}%`}`,
       ]
     : [];
 
-  if (normalizedQuery && columns.has("recordNumber") && /^\d+$/.test(normalizedQuery)) {
+  if (phoneTermLike) {
+    // Compara contra os dígitos do telefone, ignorando máscara/parênteses/espaços.
+    searchClauses.push(sql`replace(replace(replace(replace(replace(coalesce(p.phone,''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') like ${phoneTermLike}`);
+    if (columns.has("phone2")) {
+      searchClauses.push(sql`replace(replace(replace(replace(replace(coalesce(p.phone2,''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') like ${phoneTermLike}`);
+    }
+  }
+
+  if (normalizedQuery && columns.has("recordNumber") && isNumericQuery) {
     searchClauses.push(sql`p.recordNumber = ${Number(normalizedQuery)}`);
   }
 

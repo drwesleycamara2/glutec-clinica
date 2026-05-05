@@ -267,6 +267,14 @@ export async function searchPatientsAutocomplete(
   if (!normalizedQuery) return [];
 
   const searchTerm = `%${normalizedQuery}%`;
+  const startsWith = `${normalizedQuery}%`;
+  const onlyDigits = normalizedQuery.replace(/\D+/g, "");
+  const phoneTerm = onlyDigits.length >= 3 ? `%${onlyDigits}%` : null;
+  // Telefone: ignora máscara comparando contra os dígitos do campo do banco.
+  const phoneClause = phoneTerm
+    ? sql`or replace(replace(replace(replace(replace(coalesce(p.phone,''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') like ${phoneTerm}
+        or replace(replace(replace(replace(replace(coalesce(p.phone2,''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') like ${phoneTerm}`
+    : sql``;
   const recordNumberClause = /^\d+$/.test(normalizedQuery)
     ? sql`or p.recordNumber = ${Number(normalizedQuery)}`
     : sql``;
@@ -295,8 +303,23 @@ export async function searchPatientsAutocomplete(
       ) as photoUrl
     from patients p
     where coalesce(p.active, 1) <> 0
-      and (p.fullName like ${searchTerm} or p.cpf like ${searchTerm} or p.email like ${searchTerm} ${recordNumberClause})
-    order by case when p.fullName like ${`${normalizedQuery}%`} then 0 else 1 end, p.fullName
+      and (
+        p.fullName like ${searchTerm}
+        or p.cpf like ${searchTerm}
+        or p.email like ${searchTerm}
+        ${phoneClause}
+        ${recordNumberClause}
+      )
+    order by
+      -- 1) primeiro nome começa com a query (ex.: "LET" → "Letícia Maria")
+      case when p.fullName like ${startsWith} then 0 else 1 end,
+      -- 2) qualquer outro pedaço do nome começa com a query (ex.: "Ana Letícia")
+      case when p.fullName like ${`% ${normalizedQuery}%`} then 0 else 1 end,
+      -- 3) match por número do prontuário exato
+      case when ${/^\d+$/.test(normalizedQuery) ? Number(normalizedQuery) : -1} > 0
+            and p.recordNumber = ${/^\d+$/.test(normalizedQuery) ? Number(normalizedQuery) : -1}
+           then 0 else 1 end,
+      p.fullName
     limit ${limit}
   `));
 }

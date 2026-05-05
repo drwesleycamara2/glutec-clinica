@@ -34,6 +34,7 @@ import PortabilidadeDados from "./pages/PortabilidadeDados";
 import Chat from "./pages/Chat";
 import Perfil from "./pages/Perfil";
 import Auditoria from "./pages/Auditoria";
+import BackfillAnamnese from "./pages/BackfillAnamnese";
 import DashboardLayout from "./components/DashboardLayoutPremium";
 import Login from "./pages/Login";
 import AceitarConvite from "./pages/AceitarConviteSafe";
@@ -113,6 +114,7 @@ function ProtectedRoutes() {
         <Route path="/relatorios/portabilidade">{() => <AdminOnly component={PortabilidadeDados} />}</Route>
         <Route path="/relatorios">{() => <AdminOnly component={Relatorios} />}</Route>
         <Route path="/auditoria">{() => <AdminOnly component={Auditoria} />}</Route>
+        <Route path="/admin/backfill-anamnese">{() => <AdminOnly component={BackfillAnamnese} />}</Route>
         <Route path="/chat" component={Chat} />
         <Route path="/perfil" component={Perfil} />
         <Route path="/configuracoes" component={Configuracoes} />
