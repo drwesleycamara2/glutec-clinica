@@ -361,6 +361,16 @@ export const appRouter = router({
         const { runVerdeContractSignatureBackfill } = await import("./lib/legacy-verde-document-backfill");
         return runVerdeContractSignatureBackfill(input.csv, { dryRun: input.dryRun });
       }),
+    backfillVerdeEvolutionPdfs: protectedProcedure
+      .input(z.object({
+        csv: z.string().min(20).max(10_000_000),
+        dryRun: z.boolean().default(true),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+        const { runVerdeEvolutionPdfBackfill } = await import("./lib/legacy-verde-evolution-pdf-backfill");
+        return runVerdeEvolutionPdfBackfill(input.csv, { dryRun: input.dryRun });
+      }),
     generateSystemExport: protectedProcedure
       .input(z.object({
         currentPassword: z.string().min(1),

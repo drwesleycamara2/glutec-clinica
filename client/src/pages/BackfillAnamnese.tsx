@@ -155,6 +155,7 @@ export default function BackfillAnamnese() {
 
       <SignatureBackfillSection />
       <VerdeContractSignatureBackfillSection />
+      <VerdeEvolutionPdfBackfillSection />
 
       {lastResult ? (
         <Card className="border shadow-sm">
@@ -466,6 +467,94 @@ function VerdeContractSignatureBackfillSection() {
   );
 }
 
+function VerdeEvolutionPdfBackfillSection() {
+  const [csvText, setCsvText] = useState("");
+  const [result, setResult] = useState<any>(null);
+  const dryRunMutation = trpc.admin.backfillVerdeEvolutionPdfs.useMutation({
+    onSuccess: (data) => {
+      setResult({ ...data, mode: "dryRun" });
+      toast.success(`Pré-visualização: ${data.matchedInGlutec} de ${data.rowsMarkedSigned} evoluções com PDF casadas.`);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+  const applyMutation = trpc.admin.backfillVerdeEvolutionPdfs.useMutation({
+    onSuccess: (data) => {
+      setResult({ ...data, mode: "applied" });
+      toast.success(`${data.updated} evoluções atualizadas com PDF de referência.`);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const isBusy = dryRunMutation.isPending || applyMutation.isPending;
+
+  const runDryRun = () => {
+    if (!csvText.trim()) {
+      toast.error("Cole o conteúdo do exp_paciente_evolucao.csv (separado por ;).");
+      return;
+    }
+    dryRunMutation.mutate({ csv: csvText, dryRun: true });
+  };
+
+  const runApply = () => {
+    if (!csvText.trim()) {
+      toast.error("Cole o CSV antes de aplicar.");
+      return;
+    }
+    if (!window.confirm(
+      "Vincular PDFs de evolução do Prontuário Verde aos registros importados? Esta ação grava no banco.",
+    )) return;
+    applyMutation.mutate({ csv: csvText, dryRun: false });
+  };
+
+  return (
+    <>
+      <Card className="border shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <FileSignature className="h-4 w-4 text-[#C9A55B]" />
+            Importar PDF assinado — Evoluções Verde
+          </CardTitle>
+          <CardDescription>
+            Cole abaixo o conteúdo de <code>exp_paciente_evolucao.csv</code> do Prontuário Verde.
+            O sistema casa <code>CLI_ID</code> com os registros importados em <code>medical_records</code> e preenche
+            apenas <code className="mx-1">signedPdfUrl</code>, sem criar hash ou chave de assinatura inexistente no backup.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Textarea
+            value={csvText}
+            onChange={(event) => setCsvText(event.target.value)}
+            placeholder="CLI_ID;PAC_ID;Nome Paciente;Unidade;Data;Data Registro;Particular/Convênio;Profissional;Evolução HTML;Procedimentos;DOCUMENTO"
+            rows={10}
+            className="font-mono text-xs"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={runDryRun} disabled={isBusy} className="gap-2" variant="outline">
+              {dryRunMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+              Pré-visualizar (dry run)
+            </Button>
+            <Button
+              onClick={runApply}
+              disabled={isBusy || result?.mode !== "dryRun"}
+              className="gap-2 bg-[#8A6526] hover:bg-[#6B4F1B]"
+              title={result?.mode !== "dryRun" ? "Rode o dry-run antes" : "Aplicar no banco"}
+            >
+              {applyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Aplicar no banco
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <SignatureBackfillResultCard
+        result={result}
+        sourceLabel="CLI_ID"
+        targetLabel="medical_records.id"
+        markedLabel="Com PDF no CSV"
+      />
+    </>
+  );
+}
 function SignatureBackfillResultCard({ result, sourceLabel, targetLabel, markedLabel = "Marcadas assinadas" }: { result: any; sourceLabel: string; targetLabel: string; markedLabel?: string }) {
   if (!result) return null;
 
