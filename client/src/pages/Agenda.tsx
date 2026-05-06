@@ -1617,15 +1617,15 @@ export default function Agenda() {
               </div>
 
               {!["cancelada", "concluida", "falta"].includes(String(selectedEvent.status)) ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                  <Label className="text-xs font-semibold uppercase tracking-[0.22em] text-amber-800">Horário de chegada</Label>
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
+                  <Label className="text-xs font-semibold uppercase tracking-[0.22em] text-amber-900 dark:text-amber-100">Horário de chegada</Label>
                   <Input
                     type="datetime-local"
                     value={arrivalTime}
                     onChange={(event) => setArrivalTime(event.target.value)}
-                    className="mt-2 border-amber-200 bg-white"
+                    className="mt-2 border-amber-300 bg-white text-slate-950 placeholder:text-slate-500 [color-scheme:light] dark:border-amber-600 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-400 dark:[color-scheme:dark]"
                   />
-                  <p className="mt-2 text-xs text-amber-800">Se ficar em branco, o sistema usará o horário exato em que você marcar como aguardando.</p>
+                  <p className="mt-2 text-xs text-amber-900 dark:text-amber-100">Se ficar em branco, o sistema usará o horário exato em que você marcar como aguardando.</p>
                 </div>
               ) : null}
               {selectedEvent.status === "cancelada" ? (

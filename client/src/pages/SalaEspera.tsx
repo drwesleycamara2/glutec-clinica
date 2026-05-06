@@ -85,7 +85,7 @@ function AppointmentRow({ appointment, arrivalValue, onArrivalChange, onMarkWait
               type="datetime-local"
               value={arrivalValue || ""}
               onChange={(event) => onArrivalChange(appointment.id, event.target.value)}
-              className="min-w-[220px] border-gray-300"
+              className="min-w-[220px] border-gray-300 bg-white text-slate-950 placeholder:text-slate-500 [color-scheme:light] dark:border-slate-600 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-400 dark:[color-scheme:dark]"
             />
           ) : null}
           {canMarkWaiting ? (

@@ -251,6 +251,9 @@ function DashboardLayoutPremiumContent({
     [location, openClinicalDrafts]
   );
   const activeDraftBasePath = activeClinicalDraft?.path.split("#")[0] ?? null;
+  const isSeniorAdmin =
+    user?.role === "admin" &&
+    String(user?.email ?? "").trim().toLowerCase() === "contato@drwesleycamara.com.br";
 
   const sections = useMemo(
     () =>
@@ -649,7 +652,7 @@ function DashboardLayoutPremiumContent({
               </Button>
             </div>
           ) : null}
-          <SimplesNacionalReminder />
+          {isSeniorAdmin ? <SimplesNacionalReminder /> : null}
           {children}
         </main>
       </SidebarInset>
