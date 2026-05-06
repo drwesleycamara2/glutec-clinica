@@ -390,6 +390,10 @@ export const clinicalEvolutionRouter = router({
         name: user.name || user.email || `Usuário ${user.id}`,
         role: user.role,
         email: user.email,
+        profession: user.profession,
+        specialty: user.specialty,
+        professionalLicenseType: user.professionalLicenseType,
+        professionalLicenseState: user.professionalLicenseState,
       }))
       .sort((left: any, right: any) => String(left.name).localeCompare(String(right.name), "pt-BR"));
   }),
@@ -478,16 +482,50 @@ export const clinicalEvolutionRouter = router({
           });
         }
 
+        if (input.signatureMethod === "eletronica") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Atendimentos clínicos exigem certificado digital pessoa física ICP-Brasil.",
+          });
+        }
+
+        const externalDocumentKey = String(input.d4signDocumentKey ?? "").trim();
+        const provider = String(input.signatureProvider ?? "").trim();
+        const providerKey = provider.toLowerCase();
+        const certificateLabel = String(input.signatureCertificateLabel ?? "").trim();
+        const validationCode = String(input.signatureValidationCode ?? "").trim();
+
+        if (!externalDocumentKey || externalDocumentKey.toLowerCase().startsWith("local-")) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "A assinatura clínica precisa de sessão/documento validado por provedor ICP-Brasil.",
+          });
+        }
+
+        if (!provider || providerKey.includes("local") || providerKey === "certificado_local_a1") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Assinatura local ou simulada não é aceita para documentos clínicos.",
+          });
+        }
+
+        if (!certificateLabel || !validationCode) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Informe certificado pessoa física e código de validação retornados pelo provedor.",
+          });
+        }
+
         const auditLog = await db.signClinicalEvolution(
           input.id,
           ctx.user.id,
           ctx.user.name || "Unknown",
           ctx.user.specialty,
-          input.d4signDocumentKey || `local-${input.signatureMethod}-${Date.now()}`,
+          externalDocumentKey,
           input.signatureMethod,
-          input.signatureProvider,
-          input.signatureCertificateLabel,
-          input.signatureValidationCode,
+          provider,
+          certificateLabel,
+          validationCode,
           ctx.req.ip,
           ctx.req.headers["user-agent"]
         );

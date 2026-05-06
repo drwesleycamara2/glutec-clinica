@@ -679,7 +679,7 @@ export default function Agenda() {
                   setAppointmentForm(defaultAppointmentForm);
                   setShowCreateDialog(true);
                 }}
-                className="btn-gold-gradient"
+                className="btn-gold-gradient font-semibold text-slate-950 hover:text-slate-950"
               >
                 <Plus className="mr-2 h-4 w-4" />
                 Agendar
@@ -688,7 +688,7 @@ export default function Agenda() {
             <Button
               variant="outline"
               size="sm"
-              className="border-gray-300"
+              className="border-gray-300 bg-white text-gray-900 hover:bg-gray-100 hover:text-gray-950"
               onClick={() => {
                 setBlockForm({
                   ...defaultBlockForm,
@@ -702,7 +702,7 @@ export default function Agenda() {
               <Ban className="mr-2 h-4 w-4" />
               Bloquear horário
             </Button>
-            <Button variant="outline" size="sm" className="border-gray-300">
+            <Button variant="outline" size="sm" className="border-gray-300 bg-white text-gray-900 hover:bg-gray-100 hover:text-gray-950">
               <UserCheck className="mr-2 h-4 w-4" />
               Check-in
             </Button>
@@ -715,14 +715,14 @@ export default function Agenda() {
                 variant={viewMode === mode ? "default" : "outline"}
                 size="sm"
                 onClick={() => setViewMode(mode)}
-                className={viewMode === mode ? "btn-gold-gradient" : "border-gray-300"}
+                className={viewMode === mode ? "btn-gold-gradient font-semibold text-slate-950 hover:text-slate-950" : "border-gray-300 bg-white text-gray-900 hover:bg-gray-100 hover:text-gray-950"}
               >
                 {mode === "day" ? "Dia" : mode === "week" ? "Semana" : "Mês"}
               </Button>
             ))}
           </div>
 
-          <Button variant="outline" size="sm" className="border-gray-300" onClick={() => setLocation("/configuracoes")}>
+          <Button variant="outline" size="sm" className="border-gray-300 bg-white text-gray-900 hover:bg-gray-100 hover:text-gray-950" onClick={() => setLocation("/configuracoes")}>
             <Settings className="mr-2 h-4 w-4" />
             Opções
           </Button>
@@ -991,7 +991,7 @@ export default function Agenda() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="border-gray-300"
+                    className="border-gray-300 bg-white text-gray-900 hover:bg-gray-100 hover:text-gray-950"
                     onClick={() => setViewMode("day")}
                   >
                     Ver dia completo
@@ -1031,14 +1031,14 @@ export default function Agenda() {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="border-gray-300"
+                            className="border-gray-300 bg-white text-gray-900 hover:bg-gray-100 hover:text-gray-950"
                             onClick={() => openAppointmentDetails(item)}
                           >
                             Ver detalhes
                           </Button>
                           <Button
                             size="sm"
-                            className="btn-gold-gradient"
+                            className="btn-gold-gradient font-semibold text-slate-950 hover:text-slate-950"
                             onClick={() => setLocation(`/prontuarios/${item.patientId}#evolucao`)}
                           >
                             Iniciar atendimento
@@ -1096,7 +1096,7 @@ export default function Agenda() {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="border-gray-300"
+                            className="border-gray-300 bg-white text-gray-900 hover:bg-gray-100 hover:text-gray-950"
                             onClick={() => openBlockDetails(block)}
                           >
                             Ver detalhes
@@ -1116,7 +1116,7 @@ export default function Agenda() {
         <div className="rounded-lg border border-gray-300 bg-white p-4">
           <Label className="mb-2 block text-sm font-semibold text-gray-700">Profissional selecionado</Label>
           <Select value={selectedDoctor} onValueChange={setSelectedDoctor}>
-            <SelectTrigger className="border-gray-300">
+            <SelectTrigger className="border-gray-300 bg-white text-gray-900 hover:bg-gray-100 hover:text-gray-950">
               <SelectValue placeholder="Selecione um profissional" />
             </SelectTrigger>
             <SelectContent>
@@ -1130,7 +1130,7 @@ export default function Agenda() {
           </Select>
         </div>
 
-        <Button onClick={goToToday} className="btn-gold-gradient w-full">
+        <Button onClick={goToToday} className="btn-gold-gradient w-full font-semibold text-slate-950 hover:text-slate-950">
           Hoje
         </Button>
 
@@ -1454,10 +1454,10 @@ export default function Agenda() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)} className="border-gray-300">
+            <Button variant="outline" onClick={() => setShowCreateDialog(false)} className="border-gray-300 bg-white text-gray-900 hover:bg-gray-100 hover:text-gray-950">
               Cancelar
             </Button>
-            <Button onClick={handleCreateAppointment} className="btn-gold-gradient" disabled={isSavingAppointment}>
+            <Button onClick={handleCreateAppointment} className="btn-gold-gradient font-semibold text-slate-950 hover:text-slate-950" disabled={isSavingAppointment}>
               {isSavingAppointment ? "Salvando..." : isEditingAppointment ? "Salvar alterações" : "Agendar"}
             </Button>
           </DialogFooter>
@@ -1547,10 +1547,10 @@ export default function Agenda() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowBlockDialog(false)} className="border-gray-300">
+            <Button variant="outline" onClick={() => setShowBlockDialog(false)} className="border-gray-300 bg-white text-gray-900 hover:bg-gray-100 hover:text-gray-950">
               Cancelar
             </Button>
-            <Button onClick={handleCreateBlock} className="btn-gold-gradient" disabled={createBlockMutation.isPending}>
+            <Button onClick={handleCreateBlock} className="btn-gold-gradient font-semibold text-slate-950 hover:text-slate-950" disabled={createBlockMutation.isPending}>
               {createBlockMutation.isPending ? "Salvando..." : "Salvar bloqueio"}
             </Button>
           </DialogFooter>
@@ -1707,7 +1707,7 @@ export default function Agenda() {
                   Cancelar
                 </Button>
                 <Button
-                  className="btn-gold-gradient"
+                  className="btn-gold-gradient font-semibold text-slate-950 hover:text-slate-950"
                   onClick={() => updateStatusMutation.mutate(
                     { appointmentId: selectedEvent.id, status: "em_atendimento" },
                     { onSuccess: () => setLocation(`/prontuarios/${selectedEvent.patientId}`) },

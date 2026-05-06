@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { trpc } from "@/lib/trpc";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -68,6 +69,7 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownPosition, setDropdownPosition] = useState({ left: 16, top: 16, width: 720, maxHeight: 420 });
   const normalizedQuery = query.trim();
 
   const { data: searchResults, isLoading: isSearching, isError: searchFailed } = trpc.icd10.search.useQuery(
@@ -148,6 +150,37 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+  useEffect(() => {
+    if (!isOpen || typeof window === "undefined") return;
+
+    const updateDropdownPosition = () => {
+      const rect = searchInputRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const margin = 16;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const desiredWidth = Math.min(Math.max(rect.width, 860), viewportWidth - margin * 2);
+      const left = Math.min(Math.max(margin, rect.left), Math.max(margin, viewportWidth - desiredWidth - margin));
+      const topBelow = rect.bottom + 8;
+      const availableBelow = viewportHeight - topBelow - margin;
+      const availableAbove = rect.top - margin;
+      const openAbove = availableBelow < 320 && availableAbove > availableBelow;
+      const rawHeight = openAbove ? availableAbove - 8 : availableBelow;
+      const maxHeight = Math.min(560, Math.max(320, rawHeight));
+      const top = openAbove ? Math.max(margin, rect.top - maxHeight - 8) : topBelow;
+
+      setDropdownPosition({ left, top, width: desiredWidth, maxHeight });
+    };
+
+    updateDropdownPosition();
+    window.addEventListener("resize", updateDropdownPosition);
+    window.addEventListener("scroll", updateDropdownPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateDropdownPosition);
+      window.removeEventListener("scroll", updateDropdownPosition, true);
+    };
+  }, [displayItems.length, isOpen, normalizedQuery]);
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (!isOpen) {
@@ -186,88 +219,103 @@ export function Icd10Search({ onSelect, selectedCode, showFavorites = true }: Ic
     setSelectedIndex(-1);
   };
 
-  const renderDropdown = () => (
-    <div
-      ref={dropdownRef}
-      role="listbox"
-      style={{ minHeight: "16rem", maxHeight: "28rem", zIndex: 1000 }}
-      className="absolute left-0 top-full mt-2 w-full overflow-y-auto overscroll-contain rounded-xl border border-border bg-background pr-1 shadow-2xl ring-1 ring-black/5"
-    >
-      {loadingItems ? (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        </div>
-      ) : null}
-
-      {!loadingItems && hasLoadError ? (
-        <div className="p-4 text-center text-sm text-destructive">Não foi possível carregar a lista de CID-10. Tente digitar novamente.</div>
-      ) : null}
-
-      {!loadingItems && !hasLoadError && displayItems.length === 0 && normalizedQuery.length > 0 ? (
-        <div className="p-4 text-center text-sm text-muted-foreground">Nenhum CID-10 encontrado para "{query}"</div>
-      ) : null}
-
-      {!loadingItems && !hasLoadError && displayItems.length === 0 && normalizedQuery.length === 0 ? (
-        <div className="p-4 text-center text-sm text-muted-foreground">
-          Nenhum CID-10 disponível. Comece a digitar para pesquisar por código ou descrição.
-        </div>
-      ) : null}
-
-      {displayItems.map((item, index) => {
-        const serverFavorite = (serverFavorites ?? []).some((favorite) => favorite.id === item.id);
-        return (
-          <div key={`${item.code}-${item.id}-${index}`}>
-            {index === 0 && favoriteCount > 0 ? (
-              <div className="sticky top-0 z-10 border-b border-border bg-background/95 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur">
-                Favoritos
-              </div>
-            ) : null}
-            {index === favoriteCount && displayItems.length > favoriteCount ? (
-              <div className="sticky top-0 z-10 border-b border-border bg-background/95 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur">
-                {normalizedQuery ? "Resultados da busca" : "Catálogo CID-10"}
-              </div>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => handleSelect(item)}
-              className={cn(
-                "w-full border-b border-border px-4 py-3 text-left transition-colors last:border-b-0",
-                selectedIndex === index ? "bg-accent text-accent-foreground" : "hover:bg-muted",
-              )}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <Badge variant="outline" className="mb-1 text-xs">
-                    {item.code}
-                  </Badge>
-                  <p className="whitespace-normal text-sm font-medium leading-snug">{item.description}</p>
-                  {item.descriptionAbbrev ? <p className="mt-0.5 text-xs text-muted-foreground">{item.descriptionAbbrev}</p> : null}
-                </div>
-                {showFavorites && item.id > 0 ? (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleToggleFavorite(item);
-                    }}
-                    title={serverFavorite ? "Remover dos favoritos" : "Favoritar CID"}
-                    className={cn(
-                      "mt-1 shrink-0 transition-colors",
-                      serverFavorite ? "text-amber-500 hover:text-amber-600" : "text-muted-foreground hover:text-amber-500",
-                    )}
-                    disabled={addFavoriteMutation.isPending || removeFavoriteMutation.isPending}
-                  >
-                    <Star className="h-4 w-4" fill={serverFavorite ? "currentColor" : "none"} />
-                  </button>
-                ) : null}
-                {showFavorites && item.id < 0 ? <Star className="mt-1 h-4 w-4 text-amber-500" fill="currentColor" /> : null}
-              </div>
-            </button>
+  const renderDropdown = () => {
+    const dropdownContent = (
+      <div
+        ref={dropdownRef}
+        role="listbox"
+        style={{
+          left: dropdownPosition.left,
+          top: dropdownPosition.top,
+          width: dropdownPosition.width,
+          minHeight: Math.min(dropdownPosition.maxHeight, 320),
+          maxHeight: dropdownPosition.maxHeight,
+          zIndex: 9999,
+        }}
+        className="fixed overflow-y-auto overscroll-contain rounded-xl border border-border bg-background pr-1 shadow-2xl ring-1 ring-black/10"
+      >
+        {loadingItems ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           </div>
-        );
-      })}
-    </div>
-  );
+        ) : null}
+
+        {!loadingItems && hasLoadError ? (
+          <div className="p-4 text-center text-sm text-destructive">Não foi possível carregar a lista de CID-10. Tente digitar novamente.</div>
+        ) : null}
+
+        {!loadingItems && !hasLoadError && displayItems.length === 0 && normalizedQuery.length > 0 ? (
+          <div className="p-4 text-center text-sm text-muted-foreground">Nenhum CID-10 encontrado para "{query}"</div>
+        ) : null}
+
+        {!loadingItems && !hasLoadError && displayItems.length === 0 && normalizedQuery.length === 0 ? (
+          <div className="p-4 text-center text-sm text-muted-foreground">
+            Nenhum CID-10 disponível. Comece a digitar para pesquisar por código ou descrição.
+          </div>
+        ) : null}
+
+        {displayItems.map((item, index) => {
+          const serverFavorite = (serverFavorites ?? []).some((favorite) => favorite.id === item.id);
+          return (
+            <div key={`${item.code}-${item.id}-${index}`}>
+              {index === 0 && favoriteCount > 0 ? (
+                <div className="sticky top-0 z-10 border-b border-border bg-background/95 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur">
+                  Favoritos
+                </div>
+              ) : null}
+              {index === favoriteCount && displayItems.length > favoriteCount ? (
+                <div className="sticky top-0 z-10 border-b border-border bg-background/95 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur">
+                  {normalizedQuery ? "Resultados da busca" : "Catálogo CID-10"}
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => handleSelect(item)}
+                className={cn(
+                  "w-full border-b border-border px-4 py-2.5 text-left transition-colors last:border-b-0",
+                  selectedIndex === index ? "bg-accent text-accent-foreground" : "hover:bg-muted",
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <Badge variant="outline" className="mb-1 text-xs">
+                      {item.code}
+                    </Badge>
+                    <p className="whitespace-normal text-sm font-medium leading-snug">{item.description}</p>
+                    {item.descriptionAbbrev ? <p className="mt-0.5 text-xs text-muted-foreground">{item.descriptionAbbrev}</p> : null}
+                  </div>
+                  {showFavorites && item.id > 0 ? (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleToggleFavorite(item);
+                      }}
+                      title={serverFavorite ? "Remover dos favoritos" : "Favoritar CID"}
+                      className={cn(
+                        "mt-1 shrink-0 transition-colors",
+                        serverFavorite ? "text-amber-500 hover:text-amber-600" : "text-muted-foreground hover:text-amber-500",
+                      )}
+                      disabled={addFavoriteMutation.isPending || removeFavoriteMutation.isPending}
+                    >
+                      <Star className="h-4 w-4" fill={serverFavorite ? "currentColor" : "none"} />
+                    </button>
+                  ) : null}
+                  {showFavorites && item.id < 0 ? <Star className="mt-1 h-4 w-4 text-amber-500" fill="currentColor" /> : null}
+                </div>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    );
+
+    if (typeof document === "undefined") {
+      return dropdownContent;
+    }
+
+    return createPortal(dropdownContent, document.body);
+  };
 
   return (
     <div className="relative w-full">

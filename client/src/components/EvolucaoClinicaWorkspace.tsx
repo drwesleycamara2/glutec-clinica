@@ -56,20 +56,19 @@ type EvolutionFormState = {
 };
 
 const SIGNATURE_METHODS = [
-  { value: "icp_brasil_a1", label: "Certificado A1" },
-  { value: "icp_brasil_a3", label: "Certificado A3" },
-];
+  { value: "icp_brasil_a3", label: "Certificado A3 pessoa física (e-CPF)" },
+  { value: "icp_brasil_a1", label: "Certificado A1 pessoa física (e-CPF)" },
+] as const;
 
 const SIGNATURE_PROVIDERS = {
   icp_brasil_a1: [
-    { value: "certificado_local_a1", label: "A1 local / arquivo" },
-    { value: "d4sign_icp", label: "D4Sign ICP-Brasil" },
+    { value: "d4sign_icp", label: "D4Sign ICP-Brasil (e-CPF)" },
   ],
   icp_brasil_a3: [
-    { value: "vidaas", label: "Vidaas" },
-    { value: "bird", label: "Bird ID" },
-    { value: "gov", label: "gov.br" },
-    { value: "d4sign_icp", label: "D4Sign ICP-Brasil" },
+    { value: "vidaas", label: "VIDaaS e-CPF" },
+    { value: "bird", label: "Bird ID e-CPF" },
+    { value: "gov", label: "gov.br e-CPF" },
+    { value: "d4sign_icp", label: "D4Sign ICP-Brasil (e-CPF)" },
   ],
 } as const;
 
@@ -300,11 +299,11 @@ function getEvolutionRecordKey(record: any) {
 }
 
 const SIGNATURE_PROVIDER_LABELS: Record<string, string> = {
-  certificado_local_a1: "A1 local / arquivo",
-  d4sign_icp: "D4Sign ICP-Brasil",
-  vidaas: "VIDaaS",
-  bird: "Bird ID",
-  gov: "gov.br",
+  d4sign_icp: "D4Sign ICP-Brasil (e-CPF)",
+  vidaas: "VIDaaS e-CPF",
+  bird: "Bird ID e-CPF",
+  gov: "gov.br e-CPF",
+  certificado_local_a1: "A1 local / arquivo (sem validade ICP)",
 };
 
 function getSignatureMethodLabel(record: any) {
@@ -326,6 +325,11 @@ function getSignatureDetails(record: any, fallbackSigner: string) {
   const provider = String(record?.signatureProvider ?? "").trim();
   const providerLabel = SIGNATURE_PROVIDER_LABELS[provider] || provider || "Não informado";
   const certificateLabel = repairTextArtifacts(record?.signatureCertificateLabel || record?.certificateLabel || "").trim();
+  const validationCode = repairTextArtifacts(record?.signatureValidationCode || record?.signatureHash || "").trim();
+  const sessionId = repairTextArtifacts(record?.signatureSessionId || record?.d4signDocumentKey || "").trim();
+  const providerKey = provider.toLowerCase();
+  const isLocalPlaceholder = providerKey.includes("local") || providerKey === "certificado_local_a1" || sessionId.toLowerCase().startsWith("local-");
+  const hasCertificateEvidence = Boolean(certificateLabel) && Boolean(provider) && !isLocalPlaceholder;
 
   return {
     signedAt: formatDateTime(record?.signedAt),
@@ -333,8 +337,10 @@ function getSignatureDetails(record: any, fallbackSigner: string) {
     method: getSignatureMethodLabel(record),
     provider: providerLabel,
     certificateLabel: certificateLabel || "Certificado não informado",
-    validationCode: repairTextArtifacts(record?.signatureValidationCode || record?.signatureHash || "").trim(),
-    sessionId: repairTextArtifacts(record?.signatureSessionId || record?.d4signDocumentKey || "").trim(),
+    validationCode,
+    sessionId,
+    hasCertificateEvidence,
+    warning: hasCertificateEvidence ? "" : "Assinatura sem evidência de certificado ICP-Brasil pessoa física. Reassine com e-CPF por provedor válido para validade jurídica.",
   };
 }
 
@@ -347,6 +353,7 @@ function buildSignatureDetailsHtml(signature: NonNullable<ReturnType<typeof getS
       <p style="margin:0 0 4px 0;"><strong>Método:</strong> ${escapeHtml(signature.method)}</p>
       <p style="margin:0 0 4px 0;"><strong>Provedor:</strong> ${escapeHtml(signature.provider)}</p>
       <p style="margin:0 0 4px 0;"><strong>Certificado:</strong> ${escapeHtml(signature.certificateLabel)}</p>
+      ${signature.warning ? `<p style="margin:0 0 8px 0;padding:8px;border:1px solid #f59e0b;border-radius:6px;background:#fffbeb;color:#92400e;"><strong>Atenção:</strong> ${escapeHtml(signature.warning)}</p>` : ""}
       ${signature.validationCode ? `<p style="margin:0 0 4px 0;word-break:break-all;"><strong>Código de validação:</strong> ${escapeHtml(signature.validationCode)}</p>` : ""}
       ${signature.sessionId ? `<p style="margin:0;word-break:break-all;"><strong>Sessão/documento:</strong> ${escapeHtml(signature.sessionId)}</p>` : ""}
     </div>
@@ -375,6 +382,36 @@ function canPersistDraft(form: EvolutionFormState, startedSessionAt: string) {
   return Boolean(form.icd10) || stripHtml(form.clinicalNotes).length > 0 || form.audioTranscription.trim().length > 0 || Boolean(form.attendanceType);
 }
 
+function normalizeStaffRoleText(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function getStaffRoleLabel(staff: any) {
+  const role = normalizeStaffRoleText(staff?.role);
+  const profession = normalizeStaffRoleText(staff?.profession);
+  const specialty = normalizeStaffRoleText(staff?.specialty);
+  const licenseType = normalizeStaffRoleText(staff?.professionalLicenseType);
+  const combined = `${role} ${profession} ${specialty} ${licenseType}`;
+
+  if (combined.includes("massoterapeuta")) return "Massoterapeuta";
+  if (role === "medico" || combined.includes("medic") || combined.includes("crm") || combined.includes("cirurg")) return "Médico";
+  if (combined.includes("enferm")) return "Enfermagem";
+  if (role === "gerente") return "Gerente";
+  if (combined.includes("secret") || combined.includes("recepc")) return "Secretária";
+
+  return String(staff?.profession || staff?.specialty || staff?.role || "").trim();
+}
+
+function formatStaffWithRole(staff: any) {
+  const name = String(staff?.name || staff?.email || "Profissional").trim();
+  const roleLabel = getStaffRoleLabel(staff);
+  if (!roleLabel) return name;
+  return `${name} - ${roleLabel}`;
+}
+
 interface Props {
   patientId: number;
   patientName: string;
@@ -388,8 +425,8 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
   const [signatureDialogOpen, setSignatureDialogOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [selectedEvolution, setSelectedEvolution] = useState<any | null>(null);
-  const [signatureMethod, setSignatureMethod] = useState<"icp_brasil_a1" | "icp_brasil_a3">("icp_brasil_a1");
-  const [signatureProvider, setSignatureProvider] = useState("certificado_local_a1");
+  const [signatureMethod, setSignatureMethod] = useState<"icp_brasil_a1" | "icp_brasil_a3">("icp_brasil_a3");
+  const [signatureProvider, setSignatureProvider] = useState("vidaas");
   const [signatureCertificateLabel, setSignatureCertificateLabel] = useState("");
   const [includeAuditReport, setIncludeAuditReport] = useState(true);
   const [startedSessionAt, setStartedSessionAt] = useState("");
@@ -528,11 +565,20 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
   }, [form.endedAt, form.isRetroactive, startedSessionAt]);
 
   const professionalName = (user as any)?.name || "Dr. Wesley Câmara";
-  const assistantOptions = (assistantsQuery.data ?? []).map((item: any) => ({
-    id: String(item.id),
-    name: item.name || item.email || `Usuário ${item.id}`,
-    role: item.role,
-  }));
+  const professionalDisplayName = formatStaffWithRole(user);
+  const currentUserId = String((user as any)?.id ?? "");
+  const assistantOptions = (assistantsQuery.data ?? [])
+    .map((item: any) => ({
+      id: String(item.id),
+      name: item.name || item.email || `Usuário ${item.id}`,
+      email: item.email,
+      role: item.role,
+      profession: item.profession,
+      specialty: item.specialty,
+      professionalLicenseType: item.professionalLicenseType,
+      displayName: formatStaffWithRole(item),
+    }))
+    .filter((item: any) => !currentUserId || item.id !== currentUserId);
   const templates = (templatesQuery.data ?? []).filter((template: any) => {
     const specialty = String(template.specialty ?? "").toLowerCase();
     return !specialty || specialty.includes("evolu") || specialty.includes("prontu") || specialty.includes("consulta");
@@ -872,21 +918,37 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
 
   const handleOpenSignature = (record: any) => {
     setSelectedEvolution(record);
-    setSignatureMethod("icp_brasil_a1");
-    setSignatureProvider("certificado_local_a1");
+    setSignatureMethod("icp_brasil_a3");
+    setSignatureProvider("vidaas");
     setSignatureCertificateLabel("");
     setSignatureDialogOpen(true);
   };
 
   const handleSign = async () => {
     if (!selectedEvolution?.id) return;
+
+    const externalDocumentKey = String(selectedEvolution?.d4signDocumentKey ?? "").trim();
+    const certificateLabel = signatureCertificateLabel.trim();
+    const hasExternalSignatureEvidence = Boolean(externalDocumentKey) && !externalDocumentKey.toLowerCase().startsWith("local-");
+
+    if (!hasExternalSignatureEvidence) {
+      toast.error("A assinatura clínica precisa passar por um provedor ICP-Brasil pessoa física (e-CPF). O sistema não marcará atendimento como assinado sem validação real do certificado.");
+      return;
+    }
+
+    if (!certificateLabel) {
+      toast.error("Informe a identificação do certificado pessoa física usado na assinatura.");
+      return;
+    }
+
     const validationCode = buildValidationCode(selectedEvolution.id);
 
     await signMutation.mutateAsync({
       id: selectedEvolution.id,
+      d4signDocumentKey: externalDocumentKey,
       signatureMethod,
       signatureProvider,
-      signatureCertificateLabel: signatureCertificateLabel || undefined,
+      signatureCertificateLabel: certificateLabel,
       signatureValidationCode: validationCode,
     });
   };
@@ -1233,7 +1295,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Profissional responsável</Label>
-              <Input value={professionalName} readOnly />
+              <Input value={professionalDisplayName} readOnly />
             </div>
             <div className="space-y-2">
               <Label>Profissional cadastrado que acompanhou</Label>
@@ -1249,7 +1311,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
                   setForm((current) => ({
                     ...current,
                     assistantUserId: value,
-                    assistantName: selectedAssistant?.name || current.assistantName,
+                    assistantName: selectedAssistant?.displayName || selectedAssistant?.name || current.assistantName,
                   }));
                 }}
               >
@@ -1260,7 +1322,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
                   <SelectItem value="manual">Digitar manualmente</SelectItem>
                   {assistantOptions.map((assistant) => (
                     <SelectItem key={assistant.id} value={assistant.id}>
-                      {assistant.name}
+                      {assistant.displayName}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1563,6 +1625,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
                   {signatureDetails && showSignatureDetails && (
                     <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs leading-5 text-emerald-950">
                       <p className="font-semibold text-emerald-800">Detalhes da assinatura digital</p>
+                      {signatureDetails.warning ? <p className="mb-2 rounded-md border border-amber-300 bg-amber-50 p-2 font-medium text-amber-800">{signatureDetails.warning}</p> : null}
                       <p>Assinado em: {signatureDetails.signedAt}</p>
                       <p>Assinante: {signatureDetails.signerName}</p>
                       <p>Método: {signatureDetails.method}</p>
@@ -1639,6 +1702,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
                       {signatureDetails && (
                         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs leading-5 text-emerald-950">
                           <p className="font-semibold text-emerald-800">Assinatura digital</p>
+                            {signatureDetails.warning ? <p className="mb-2 rounded-md border border-amber-300 bg-amber-50 p-2 font-medium text-amber-800">{signatureDetails.warning}</p> : null}
                           <p>Assinado em: {signatureDetails.signedAt}</p>
                           <p>Assinante: {signatureDetails.signerName}</p>
                           <p>Método: {signatureDetails.method}</p>
@@ -1710,12 +1774,12 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
               />
             </div>
 
-            <div className="rounded-xl border border-[#C9A55B]/20 bg-[#C9A55B]/5 p-3 text-xs text-muted-foreground">
-              <div className="mb-1 flex items-center gap-2 font-medium text-[#8A6526]">
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+              <div className="mb-1 flex items-center gap-2 font-semibold text-amber-900">
                 <ShieldCheck className="h-4 w-4" />
-                Registro de assinatura
+                Assinatura clínica exige e-CPF real
               </div>
-              O sistema registrará método, provedor, horário, profissional, código de validação e trilha de auditoria para exportação do PDF.
+              Atendimentos, atestados, prescrições e documentos clínicos não podem ser marcados como assinados por simulação local. Fora do módulo fiscal, use sempre certificado pessoa física ICP-Brasil por provedor integrado. Sem essa sessão validada, o sistema bloqueará a assinatura.
             </div>
           </div>
           <DialogFooter>

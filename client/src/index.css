@@ -192,6 +192,19 @@
     min-width: 0;
   }
 
+  .btn-gold-gradient {
+    background: linear-gradient(135deg, #F1D791 0%, #C9A55B 52%, #B8863B 100%);
+    border: 1px solid rgba(138, 101, 38, 0.45);
+    color: #050505 !important;
+    font-weight: 700;
+    box-shadow: 0 10px 24px rgba(138, 101, 38, 0.22);
+  }
+
+  .btn-gold-gradient:hover {
+    color: #050505 !important;
+    filter: brightness(0.98);
+  }
+
   @media (min-width: 640px) {
     .container {
       padding-left: 1.5rem; /* 24px - tablet padding */
