@@ -351,7 +351,16 @@ export const appRouter = router({
         const { runOnDoctorSignatureBackfill } = await import("./lib/legacy-signature-backfill");
         return runOnDoctorSignatureBackfill(input.csv, { dryRun: input.dryRun });
       }),
-
+    backfillVerdeContractSignatures: protectedProcedure
+      .input(z.object({
+        csv: z.string().min(20).max(5_000_000),
+        dryRun: z.boolean().default(true),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+        const { runVerdeContractSignatureBackfill } = await import("./lib/legacy-verde-document-backfill");
+        return runVerdeContractSignatureBackfill(input.csv, { dryRun: input.dryRun });
+      }),
     generateSystemExport: protectedProcedure
       .input(z.object({
         currentPassword: z.string().min(1),

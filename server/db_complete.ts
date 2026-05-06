@@ -675,7 +675,8 @@ function normalizeDocumentRow(row: any) {
     content,
     templateGroup: typeof metadata?.templateGroup === "string" ? metadata.templateGroup : null,
     signedAt: metadata?.signedAt ?? row?.signedAt ?? null,
-    signedByName: metadata?.signedByName ?? row?.signedByName ?? null,
+    signedBy: row?.signedBy ?? metadata?.signedByName ?? null,
+    signedByName: metadata?.signedByName ?? row?.signedByName ?? row?.signedBy ?? null,
     signatureProvider: metadata?.signatureProvider ?? row?.signatureProvider ?? null,
     signatureValidationCode: metadata?.signatureValidationCode ?? row?.signatureValidationCode ?? null,
   };

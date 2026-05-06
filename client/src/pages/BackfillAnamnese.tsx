@@ -154,6 +154,7 @@ export default function BackfillAnamnese() {
       </Card>
 
       <SignatureBackfillSection />
+      <VerdeContractSignatureBackfillSection />
 
       {lastResult ? (
         <Card className="border shadow-sm">
@@ -377,5 +378,177 @@ function SignatureBackfillSection() {
         </Card>
       ) : null}
     </>
+  );
+}
+
+function VerdeContractSignatureBackfillSection() {
+  const [csvText, setCsvText] = useState("");
+  const [result, setResult] = useState<any>(null);
+  const dryRunMutation = trpc.admin.backfillVerdeContractSignatures.useMutation({
+    onSuccess: (data) => {
+      setResult({ ...data, mode: "dryRun" });
+      toast.success(`Pré-visualização: ${data.matchedInGlutec} de ${data.rowsMarkedSigned} assinaturas casadas com contratos/termos.`);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+  const applyMutation = trpc.admin.backfillVerdeContractSignatures.useMutation({
+    onSuccess: (data) => {
+      setResult({ ...data, mode: "applied" });
+      toast.success(`${data.updated} documentos atualizados com metadados de assinatura.`);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const isBusy = dryRunMutation.isPending || applyMutation.isPending;
+
+  const runDryRun = () => {
+    if (!csvText.trim()) {
+      toast.error("Cole o conteúdo do exp_contrato_termo.csv (separado por ;).");
+      return;
+    }
+    dryRunMutation.mutate({ csv: csvText, dryRun: true });
+  };
+
+  const runApply = () => {
+    if (!csvText.trim()) {
+      toast.error("Cole o CSV antes de aplicar.");
+      return;
+    }
+    if (!window.confirm(
+      "Aplicar dados de assinatura nos contratos e termos do Prontuário Verde? Esta ação grava no banco.",
+    )) return;
+    applyMutation.mutate({ csv: csvText, dryRun: false });
+  };
+
+  return (
+    <>
+      <Card className="border shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <FileSignature className="h-4 w-4 text-[#C9A55B]" />
+            Importar assinaturas — Contratos Verde
+          </CardTitle>
+          <CardDescription>
+            Cole abaixo o conteúdo de <code>exp_contrato_termo.csv</code> do Prontuário Verde.
+            Para cada linha com <code>Assinado em</code>, o sistema localiza o PDF pelo campo <code>Documento</code>
+            e grava <code className="mx-1">signedAt</code>, <code>signedBy</code>,
+            <code className="mx-1">signatureProvider</code> e <code>signatureMethod</code> em <code>patient_documents</code>.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Textarea
+            value={csvText}
+            onChange={(event) => setCsvText(event.target.value)}
+            placeholder="CLI_ID;Unidade;Tipo;Lançado por;PAC_ID;Nome Paciente;Emitido;Assinado em;Assinado por;Documento"
+            rows={10}
+            className="font-mono text-xs"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={runDryRun} disabled={isBusy} className="gap-2" variant="outline">
+              {dryRunMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+              Pré-visualizar (dry run)
+            </Button>
+            <Button
+              onClick={runApply}
+              disabled={isBusy || result?.mode !== "dryRun"}
+              className="gap-2 bg-[#8A6526] hover:bg-[#6B4F1B]"
+              title={result?.mode !== "dryRun" ? "Rode o dry-run antes" : "Aplicar no banco"}
+            >
+              {applyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Aplicar no banco
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <SignatureBackfillResultCard result={result} sourceLabel="Documento" targetLabel="patient_documents.id" />
+    </>
+  );
+}
+
+function SignatureBackfillResultCard({ result, sourceLabel, targetLabel, markedLabel = "Marcadas assinadas" }: { result: any; sourceLabel: string; targetLabel: string; markedLabel?: string }) {
+  if (!result) return null;
+
+  return (
+    <Card className="border shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm flex items-center gap-2">
+          {result.mode === "applied" ? "Resultado das assinaturas aplicadas" : "Pré-visualização das assinaturas"}
+          <Badge variant={result.mode === "applied" ? "default" : "secondary"}>
+            {result.mode === "applied" ? "GRAVADO" : "DRY RUN"}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="rounded-lg border p-3">
+            <p className="text-xs text-muted-foreground">Linhas no CSV</p>
+            <p className="mt-1 text-lg font-semibold">{result.totalRows}</p>
+          </div>
+          <div className="rounded-lg border p-3">
+            <p className="text-xs text-muted-foreground">{markedLabel}</p>
+            <p className="mt-1 text-lg font-semibold">{result.rowsMarkedSigned}</p>
+          </div>
+          <div className="rounded-lg border p-3">
+            <p className="text-xs text-muted-foreground">Casadas no Glutec</p>
+            <p className="mt-1 text-lg font-semibold">{result.matchedInGlutec}</p>
+          </div>
+          <div className="rounded-lg border p-3">
+            <p className="text-xs text-muted-foreground">Atualizadas</p>
+            <p className="mt-1 text-lg font-semibold">{result.updated}</p>
+          </div>
+        </div>
+
+        {Array.isArray(result.sampleMatched) && result.sampleMatched.length > 0 ? (
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground">Amostra de casamentos (primeiros 5)</p>
+            <div className="mt-1 overflow-x-auto">
+              <table className="min-w-full text-xs">
+                <thead className="text-muted-foreground">
+                  <tr>
+                    <th className="py-1 pr-3 text-left">{sourceLabel}</th>
+                    <th className="py-1 pr-3 text-left">{targetLabel}</th>
+                    <th className="py-1 pr-3 text-left">arquivo</th>
+                    <th className="py-1 pr-3 text-left">signedAt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.sampleMatched.map((item: any) => (
+                    <tr key={`${item.targetId}-${item.sourceId}`} className="border-t border-border/30">
+                      <td className="py-1 pr-3 font-mono">{item.sourceId}</td>
+                      <td className="py-1 pr-3 font-mono">{item.targetId}</td>
+                      <td className="py-1 pr-3">{item.arquivo}</td>
+                      <td className="py-1 pr-3">{item.signedAt}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
+
+        {Array.isArray(result.unmatchedSourceIds) && result.unmatchedSourceIds.length > 0 ? (
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground">
+              IDs sem correspondência no Glutec (primeiros 50)
+            </p>
+            <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
+              {result.unmatchedSourceIds.join(", ")}
+            </p>
+          </div>
+        ) : null}
+
+        {Array.isArray(result.errors) && result.errors.length > 0 ? (
+          <div>
+            <p className="text-xs font-semibold text-rose-700">Erros</p>
+            <ul className="mt-1 list-disc pl-4 text-xs text-rose-700">
+              {result.errors.slice(0, 10).map((err: string, idx: number) => (
+                <li key={idx}>{err}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }

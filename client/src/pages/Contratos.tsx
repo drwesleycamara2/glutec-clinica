@@ -23,6 +23,15 @@ function formatDate(value?: string | null) {
   if (Number.isNaN(date.getTime())) return "Sem data";
   return date.toLocaleDateString("pt-BR");
 }
+function formatSignedLabel(doc: any) {
+  if (!doc?.signedAt) return null;
+  const date = new Date(doc.signedAt);
+  const dateLabel = Number.isNaN(date.getTime())
+    ? String(doc.signedAt)
+    : date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  const signer = cleanText(doc.signedBy || doc.signedByName);
+  return `Assinado em ${dateLabel}${signer ? ` por ${signer}` : ""}`;
+}
 
 function documentLabel(type?: string | null) {
   const normalized = String(type || "").toLowerCase();
@@ -89,6 +98,7 @@ export default function Contratos() {
       ) : (
         <div className="space-y-3">
           {contracts.map((doc: any) => {
+            const signedLabel = formatSignedLabel(doc);
             const fileUrl = doc.fileUrl || doc.url || "";
             return (
               <Card key={doc.id} className="border-border/50">
@@ -108,6 +118,9 @@ export default function Contratos() {
                     <p><span className="font-medium text-foreground">Origem:</span> {doc.sourceSystem === "prontuario_verde" ? "Prontuário Verde" : cleanText(doc.sourceSystem) || "Sistema"}</p>
                   </div>
                   {doc.description ? <p className="text-sm text-muted-foreground">{cleanText(doc.description)}</p> : null}
+                  {signedLabel ? (
+                    <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">{signedLabel}</p>
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
                     {fileUrl ? (
                       <a href={fileUrl} target="_blank" rel="noopener noreferrer">

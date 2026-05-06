@@ -1854,6 +1854,15 @@ function ContratosTab({ patientId }: { patientId: number }) {
 
   const contratos = contratosTermos.filter((d) => d.type === "contrato");
   const termos = contratosTermos.filter((d) => d.type === "termo");
+  const formatDocumentSignedLabel = (doc: any) => {
+    if (!doc?.signedAt) return null;
+    const date = new Date(doc.signedAt);
+    const dateLabel = Number.isNaN(date.getTime())
+      ? String(doc.signedAt)
+      : date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+    const signer = formatImportedText(doc.signedBy || doc.signedByName || "");
+    return `Assinado em ${dateLabel}${signer ? ` por ${signer}` : ""}`;
+  };
 
   const renderList = (items: any[], emptyLabel: string) => (
     items.length === 0 ? (
@@ -1885,6 +1894,11 @@ function ContratosTab({ patientId }: { patientId: number }) {
                   )}
                   {doc.description && (
                     <span className="text-[10px] text-muted-foreground truncate">{formatImportedText(doc.description)}</span>
+                  )}
+                  {formatDocumentSignedLabel(doc) && (
+                    <Badge variant="outline" className="h-4 border-emerald-200 px-1 text-[9px] text-emerald-700 dark:border-emerald-700 dark:text-emerald-300">
+                      {formatDocumentSignedLabel(doc)}
+                    </Badge>
                   )}
                 </div>
               </div>
