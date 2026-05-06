@@ -1232,11 +1232,7 @@ export const appRouter = router({
         specialties: z.array(z.string()).optional(),
         structuralSectors: z.array(z.string().min(1)).optional(),
         patientAttachmentFolders: z.array(z.string().min(1)).optional(),
-        openingHours: z.array(z.object({
-          day: z.string(),
-          open: z.string(),
-          close: z.string(),
-        })).optional(),
+        openingHours: z.unknown().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });

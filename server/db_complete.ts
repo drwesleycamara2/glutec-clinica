@@ -22,6 +22,7 @@ import {
 } from "./lib/patient-normalization-safe";
 import { encryptSensitiveValue, maskStoredValue } from "./lib/secure-storage";
 import { createWhatsAppService } from "./whatsapp";
+import { DEFAULT_OPENING_HOURS_CONFIG, normalizeOpeningHoursConfig } from "../shared/schedule-hours";
 
 function unwrapRows<T = any>(result: any): T[] {
   if (Array.isArray(result) && Array.isArray(result[0])) {
@@ -3267,6 +3268,7 @@ export async function getClinicSettings() {
     return {
       structuralSectors: [...DEFAULT_CLINIC_STRUCTURAL_SECTORS],
       patientAttachmentFolders: [...DEFAULT_PATIENT_ATTACHMENT_FOLDERS],
+      openingHours: DEFAULT_OPENING_HOURS_CONFIG,
     };
   }
 
@@ -3274,6 +3276,7 @@ export async function getClinicSettings() {
     ...settings,
     structuralSectors: normalizeClinicStructuralSectors(settings.structuralSectors),
     patientAttachmentFolders: normalizeClinicAttachmentFolders(settings.patientAttachmentFolders),
+    openingHours: normalizeOpeningHoursConfig(settings.openingHours),
   };
 }
 
@@ -3291,6 +3294,10 @@ export async function updateClinicSettings(data: any) {
       data.patientAttachmentFolders === undefined
         ? undefined
         : JSON.stringify(normalizeClinicAttachmentFolders(data.patientAttachmentFolders)),
+    openingHours:
+      data.openingHours === undefined
+        ? undefined
+        : JSON.stringify(normalizeOpeningHoursConfig(data.openingHours)),
   };
 
   const existing = await getClinicSettings();

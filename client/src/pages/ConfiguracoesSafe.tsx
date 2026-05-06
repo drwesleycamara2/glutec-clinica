@@ -8,7 +8,18 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Switch as ToggleSwitch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import {
+  SCHEDULE_DAY_KEYS,
+  SCHEDULE_DAY_LABELS,
+  cloneOpeningHoursConfig,
+  createDefaultWeeklySchedule,
+  ensureProfessionalSchedules,
+  normalizeOpeningHoursConfig,
+  type ScheduleDayKey,
+  type WeeklySchedule,
+} from "@shared/schedule-hours";
 import {
   Moon,
   Sun,
@@ -21,6 +32,7 @@ import {
   Plus,
   MinusCircle,
   FolderOpen,
+  CalendarClock,
   FileLock2,
 } from "lucide-react";
 
@@ -36,15 +48,17 @@ export default function ConfiguracoesSafe() {
   const updateClinicMutation = trpc.clinic.update.useMutation({
     onSuccess: async () => {
       await clinicQuery.refetch();
-      toast.success("Estrutura da clínica atualizada.");
+      toast.success("Configuracoes da clinica atualizadas.");
     },
     onError: (error) => toast.error(error.message),
   });
+  const doctorsQuery = trpc.admin.getDoctors.useQuery(undefined, { enabled: isAdmin });
 
   const [newSector, setNewSector] = useState("");
   const [newAttachmentFolder, setNewAttachmentFolder] = useState("");
   const [structuralSectors, setStructuralSectors] = useState<string[]>(DEFAULT_STRUCTURAL_SECTORS);
   const [attachmentFolders, setAttachmentFolders] = useState<string[]>(DEFAULT_ATTACHMENT_FOLDERS);
+  const [openingHoursConfig, setOpeningHoursConfig] = useState(() => normalizeOpeningHoursConfig(null));
 
   useEffect(() => {
     const sectors =
@@ -58,7 +72,11 @@ export default function ConfiguracoesSafe() {
         ? clinicQuery.data.patientAttachmentFolders
         : DEFAULT_ATTACHMENT_FOLDERS;
     setAttachmentFolders(folders);
-  }, [clinicQuery.data]);
+
+    setOpeningHoursConfig(
+      ensureProfessionalSchedules(normalizeOpeningHoursConfig(clinicQuery.data?.openingHours), doctorsQuery.data ?? []),
+    );
+  }, [clinicQuery.data, doctorsQuery.data]);
 
   const normalizedSectors = useMemo(
     () => structuralSectors.map((item) => item.trim()).filter(Boolean),
@@ -115,6 +133,76 @@ export default function ConfiguracoesSafe() {
     setAttachmentFolders((current) => current.filter((item) => item !== folder));
   };
 
+  const updateScheduleDay = (
+    target: "clinic" | string,
+    dayKey: ScheduleDayKey,
+    patch: Partial<{ enabled: boolean; start: string; end: string }>,
+  ) => {
+    setOpeningHoursConfig((current) => {
+      const next = cloneOpeningHoursConfig(ensureProfessionalSchedules(current, doctorsQuery.data ?? []));
+      const schedule = target === "clinic"
+        ? next.clinic
+        : next.professionals[String(target)] ?? createDefaultWeeklySchedule();
+      schedule.days[dayKey] = { ...schedule.days[dayKey], ...patch };
+      if (target === "clinic") {
+        next.clinic = schedule;
+      } else {
+        next.professionals[String(target)] = schedule;
+      }
+      return normalizeOpeningHoursConfig(next);
+    });
+  };
+
+  const saveOpeningHours = () => {
+    updateClinicMutation.mutate({
+      openingHours: ensureProfessionalSchedules(openingHoursConfig, doctorsQuery.data ?? []),
+    });
+  };
+
+  const renderScheduleEditor = (title: string, subtitle: string, target: "clinic" | string, schedule: WeeklySchedule) => (
+    <div key={`${target}-schedule`} className="rounded-xl border border-border/60 bg-muted/10 p-4">
+      <div className="mb-4">
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
+      </div>
+      <div className="space-y-3">
+        {SCHEDULE_DAY_KEYS.map((dayKey) => {
+          const day = schedule.days[dayKey];
+          return (
+            <div key={`${target}-${dayKey}`} className="grid gap-3 rounded-lg border border-border/50 bg-background/70 p-3 sm:grid-cols-[170px_1fr_1fr]">
+              <div className="flex items-center gap-3">
+                <ToggleSwitch
+                  checked={day.enabled}
+                  onCheckedChange={(checked) => updateScheduleDay(target, dayKey, { enabled: checked })}
+                />
+                <span className="text-sm font-medium text-foreground">{SCHEDULE_DAY_LABELS[dayKey]}</span>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Inicio</Label>
+                <Input
+                  type="time"
+                  step={1800}
+                  value={day.start}
+                  disabled={!day.enabled}
+                  onChange={(event) => updateScheduleDay(target, dayKey, { start: event.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Fim</Label>
+                <Input
+                  type="time"
+                  step={1800}
+                  value={day.end}
+                  disabled={!day.enabled}
+                  onChange={(event) => updateScheduleDay(target, dayKey, { end: event.target.value })}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
   const saveStructure = () => {
     updateClinicMutation.mutate({
       structuralSectors: normalizedSectors.length > 0 ? normalizedSectors : DEFAULT_STRUCTURAL_SECTORS,
@@ -279,6 +367,57 @@ export default function ConfiguracoesSafe() {
           </CardContent>
         </Card>
 
+        {isAdmin ? (
+          <Card className="border-primary/10 bg-card/50 backdrop-blur-sm md:col-span-2">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <CalendarClock className="h-5 w-5 text-primary" />
+                <CardTitle>Horarios de agenda</CardTitle>
+              </div>
+              <CardDescription>
+                Configure o funcionamento da clinica e a agenda propria de cada profissional habilitado.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {renderScheduleEditor(
+                "Funcionamento da clinica",
+                "Padrao inicial: segunda a sexta das 09:00 as 19:00 e sabado das 09:30 as 13:00.",
+                "clinic",
+                openingHoursConfig.clinic,
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Agendas dos profissionais</p>
+                  <p className="text-xs text-muted-foreground">
+                    Apenas usuarios com agenda habilitada aparecem aqui e na tela de agendamento.
+                  </p>
+                </div>
+                {(doctorsQuery.data ?? []).length === 0 ? (
+                  <p className="rounded-lg border border-border/60 bg-muted/20 px-3 py-3 text-sm text-muted-foreground">
+                    Nenhum profissional com agenda habilitada foi encontrado.
+                  </p>
+                ) : (
+                  (doctorsQuery.data ?? []).map((doctor: any) =>
+                    renderScheduleEditor(
+                      String(doctor?.name ?? `Profissional #${doctor?.id}`),
+                      "Horario aberto individual dentro do funcionamento geral da clinica.",
+                      String(doctor.id),
+                      openingHoursConfig.professionals[String(doctor.id)] ?? createDefaultWeeklySchedule(),
+                    ),
+                  )
+                )}
+              </div>
+
+              <div className="flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-muted-foreground">Os horarios livres da agenda aparecem em intervalos de 30 minutos.</p>
+                <Button type="button" onClick={saveOpeningHours} className="btn-glossy-gold" disabled={updateClinicMutation.isPending}>
+                  {updateClinicMutation.isPending ? "Salvando..." : "Salvar horarios"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
         <Card className="border-primary/10 bg-card/50 backdrop-blur-sm opacity-60">
           <CardHeader>
             <div className="flex items-center gap-2">

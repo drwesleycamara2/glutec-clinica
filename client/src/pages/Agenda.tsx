@@ -3,6 +3,13 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { patientDisplayName } from "@/lib/patientDisplay";
+import {
+  generateTimeSlotsForDate,
+  getScheduleForProfessional,
+  isDateTimeInsideSchedule,
+  normalizeOpeningHoursConfig,
+  sortTimeSlots,
+} from "@shared/schedule-hours";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -87,7 +94,7 @@ const DAY_STATUS_LABELS: Record<keyof typeof DAY_STATUS_COLORS, string> = {
   parcial: "Parcialmente livre",
   ocupado: "Ocupado",
   bloqueado: "Bloqueado ou feriado",
-  fechado: "Domingo (fechado)",
+  fechado: "Fechado",
   sabado_vazio: "Sábado livre",
   sabado_ocupado: "Sábado com atendimento",
 };
@@ -115,17 +122,6 @@ const defaultBlockForm = {
 };
 
 type ViewMode = "day" | "week";
-
-function generateTimeSlots() {
-  const slots: string[] = [];
-  for (let hour = 8; hour < 20; hour += 1) {
-    slots.push(`${hour.toString().padStart(2, "0")}:00`);
-    slots.push(`${hour.toString().padStart(2, "0")}:30`);
-  }
-  return slots;
-}
-
-const TIME_SLOTS = generateTimeSlots();
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
@@ -425,6 +421,12 @@ export default function Agenda() {
     return values.length > 0 ? values : ["Consultório", "Centro Cirúrgico"];
   }, [clinicSettings]);
 
+  const openingHoursConfig = useMemo(() => normalizeOpeningHoursConfig(clinicSettings?.openingHours), [clinicSettings?.openingHours]);
+  const selectedSchedule = useMemo(
+    () => getScheduleForProfessional(openingHoursConfig, selectedDoctor),
+    [openingHoursConfig, selectedDoctor],
+  );
+
   const isEditingAppointment = Boolean(appointmentForm.appointmentId);
   const isSavingAppointment = createAppointmentMutation.isPending || updateAppointmentMutation.isPending;
 
@@ -501,6 +503,12 @@ export default function Agenda() {
     return map;
   }, [selectedDayAppointments, patients, doctors]);
 
+  const visibleTimeSlots = useMemo(() => {
+    const configuredSlots = generateTimeSlotsForDate(selectedDate, selectedSchedule);
+    const appointmentSlots = Object.keys(slotMap);
+    return sortTimeSlots([...configuredSlots, ...appointmentSlots]);
+  }, [selectedDate, selectedSchedule, slotMap]);
+
   const blockForSlot = (slot: string) => {
     const slotStart = buildDateTimeForSlot(selectedDate, slot);
     const slotEnd = new Date(slotStart.getTime() + 30 * 60 * 1000);
@@ -522,26 +530,17 @@ export default function Agenda() {
     const dayBlocks = filteredBlocks.filter((block) =>
       doesRangeOverlap(new Date(block.startsAt), new Date(block.endsAt), dayStart, dayEnd)
     );
+    const daySlots = generateTimeSlotsForDate(date, getScheduleForProfessional(openingHoursConfig, selectedDoctor));
 
-    // Domingo: sempre preto (fechado)
-    if (dayOfWeek === 0) return "fechado";
+    if (daySlots.length === 0) return "fechado";
+    if (dayBlocks.length > 0) return "bloqueado";
 
-    // Sábado: cinza se vazio, vermelho se tiver qualquer agendamento
     if (dayOfWeek === 6) {
-      if (dayBlocks.length > 0) return "bloqueado";
       return activeDayAppointments.length > 0 ? "sabado_ocupado" : "sabado_vazio";
     }
 
-    // Dias bloqueados ou feriados: roxo
-    if (dayBlocks.length > 0) return "bloqueado";
-
-    // Dia livre: verde
     if (activeDayAppointments.length === 0) return "livre";
-
-    // Agenda cheia: vermelho
-    if (activeDayAppointments.length >= TIME_SLOTS.length) return "ocupado";
-
-    // Parcialmente ocupado: amarelo
+    if (activeDayAppointments.length >= Math.max(daySlots.length, 1)) return "ocupado";
     return "parcial";
   };
 
@@ -573,6 +572,13 @@ export default function Agenda() {
 
     if (!Number.isFinite(durationMinutes) || durationMinutes < 5) {
       toast.error("Informe uma duração válida para o atendimento.");
+      return;
+    }
+
+    const scheduledDate = new Date(appointmentForm.scheduledAt);
+    const doctorSchedule = getScheduleForProfessional(openingHoursConfig, appointmentForm.doctorId);
+    if (Number.isNaN(scheduledDate.getTime()) || !isDateTimeInsideSchedule(scheduledDate, doctorSchedule, durationMinutes)) {
+      toast.error("Este horario esta fora da agenda aberta do profissional ou da clinica.");
       return;
     }
 
@@ -766,7 +772,14 @@ export default function Agenda() {
                   </tr>
                 </thead>
                 <tbody>
-                  {TIME_SLOTS.map((slot) => {
+                  {visibleTimeSlots.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="border-t border-gray-200 px-3 py-10 text-center text-sm text-gray-500">
+                        Agenda fechada neste dia para o filtro selecionado.
+                      </td>
+                    </tr>
+                  ) : null}
+                  {visibleTimeSlots.map((slot) => {
                     const appointmentsInSlot = slotMap[slot] ?? [];
                     const activeBlock = blockForSlot(slot);
 
@@ -1033,7 +1046,7 @@ export default function Agenda() {
           </div>
           <div className="flex items-center gap-2">
             <div className="h-4 w-4 rounded bg-black" />
-            <span className="text-gray-700">Domingo (fechado)</span>
+            <span className="text-gray-700">Fechado</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="h-4 w-4 rounded bg-gray-400" />
