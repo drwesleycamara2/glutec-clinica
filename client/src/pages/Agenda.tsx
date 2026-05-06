@@ -114,7 +114,7 @@ const defaultBlockForm = {
   notes: "",
 };
 
-type ViewMode = "day" | "week" | "month";
+type ViewMode = "day" | "week";
 
 function generateTimeSlots() {
   const slots: string[] = [];
@@ -348,7 +348,7 @@ export default function Agenda() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
-  const [viewMode, setViewMode] = useState<ViewMode>("month");
+  const [viewMode, setViewMode] = useState<ViewMode>("day");
   const [selectedDoctor, setSelectedDoctor] = useState("all");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showBlockDialog, setShowBlockDialog] = useState(false);
@@ -709,7 +709,7 @@ export default function Agenda() {
           </div>
 
           <div className="flex gap-2">
-            {(["day", "week", "month"] as ViewMode[]).map((mode) => (
+            {(["day", "week"] as ViewMode[]).map((mode) => (
               <Button
                 key={mode}
                 variant={viewMode === mode ? "default" : "outline"}
@@ -717,7 +717,7 @@ export default function Agenda() {
                 onClick={() => setViewMode(mode)}
                 className={viewMode === mode ? "btn-gold-gradient font-semibold text-slate-950 hover:text-slate-950" : "border-gray-300 bg-white text-gray-900 hover:bg-gray-100 hover:text-gray-950"}
               >
-                {mode === "day" ? "Dia" : mode === "week" ? "Semana" : "Mês"}
+                {mode === "day" ? "Dia" : "Semana"}
               </Button>
             ))}
           </div>
@@ -943,173 +943,6 @@ export default function Agenda() {
             </div>
           </div>
         )}
-
-        {viewMode === "month" && (
-          <div className="flex min-w-0 flex-1 flex-col">
-            <h2 className="mb-4 text-lg font-bold text-foreground">
-              {MONTHS_PT[calendarMonth]} {calendarYear}
-            </h2>
-            <div className="grid grid-cols-7 gap-2">
-              {DAYS_PT.map((day) => (
-                <div key={day} className="py-2 text-center text-sm font-semibold text-gray-700">
-                  {day}
-                </div>
-              ))}
-              {calendarDays.map((day, index) => {
-                if (day === null) {
-                  return <div key={`empty-${index}`} className="aspect-square" />;
-                }
-
-                const date = new Date(calendarYear, calendarMonth, day);
-                return (
-                  <button
-                    key={day}
-                    type="button"
-                    onClick={() => {
-                      setSelectedDate(date);
-                    }}
-                    className={`aspect-square rounded-lg font-semibold text-white transition-all hover:shadow-lg ${DAY_STATUS_COLORS[getDayStatus(date)]}`}
-                  >
-                    {day}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="mt-5 rounded-2xl border border-gray-300 bg-white p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 pb-4">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-500">Agenda do dia selecionado</p>
-                  <h3 className="mt-1 text-lg font-semibold text-gray-900">
-                    {selectedDate.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}
-                  </h3>
-                </div>
-                <div className="flex gap-2">
-                  <Badge className="border border-[#C9A55B]/25 bg-[#C9A55B]/10 text-[#8A6526]">
-                    {selectedDayAppointments.length} agendamento(s)
-                  </Badge>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-gray-300 bg-white text-gray-900 hover:bg-gray-100 hover:text-gray-950"
-                    onClick={() => setViewMode("day")}
-                  >
-                    Ver dia completo
-                  </Button>
-                </div>
-              </div>
-
-              <div className="mt-4 space-y-3">
-                {selectedDayAppointments.length === 0 ? (
-                  <p className="text-sm text-gray-500">Nenhum paciente agendado para este dia.</p>
-                ) : (
-                  selectedDayAppointments.map((item) => (
-                    <div
-                      key={item.id}
-                      className="rounded-xl border border-gray-200 bg-gray-50 p-4"
-                    >
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="space-y-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-base font-semibold text-gray-900">
-                              {new Date(item.scheduledAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                            </span>
-                            <Badge className={getStatusBadgeClass(item.status)}>
-                              {STATUS_LABELS[item.status] ?? item.status}
-                            </Badge>
-                          </div>
-                          <p className="text-sm font-semibold text-gray-900">{getPatientName(item.patientId)}</p>
-                          <p className="text-xs text-gray-500">
-                            {getDoctorName(item.doctorId)} · {item.room || "Sem sala"}
-                          </p>
-                          {item.status === "cancelada" ? (
-                            <p className="text-xs text-rose-600">{getCancellationSummary(item)}</p>
-                          ) : null}
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="border-gray-300 bg-white text-gray-900 hover:bg-gray-100 hover:text-gray-950"
-                            onClick={() => openAppointmentDetails(item)}
-                          >
-                            Ver detalhes
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="btn-gold-gradient font-semibold text-slate-950 hover:text-slate-950"
-                            onClick={() => setLocation(`/prontuarios/${item.patientId}#evolucao`)}
-                          >
-                            Iniciar atendimento
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-2xl border border-gray-300 bg-white p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 pb-4">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-500">Bloqueios do dia selecionado</p>
-                  <h3 className="mt-1 text-lg font-semibold text-gray-900">
-                    {selectedDate.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}
-                  </h3>
-                </div>
-                <Badge className="border border-amber-200 bg-amber-100 text-amber-700">
-                  {selectedDayBlocks.length} bloqueio(s)
-                </Badge>
-              </div>
-
-              <div className="mt-4 space-y-3">
-                {selectedDayBlocks.length === 0 ? (
-                  <p className="text-sm text-gray-500">Nenhum bloqueio registrado para este dia.</p>
-                ) : (
-                  selectedDayBlocks.map((block) => (
-                    <div
-                      key={block.id}
-                      className="rounded-xl border border-amber-200 bg-amber-50 p-4"
-                    >
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="space-y-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-base font-semibold text-gray-900">
-                              {new Date(block.startsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} até {new Date(block.endsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                            </span>
-                            <Badge className="border border-amber-200 bg-white text-amber-700">
-                              Bloqueado
-                            </Badge>
-                          </div>
-                          <p className="text-sm font-semibold text-gray-900">{block.title}</p>
-                          <p className="text-xs text-gray-500">
-                            Sala: {block.room || "Todas"} · Profissional: {block.doctorId ? getDoctorName(block.doctorId) : "Todos"}
-                          </p>
-                          {block.notes ? (
-                            <p className="text-xs text-gray-500">{formatImportedText(block.notes)}</p>
-                          ) : null}
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="border-gray-300 bg-white text-gray-900 hover:bg-gray-100 hover:text-gray-950"
-                            onClick={() => openBlockDetails(block)}
-                          >
-                            Ver detalhes
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="flex w-80 flex-col gap-4">
@@ -1165,7 +998,10 @@ export default function Agenda() {
                 <button
                   key={day}
                   type="button"
-                  onClick={() => setSelectedDate(date)}
+                  onClick={() => {
+                    setSelectedDate(date);
+                    setViewMode("day");
+                  }}
                   className={`aspect-square rounded text-xs font-semibold text-white transition-all ${
                     isSelected ? "ring-2 ring-gray-400 ring-offset-1" : ""
                   } ${DAY_STATUS_COLORS[getDayStatus(date)]}`}
