@@ -145,11 +145,12 @@ function deriveSystemRole(jobTitles: TeamJobId[]) {
 
 function getAccessStage(user: UserRow): AccessStage {
   const openId = String(user.openId ?? "");
+  const status = String(user.status ?? "");
   const isInvitePlaceholder = openId.startsWith("invited_");
   const isTwoFactorEnabled = Boolean(user.twoFactorEnabled);
 
-  if (isInvitePlaceholder) return "invite_pending";
-  if (String(user.status ?? "") !== "active") return "inactive";
+  if (isInvitePlaceholder && status !== "active") return "invite_pending";
+  if (status !== "active") return "inactive";
   if (!isTwoFactorEnabled) return "awaiting_2fa";
   return "active";
 }

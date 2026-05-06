@@ -38,7 +38,6 @@ import {
   Camera,
   ClipboardList,
   Clock,
-  Database,
   FileStack,
   FileText,
   Files,
@@ -60,6 +59,7 @@ import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { SimplesNacionalReminder } from "./SimplesNacionalReminder";
 import { ThemeToggle } from "./ThemeToggle";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "./ui/button";
 import { canAccessModule } from "@/lib/access";
 import {
@@ -112,11 +112,10 @@ const menuSections: MenuSection[] = [
       { icon: MessageSquare, label: "CRM", path: "/crm", moduleId: "crm" },
       { icon: BarChart3, label: "Relatórios", path: "/relatorios", adminOnly: true, moduleId: "relatorios" },
       { icon: ShieldCheck, label: "Auditoria", path: "/auditoria", adminOnly: true },
-      { icon: Database, label: "Backfill anamnese", path: "/admin/backfill-anamnese", adminOnly: true },
       { icon: MessageSquare, label: "Chat", path: "/chat", moduleId: "chat" },
       { icon: UserCircle2, label: "Perfil", path: "/perfil" },
       { icon: ShieldCheck, label: "Usuários", path: "/usuarios", adminOnly: true, moduleId: "usuarios" },
-      { icon: Settings, label: "Configurações", path: "/configuracoes", moduleId: "configuracoes" },
+      { icon: Settings, label: "Configurações", path: "/configuracoes" },
     ],
   },
 ];
@@ -235,6 +234,7 @@ function DashboardLayoutPremiumContent({
   setSidebarWidth: (width: number) => void;
 }) {
   const { user, logout } = useAuth();
+  const { setStorageScope } = useTheme();
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar, isMobile } = useSidebar();
   const [isResizing, setIsResizing] = useState(false);
@@ -254,6 +254,12 @@ function DashboardLayoutPremiumContent({
   const isSeniorAdmin =
     user?.role === "admin" &&
     String(user?.email ?? "").trim().toLowerCase() === "contato@drwesleycamara.com.br";
+  const themeScope = user?.id ? `user-${user.id}` : user?.email ? String(user.email).trim().toLowerCase() : null;
+
+  useEffect(() => {
+    setStorageScope?.(themeScope);
+    return () => setStorageScope?.(null);
+  }, [setStorageScope, themeScope]);
 
   const sections = useMemo(
     () =>

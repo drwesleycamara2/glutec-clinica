@@ -21,11 +21,9 @@ import { PatientAutocomplete } from "@/components/PatientAutocomplete";
 import { toast } from "sonner";
 import {
   Ban,
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
   Clock,
-  History,
   Plus,
   Settings,
   UserCheck,
@@ -462,13 +460,6 @@ export default function Agenda() {
     return filteredAppointments.filter((appointment) => new Date(appointment.scheduledAt).getTime() >= now).slice(0, 8);
   }, [filteredAppointments]);
 
-  const pastAppointments = useMemo(() => {
-    const now = Date.now();
-    return [...filteredAppointments]
-      .filter((appointment) => new Date(appointment.scheduledAt).getTime() < now)
-      .sort((left, right) => new Date(right.scheduledAt).getTime() - new Date(left.scheduledAt).getTime())
-      .slice(0, 8);
-  }, [filteredAppointments]);
   const daysInMonth = getDaysInMonth(calendarYear, calendarMonth);
   const firstDayOfMonth = getFirstDayOfMonth(calendarYear, calendarMonth);
 
@@ -577,11 +568,17 @@ export default function Agenda() {
 
     const scheduledDate = new Date(appointmentForm.scheduledAt);
     const doctorSchedule = getScheduleForProfessional(openingHoursConfig, appointmentForm.doctorId);
-    if (Number.isNaN(scheduledDate.getTime()) || !isDateTimeInsideSchedule(scheduledDate, doctorSchedule, durationMinutes)) {
-      toast.error("Este horario esta fora da agenda aberta do profissional ou da clinica.");
+    if (Number.isNaN(scheduledDate.getTime())) {
+      toast.error("Informe uma data e horário válidos para o atendimento.");
       return;
     }
 
+    if (!isDateTimeInsideSchedule(scheduledDate, doctorSchedule, durationMinutes)) {
+      const confirmed = window.confirm(
+        "Este horário está fora do horário de funcionamento da clínica ou da agenda aberta do profissional. Deseja agendar mesmo assim?"
+      );
+      if (!confirmed) return;
+    }
     const payload = {
       patientId: Number(appointmentForm.patientId),
       doctorId: Number(appointmentForm.doctorId),
@@ -675,7 +672,7 @@ export default function Agenda() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-5">
+    <div className="flex items-start gap-5">
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex gap-2">
@@ -758,9 +755,9 @@ export default function Agenda() {
               <h2 className="text-lg font-bold text-foreground">{formatDateHeader(selectedDate)}</h2>
             </div>
 
-            <div className="flex-1 overflow-y-auto rounded-lg border border-gray-300 bg-white">
+            <div className="rounded-lg border border-gray-300 bg-white">
               <table className="w-full">
-                <thead className="sticky top-0 z-10 bg-gray-100 backdrop-blur">
+                <thead className="bg-gray-100 backdrop-blur">
                   <tr className="text-xs font-semibold text-gray-700">
                     <th className="w-10 px-2 py-2 text-center"></th>
                     <th className="w-24 px-3 py-2 text-left">Horário</th>
@@ -1090,74 +1087,6 @@ export default function Agenda() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-gray-300 bg-white p-4">
-          <div className="flex items-center gap-2">
-            <CalendarDays className="h-4 w-4 text-[#C9A55B]" />
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Próximos agendamentos</p>
-          </div>
-          <div className="mt-3 space-y-3">
-            {upcomingAppointments.length === 0 ? (
-              <p className="text-sm text-gray-500">Nenhum agendamento futuro no filtro atual.</p>
-            ) : (
-              upcomingAppointments.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-left hover:border-[#C9A55B]/40"
-                  onClick={() => openAppointmentDetails(item)}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-semibold text-gray-900">
-                      {new Date(item.scheduledAt).toLocaleDateString("pt-BR")}
-                    </span>
-                    <span className="text-sm text-[#8A6526]">
-                      {new Date(item.scheduledAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm text-gray-900">{getPatientName(item.patientId)}</p>
-                  <p className="text-xs text-gray-500">{item.room || "Sem sala"}</p>
-                  {item.status === "cancelada" ? (
-                    <p className="mt-2 text-xs text-rose-600">{getCancellationSummary(item)}</p>
-                  ) : null}
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-gray-300 bg-white p-4">
-          <div className="flex items-center gap-2">
-            <History className="h-4 w-4 text-[#C9A55B]" />
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Histórico recente</p>
-          </div>
-          <div className="mt-3 space-y-3">
-            {pastAppointments.length === 0 ? (
-              <p className="text-sm text-gray-500">Nenhum atendimento anterior no filtro atual.</p>
-            ) : (
-              pastAppointments.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 text-left hover:border-[#C9A55B]/40"
-                  onClick={() => openAppointmentDetails(item)}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-semibold text-gray-900">
-                      {new Date(item.scheduledAt).toLocaleDateString("pt-BR")}
-                    </span>
-                    <Badge className={getStatusBadgeClass(item.status)}>
-                      {STATUS_LABELS[item.status] ?? item.status}
-                    </Badge>
-                  </div>
-                  <p className="mt-2 text-sm text-gray-900">{getPatientName(item.patientId)}</p>
-                  {item.status === "cancelada" ? (
-                    <p className="mt-2 text-xs text-rose-600">{getCancellationSummary(item)}</p>
-                  ) : null}
-                </button>
-              ))
-            )}
-          </div>
-        </div>
       </div>
 
       <Dialog

@@ -40,19 +40,19 @@ const DEFAULT_STRUCTURAL_SECTORS = ["Consultório", "Centro Cirúrgico"];
 const DEFAULT_ATTACHMENT_FOLDERS = ["Documentos pessoais", "Resultados de exames"];
 
 export default function ConfiguracoesSafe() {
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const [, navigate] = useLocation();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
-  const clinicQuery = trpc.clinic.get.useQuery();
+  const isSeniorAdmin = user?.role === "admin" && String(user?.email ?? "").trim().toLowerCase() === "contato@drwesleycamara.com.br";
+  const clinicQuery = trpc.clinic.get.useQuery(undefined, { enabled: isSeniorAdmin });
   const updateClinicMutation = trpc.clinic.update.useMutation({
     onSuccess: async () => {
       await clinicQuery.refetch();
-      toast.success("Configuracoes da clinica atualizadas.");
+      toast.success("Configurações da clínica atualizadas.");
     },
     onError: (error) => toast.error(error.message),
   });
-  const doctorsQuery = trpc.admin.getDoctors.useQuery(undefined, { enabled: isAdmin });
+  const doctorsQuery = trpc.admin.getDoctors.useQuery(undefined, { enabled: isSeniorAdmin });
 
   const [newSector, setNewSector] = useState("");
   const [newAttachmentFolder, setNewAttachmentFolder] = useState("");
@@ -61,6 +61,10 @@ export default function ConfiguracoesSafe() {
   const [openingHoursConfig, setOpeningHoursConfig] = useState(() => normalizeOpeningHoursConfig(null));
 
   useEffect(() => {
+    if (!isSeniorAdmin) {
+      return;
+    }
+
     const sectors =
       Array.isArray(clinicQuery.data?.structuralSectors) && clinicQuery.data.structuralSectors.length > 0
         ? clinicQuery.data.structuralSectors
@@ -76,7 +80,7 @@ export default function ConfiguracoesSafe() {
     setOpeningHoursConfig(
       ensureProfessionalSchedules(normalizeOpeningHoursConfig(clinicQuery.data?.openingHours), doctorsQuery.data ?? []),
     );
-  }, [clinicQuery.data, doctorsQuery.data]);
+  }, [clinicQuery.data, doctorsQuery.data, isSeniorAdmin]);
 
   const normalizedSectors = useMemo(
     () => structuralSectors.map((item) => item.trim()).filter(Boolean),
@@ -138,6 +142,7 @@ export default function ConfiguracoesSafe() {
     dayKey: ScheduleDayKey,
     patch: Partial<{ enabled: boolean; start: string; end: string }>,
   ) => {
+    if (!isSeniorAdmin) return;
     setOpeningHoursConfig((current) => {
       const next = cloneOpeningHoursConfig(ensureProfessionalSchedules(current, doctorsQuery.data ?? []));
       const schedule = target === "clinic"
@@ -154,6 +159,7 @@ export default function ConfiguracoesSafe() {
   };
 
   const saveOpeningHours = () => {
+    if (!isSeniorAdmin) return;
     updateClinicMutation.mutate({
       openingHours: ensureProfessionalSchedules(openingHoursConfig, doctorsQuery.data ?? []),
     });
@@ -178,7 +184,7 @@ export default function ConfiguracoesSafe() {
                 <span className="text-sm font-medium text-foreground">{SCHEDULE_DAY_LABELS[dayKey]}</span>
               </div>
               <div className="space-y-1">
-                <Label className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Inicio</Label>
+                <Label className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Início</Label>
                 <Input
                   type="time"
                   step={1800}
@@ -204,6 +210,7 @@ export default function ConfiguracoesSafe() {
     </div>
   );
   const saveStructure = () => {
+    if (!isSeniorAdmin) return;
     updateClinicMutation.mutate({
       structuralSectors: normalizedSectors.length > 0 ? normalizedSectors : DEFAULT_STRUCTURAL_SECTORS,
       patientAttachmentFolders:
@@ -214,8 +221,8 @@ export default function ConfiguracoesSafe() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-primary">Configurações Gerais</h1>
-        <p className="text-muted-foreground">Gerencie as preferências do sistema e a estrutura da clínica.</p>
+        <h1 className="text-3xl font-bold tracking-tight text-primary">{isSeniorAdmin ? "Configurações Gerais" : "Preferências"}</h1>
+        <p className="text-muted-foreground">{isSeniorAdmin ? "Gerencie as preferências do sistema e a estrutura da clínica." : "Escolha o tema visual do seu acesso."}</p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -228,7 +235,7 @@ export default function ConfiguracoesSafe() {
             <CardDescription>Escolha o tema visual do sistema.</CardDescription>
           </CardHeader>
           <CardContent>
-            <RadioGroup defaultValue={theme} onValueChange={() => toggleTheme?.()} className="grid grid-cols-2 gap-4">
+            <RadioGroup value={theme} onValueChange={(value) => setTheme?.(value === "dark" ? "dark" : "light")} className="grid grid-cols-2 gap-4">
               <div>
                 <RadioGroupItem value="light" id="light" className="peer sr-only" />
                 <Label
@@ -259,6 +266,8 @@ export default function ConfiguracoesSafe() {
           </CardContent>
         </Card>
 
+        {isSeniorAdmin ? (
+          <>
         <Card className="border-primary/10 bg-card/50 backdrop-blur-sm">
           <CardHeader>
             <div className="flex items-center gap-2">
@@ -367,21 +376,21 @@ export default function ConfiguracoesSafe() {
           </CardContent>
         </Card>
 
-        {isAdmin ? (
+        {isSeniorAdmin ? (
           <Card className="border-primary/10 bg-card/50 backdrop-blur-sm md:col-span-2">
             <CardHeader>
               <div className="flex items-center gap-2">
                 <CalendarClock className="h-5 w-5 text-primary" />
-                <CardTitle>Horarios de agenda</CardTitle>
+                <CardTitle>Horários de agenda</CardTitle>
               </div>
               <CardDescription>
-                Configure o funcionamento da clinica e a agenda propria de cada profissional habilitado.
+                Configure o funcionamento da clínica e a agenda própria de cada profissional habilitado.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               {renderScheduleEditor(
-                "Funcionamento da clinica",
-                "Padrao inicial: segunda a sexta das 09:00 as 19:00 e sabado das 09:30 as 13:00.",
+                "Funcionamento da clínica",
+                "Padrão inicial: segunda a sexta das 08:30 às 19:00 e sábado das 09:30 às 13:00.",
                 "clinic",
                 openingHoursConfig.clinic,
               )}
@@ -390,7 +399,7 @@ export default function ConfiguracoesSafe() {
                 <div>
                   <p className="text-sm font-semibold text-foreground">Agendas dos profissionais</p>
                   <p className="text-xs text-muted-foreground">
-                    Apenas usuarios com agenda habilitada aparecem aqui e na tela de agendamento.
+                    Apenas usuários com agenda habilitada aparecem aqui e na tela de agendamento.
                   </p>
                 </div>
                 {(doctorsQuery.data ?? []).length === 0 ? (
@@ -401,7 +410,7 @@ export default function ConfiguracoesSafe() {
                   (doctorsQuery.data ?? []).map((doctor: any) =>
                     renderScheduleEditor(
                       String(doctor?.name ?? `Profissional #${doctor?.id}`),
-                      "Horario aberto individual dentro do funcionamento geral da clinica.",
+                      "Horário aberto individual dentro do funcionamento geral da clínica.",
                       String(doctor.id),
                       openingHoursConfig.professionals[String(doctor.id)] ?? createDefaultWeeklySchedule(),
                     ),
@@ -410,9 +419,9 @@ export default function ConfiguracoesSafe() {
               </div>
 
               <div className="flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-muted-foreground">Os horarios livres da agenda aparecem em intervalos de 30 minutos.</p>
+                <p className="text-xs text-muted-foreground">Os horários livres da agenda aparecem em intervalos de 30 minutos.</p>
                 <Button type="button" onClick={saveOpeningHours} className="btn-glossy-gold" disabled={updateClinicMutation.isPending}>
-                  {updateClinicMutation.isPending ? "Salvando..." : "Salvar horarios"}
+                  {updateClinicMutation.isPending ? "Salvando..." : "Salvar horários"}
                 </Button>
               </div>
             </CardContent>
@@ -474,14 +483,14 @@ export default function ConfiguracoesSafe() {
           </CardContent>
         </Card>
 
-        {isAdmin ? (
+        {isSeniorAdmin ? (
           <Card className="border-primary/10 bg-card/50 backdrop-blur-sm">
             <CardHeader>
               <div className="flex items-center gap-2">
                 <FileLock2 className="h-5 w-5 text-primary" />
                 <CardTitle>Backup e portabilidade</CardTitle>
               </div>
-              <CardDescription>Exporte prontuarios, cadastros, anamneses, atendimentos, exames, anexos, fotos, contratos, historico e agenda.</CardDescription>
+              <CardDescription>Exporte prontuários, cadastros, anamneses, atendimentos, exames, anexos, fotos, contratos, histórico e agenda.</CardDescription>
             </CardHeader>
             <CardContent className="flex h-[140px] items-center justify-center">
               <button onClick={() => navigate("/relatorios/portabilidade")} className="btn-glossy-gold px-6 py-2 text-sm">
@@ -489,6 +498,8 @@ export default function ConfiguracoesSafe() {
               </button>
             </CardContent>
           </Card>
+        ) : null}
+          </>
         ) : null}
       </div>
     </div>

@@ -4,11 +4,11 @@ export type ScheduleDayKey = (typeof SCHEDULE_DAY_KEYS)[number];
 export const SCHEDULE_DAY_LABELS: Record<ScheduleDayKey, string> = {
   "0": "Domingo",
   "1": "Segunda-feira",
-  "2": "Terca-feira",
+  "2": "Terça-feira",
   "3": "Quarta-feira",
   "4": "Quinta-feira",
   "5": "Sexta-feira",
-  "6": "Sabado",
+  "6": "Sábado",
 };
 
 export type ScheduleDay = {
@@ -34,9 +34,9 @@ const DEFAULT_INTERVAL_MINUTES = 30;
 const DEFAULT_TIMEZONE = "America/Sao_Paulo";
 
 function defaultDayFor(key: ScheduleDayKey): ScheduleDay {
-  if (key === "0") return { enabled: false, start: "09:00", end: "19:00" };
+  if (key === "0") return { enabled: false, start: "08:30", end: "19:00" };
   if (key === "6") return { enabled: true, start: "09:30", end: "13:00" };
-  return { enabled: true, start: "09:00", end: "19:00" };
+  return { enabled: true, start: "08:30", end: "19:00" };
 }
 
 export function createDefaultWeeklySchedule(): WeeklySchedule {
@@ -143,7 +143,7 @@ export function normalizeWeeklySchedule(value: unknown): WeeklySchedule {
     const startMinutes = timeToMinutes(start);
     const endMinutes = timeToMinutes(end);
     base.days[key] = {
-      enabled: Boolean(incoming.enabled ?? base.days[key].enabled) && endMinutes > startMinutes,
+      enabled: Boolean(incoming.enabled ?? base.days[key].enabled),
       start,
       end,
     };
@@ -245,20 +245,20 @@ export function generateTimeSlotsForDate(date: Date, schedule: WeeklySchedule) {
   if (end <= start) return [];
 
   const slots: string[] = [];
-  for (let minute = start; minute < end; minute += interval) {
+  for (let minute = start; minute <= end; minute += interval) {
     slots.push(minutesToTime(minute));
   }
   return slots;
 }
 
-export function isDateTimeInsideSchedule(date: Date, schedule: WeeklySchedule, durationMinutes = DEFAULT_INTERVAL_MINUTES) {
+export function isDateTimeInsideSchedule(date: Date, schedule: WeeklySchedule, _durationMinutes = DEFAULT_INTERVAL_MINUTES) {
   const dayKey = String(date.getDay()) as ScheduleDayKey;
   const day = schedule.days[dayKey];
   if (!day?.enabled) return false;
   const start = timeToMinutes(day.start);
   const end = timeToMinutes(day.end);
   const current = date.getHours() * 60 + date.getMinutes();
-  return current >= start && current + Math.max(1, durationMinutes) <= end;
+  return current >= start && current <= end;
 }
 
 export function sortTimeSlots(slots: string[]) {

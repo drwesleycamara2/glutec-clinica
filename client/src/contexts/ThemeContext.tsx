@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 
-type Theme = "light" | "dark";
+export type Theme = "light" | "dark";
 
 interface ThemeContextType {
   theme: Theme;
+  setTheme?: (theme: Theme) => void;
   toggleTheme?: () => void;
+  setStorageScope?: (scope: string | null) => void;
   switchable: boolean;
 }
 
@@ -16,18 +18,52 @@ interface ThemeProviderProps {
   switchable?: boolean;
 }
 
+const LEGACY_THEME_KEY = "theme";
+const SCOPED_THEME_PREFIX = "theme:";
+
+function isTheme(value: unknown): value is Theme {
+  return value === "light" || value === "dark";
+}
+
+function readStoredTheme(key: string): Theme | null {
+  try {
+    const value = localStorage.getItem(key);
+    return isTheme(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredTheme(key: string, theme: Theme) {
+  try {
+    localStorage.setItem(key, theme);
+  } catch {
+    // Ignore storage failures; the visual theme still applies for the session.
+  }
+}
+
+function storageKeyForScope(scope: string | null) {
+  return scope ? `${SCOPED_THEME_PREFIX}${scope}` : LEGACY_THEME_KEY;
+}
+
 export function ThemeProvider({
   children,
   defaultTheme = "light",
   switchable = false,
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (switchable) {
-      const stored = localStorage.getItem("theme");
-      return (stored as Theme) || defaultTheme;
-    }
-    return defaultTheme;
+  const [storageScope, setStorageScope] = useState<string | null>(null);
+  const storageKey = storageKeyForScope(storageScope);
+  const [theme, setThemeState] = useState<Theme>(() => {
+    if (!switchable) return defaultTheme;
+    return readStoredTheme(LEGACY_THEME_KEY) ?? defaultTheme;
   });
+
+  useEffect(() => {
+    if (!switchable) return;
+    const scopedTheme = readStoredTheme(storageKey);
+    const fallbackTheme = storageScope ? readStoredTheme(LEGACY_THEME_KEY) : null;
+    setThemeState(scopedTheme ?? fallbackTheme ?? defaultTheme);
+  }, [defaultTheme, storageKey, storageScope, switchable]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -38,18 +74,19 @@ export function ThemeProvider({
     }
 
     if (switchable) {
-      localStorage.setItem("theme", theme);
+      writeStoredTheme(storageKey, theme);
     }
-  }, [theme, switchable]);
+  }, [storageKey, theme, switchable]);
 
+  const setTheme = switchable ? (nextTheme: Theme) => setThemeState(nextTheme) : undefined;
   const toggleTheme = switchable
     ? () => {
-        setTheme(prev => (prev === "light" ? "dark" : "light"));
+        setThemeState(prev => (prev === "light" ? "dark" : "light"));
       }
     : undefined;
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, switchable }}>
+    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme, setStorageScope, switchable }}>
       {children}
     </ThemeContext.Provider>
   );

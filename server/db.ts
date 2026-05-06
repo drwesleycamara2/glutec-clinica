@@ -550,13 +550,16 @@ export async function createUserFromInvite(data: {
     await db
       .update(users)
       .set({
+        openId: String((existing as any).openId ?? "").startsWith("invited_") ? makeLocalOpenId() : (existing as any).openId,
         name: data.name,
         email: normalizedEmail,
+        loginMethod: "local",
         role: data.role,
         profession: data.profession ?? existing.profession ?? null,
         status: "active",
         password: data.passwordHash,
         mustChangePassword: 0,
+        lastSignedIn: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(users.id, existing.id));
