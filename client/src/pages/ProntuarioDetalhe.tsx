@@ -124,6 +124,60 @@ function formatImportedText(value?: string | null) {
     .trim();
 }
 
+/**
+ * Para registros importados (Verde / OnDoctor) o texto da mesma anamnese foi
+ * gravado duas vezes em seções diferentes ("**Anamnese / História**" +
+ * "**Evolução**" com o MESMO conteúdo). Aqui mantemos só a primeira
+ * ocorrência de cada bloco idêntico.
+ */
+function dedupeRepeatedSections(text: string): string {
+  if (!text || !text.includes("\n")) return text;
+  const lines = text.split("\n");
+  const isHeader = (line: string) => {
+    const t = line.trim();
+    if (!t) return false;
+    if (/^\*\*[^*]+\*\*\s*$/.test(t)) return true;
+    if (t.length <= 60 && /^[A-Za-zÁ-ú][A-Za-zÁ-ú0-9 /\-]+:?\s*$/.test(t) && /[A-Z]/.test(t[0])) {
+      return true;
+    }
+    return false;
+  };
+  type Section = { header: string | null; bodyLines: string[] };
+  const sections: Section[] = [];
+  let current: Section = { header: null, bodyLines: [] };
+  for (const line of lines) {
+    if (isHeader(line)) {
+      if (current.header || current.bodyLines.length) sections.push(current);
+      current = { header: line, bodyLines: [] };
+    } else {
+      current.bodyLines.push(line);
+    }
+  }
+  if (current.header || current.bodyLines.length) sections.push(current);
+  if (sections.length <= 1) return text;
+  const seen = new Set<string>();
+  const kept: Section[] = [];
+  for (const section of sections) {
+    const fp = section.bodyLines.join("\n").replace(/\s+/g, " ").trim().toLocaleLowerCase("pt-BR");
+    if (!fp) {
+      kept.push(section);
+      continue;
+    }
+    if (seen.has(fp)) continue;
+    seen.add(fp);
+    kept.push(section);
+  }
+  if (kept.length === sections.length) return text;
+  return kept
+    .map((section) =>
+      section.header && section.bodyLines.length
+        ? `${section.header}\n${section.bodyLines.join("\n")}`
+        : section.header ?? section.bodyLines.join("\n"),
+    )
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
 function getThreeLinePreview(value: string) {
   const lines = value.split("\n").map((line) => line.trim()).filter(Boolean);
   if (lines.length <= 3 && value.length <= 360) return { preview: value, truncated: false };
@@ -424,7 +478,7 @@ function HistoricoTab({ patientId }: { patientId: number }) {
         const isLegacy = ev.isLegacy === true;
         const displayId = isLegacy ? (ev.legacyRecordId ?? Math.abs(ev.id)) : ev.id;
         const historyKey = (isLegacy ? "legacy" : "ev") + "-" + ev.id;
-        const clinicalText = formatImportedText(ev.clinicalNotes);
+        const clinicalText = dedupeRepeatedSections(formatImportedText(ev.clinicalNotes));
         const secretaryText = formatImportedText(ev.secretaryNotes);
         const audioText = formatImportedText(ev.audioTranscription);
         const mainText = isReceptionist ? secretaryText : clinicalText;

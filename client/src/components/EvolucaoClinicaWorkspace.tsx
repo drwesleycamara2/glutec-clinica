@@ -208,6 +208,77 @@ function stripHtml(value: string) {
   return clinicalTextFromHtml(value).replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Para registros importados (Prontuário Verde / OnDoctor) o conteúdo da
+ * mesma anamnese/atendimento foi gravado duas vezes em seções diferentes
+ * — ex.: "**Anamnese / História**" + "**Evolução**" com o MESMO texto
+ * abaixo. Aqui detectamos seções com conteúdo idêntico e mantemos só a
+ * primeira ocorrência (preservando todos os cabeçalhos quando os blocos
+ * forem distintos).
+ *
+ * Suporta cabeçalhos no estilo Markdown bold "**Seção**" ou linhas
+ * terminadas em ":".
+ */
+function dedupeRepeatedSections(text: string): string {
+  if (!text || !text.includes("\n")) return text;
+  const lines = text.split("\n");
+  // Identifica linhas que parecem cabeçalhos: **bold**, "Seção:" sozinha
+  // (curta) ou MAIÚSCULAS curtas.
+  const isHeader = (line: string) => {
+    const t = line.trim();
+    if (!t) return false;
+    if (/^\*\*[^*]+\*\*\s*$/.test(t)) return true;
+    if (t.length <= 60 && /^[A-Za-zÁ-ú][A-Za-zÁ-ú0-9 /\-]+:?\s*$/.test(t) && /[A-Z]/.test(t[0])) {
+      return true;
+    }
+    return false;
+  };
+
+  type Section = { header: string | null; bodyLines: string[] };
+  const sections: Section[] = [];
+  let current: Section = { header: null, bodyLines: [] };
+  for (const line of lines) {
+    if (isHeader(line)) {
+      if (current.header || current.bodyLines.length) sections.push(current);
+      current = { header: line, bodyLines: [] };
+    } else {
+      current.bodyLines.push(line);
+    }
+  }
+  if (current.header || current.bodyLines.length) sections.push(current);
+
+  if (sections.length <= 1) return text;
+
+  const seenBodies = new Set<string>();
+  const kept: Section[] = [];
+  for (const section of sections) {
+    const fingerprint = section.bodyLines
+      .join("\n")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLocaleLowerCase("pt-BR");
+    if (!fingerprint) {
+      kept.push(section);
+      continue;
+    }
+    if (seenBodies.has(fingerprint)) continue; // duplicata: ignora
+    seenBodies.add(fingerprint);
+    kept.push(section);
+  }
+
+  if (kept.length === sections.length) return text; // nada mudou
+
+  return kept
+    .map((section) => {
+      if (section.header && section.bodyLines.length) {
+        return `${section.header}\n${section.bodyLines.join("\n")}`;
+      }
+      return section.header ?? section.bodyLines.join("\n");
+    })
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
 function escapeHtml(value?: string | null) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -1403,7 +1474,9 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
               const signatureDetails = getSignatureDetails(record, professionalName);
               const showSignatureDetails = signatureDetailsKey === recordKey;
               const clinicalSummary = stripHtml(record.clinicalNotes || "").slice(0, 260) || "Sem resumo clínico.";
-              const clinicalFullText = clinicalTextFromHtml(record.clinicalNotes || "") || "Sem evolução clínica registrada.";
+              const clinicalFullText =
+                dedupeRepeatedSections(clinicalTextFromHtml(record.clinicalNotes || "")) ||
+                "Sem evolução clínica registrada.";
               const secretaryNotesText = clinicalTextFromHtml(record.secretaryNotes || "");
               const audioTranscriptionText = clinicalTextFromHtml(record.audioTranscription || "");
               const relatedExams = Array.isArray(record.relatedExams) ? record.relatedExams : [];

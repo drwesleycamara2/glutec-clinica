@@ -341,6 +341,17 @@ export const appRouter = router({
         return runLegacyAnamneseBackfill(mapping, { dryRun: input.dryRun });
       }),
 
+    backfillOnDoctorSignatures: protectedProcedure
+      .input(z.object({
+        csv: z.string().min(50).max(2_000_000),
+        dryRun: z.boolean().default(true),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+        const { runOnDoctorSignatureBackfill } = await import("./lib/legacy-signature-backfill");
+        return runOnDoctorSignatureBackfill(input.csv, { dryRun: input.dryRun });
+      }),
+
     generateSystemExport: protectedProcedure
       .input(z.object({
         currentPassword: z.string().min(1),
