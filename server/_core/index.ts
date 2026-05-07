@@ -21,9 +21,12 @@ function getRequestBaseUrl(req: express.Request) {
   const forwardedHost = req.headers["x-forwarded-host"];
   const host = forwardedHost || req.headers.host || "localhost:3000";
   const protocol = forwardedProto || (req.secure ? "https" : "http");
-  const safeProtocol = Array.isArray(protocol) ? protocol[0] : protocol;
-  const safeHost = Array.isArray(host) ? host[0] : host;
-  return `${safeProtocol}://${safeHost}`;
+  const rawProtocol = (Array.isArray(protocol) ? protocol[0] : protocol).split(",")[0]?.trim() || "https";
+  const rawHost = (Array.isArray(host) ? host[0] : host).split(",")[0]?.trim() || "localhost:3000";
+  const safeProtocol = rawProtocol.replace(/\\/g, "").replace(/:.+$/, "").toLowerCase();
+  const safeHost = rawHost.replace(/\\/g, "").replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
+  const normalizedProtocol = safeProtocol === "http" || safeProtocol === "https" ? safeProtocol : "https";
+  return `${normalizedProtocol}://${safeHost || "localhost:3000"}`;
 }
 
 function sanitizeUploadKey(value?: string) {
