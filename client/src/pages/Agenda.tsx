@@ -1098,7 +1098,7 @@ export default function Agenda() {
           }
         }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-h-[calc(100vh-2rem)] max-w-md overflow-y-auto overscroll-contain">
           <DialogHeader>
             <DialogTitle>{isEditingAppointment ? "Alterar agendamento" : "Novo agendamento"}</DialogTitle>
           </DialogHeader>
@@ -1243,7 +1243,7 @@ export default function Agenda() {
       </Dialog>
 
       <Dialog open={showBlockDialog} onOpenChange={setShowBlockDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-h-[calc(100vh-2rem)] max-w-md overflow-y-auto overscroll-contain">
           <DialogHeader>
             <DialogTitle>Bloquear agenda</DialogTitle>
           </DialogHeader>
@@ -1336,7 +1336,7 @@ export default function Agenda() {
       </Dialog>
 
       <Dialog open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-h-[calc(100vh-2rem)] max-w-lg overflow-y-auto overscroll-contain">
           <DialogHeader>
             <DialogTitle>
               {selectedEvent?.eventType === "block" ? "Detalhes do bloqueio" : "Detalhes do agendamento"}
