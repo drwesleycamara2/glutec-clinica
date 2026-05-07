@@ -248,6 +248,7 @@ function Router() {
       <Route path="/envio-midias/:token" component={EnvioMidiasPaciente} />
       <Route path="/anamnese-preencher/:token" component={AnamnesePublica} />
       <Route path="/formulario-seguro/preencher/:token" component={AnamnesePublica} />
+      <Route path="/formulario-seguro/:token" component={AnamnesePublica} />
       <Route path="/configurar-2fa" component={Configurar2FA} />
       <Route path="/trocar-senha" component={TrocarSenha} />
       <Route component={ProtectedEntry} />

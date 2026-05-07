@@ -20,6 +20,7 @@ export interface WhatsAppMessagePayload {
   type: "text" | "template";
   text?: {
     body: string;
+    preview_url?: boolean;
   };
   template?: {
     name: string;
@@ -56,7 +57,7 @@ export class WhatsAppService {
       messaging_product: "whatsapp",
       to: this.formatPhoneNumber(to),
       type: "text",
-      text: { body: text },
+      text: { body: text, preview_url: true },
     };
 
     try {

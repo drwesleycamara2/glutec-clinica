@@ -107,6 +107,10 @@ function renderAnamnesisPreviewPage(params: {
     <meta property="og:description" content="${escapeHtml(params.description)}" />
     <meta property="og:url" content="${escapeHtml(params.pageUrl)}" />
     <meta property="og:image" content="${escapeHtml(params.imageUrl)}" />
+    <meta property="og:image:secure_url" content="${escapeHtml(params.imageUrl)}" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Clínica Glutée" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${escapeHtml(params.title)}" />
@@ -128,7 +132,7 @@ function renderAnamnesisPreviewPage(params: {
   <body>
     <main class="card">
       <section class="hero">
-        <img class="logo" src="${escapeHtml(params.imageUrl)}" alt="Clínica Glutée" />
+        <img class="logo" src="/glutee-logo.png" alt="Clínica Glutée" />
         <h1>${escapeHtml(params.title)}</h1>
         <p>${escapeHtml(params.description)}</p>
       </section>
@@ -566,7 +570,7 @@ async function startServer() {
     const baseUrl = getRequestBaseUrl(req);
     const pageUrl = `${baseUrl}/formulario-seguro/${token}`;
     const redirectUrl = `${baseUrl}/formulario-seguro/preencher/${token}`;
-    const imageUrl = `${baseUrl}/glutee-logo.png`;
+    const imageUrl = `${baseUrl}/anamnesis-preview.png`;
     const title = "Formulário seguro | Clínica Glutée";
     const description = "Preencha suas informações de saúde com segurança antes do atendimento na Clínica Glutée.";
 

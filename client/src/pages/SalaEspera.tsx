@@ -65,8 +65,8 @@ function AppointmentRow({ appointment, arrivalValue, onArrivalChange, onMarkWait
   const canOpenRecord = ["aguardando", "em_atendimento", "confirmada", "agendada"].includes(String(appointment.status));
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-4">
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-semibold text-gray-900">{appointmentTime(appointment)}</span>
@@ -79,23 +79,23 @@ function AppointmentRow({ appointment, arrivalValue, onArrivalChange, onMarkWait
           <p className="text-sm text-gray-600">{appointment.doctorName ?? `Profissional #${appointment.doctorId}`} · {appointment.room || "Sem sala"}</p>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="grid w-full min-w-0 gap-2">
           {canMarkWaiting ? (
             <Input
               type="datetime-local"
               value={arrivalValue || ""}
               onChange={(event) => onArrivalChange(appointment.id, event.target.value)}
-              className="min-w-[220px] border-gray-300 bg-white text-slate-950 placeholder:text-slate-500 [color-scheme:light] dark:border-slate-600 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-400 dark:[color-scheme:dark]"
+              className="min-w-0 border-gray-300 bg-white text-slate-950 placeholder:text-slate-500 [color-scheme:light] dark:border-gray-300 dark:bg-white dark:text-slate-950 dark:placeholder:text-slate-500 dark:[color-scheme:light]"
             />
           ) : null}
           {canMarkWaiting ? (
-            <Button variant="outline" onClick={() => onMarkWaiting(appointment)}>
+            <Button variant="outline" className="w-full border-gray-300 bg-white text-slate-900 hover:bg-gray-100 hover:text-slate-950" onClick={() => onMarkWaiting(appointment)}>
               <UserCheck className="mr-2 h-4 w-4" />
               Marcar chegada
             </Button>
           ) : null}
           {canOpenRecord ? (
-            <Button className="btn-gold-gradient" onClick={() => onOpenRecord(appointment)}>
+            <Button className="btn-gold-gradient w-full text-slate-950 hover:text-slate-950" onClick={() => onOpenRecord(appointment)}>
               <DoorOpen className="mr-2 h-4 w-4" />
               Abrir prontuário
             </Button>
