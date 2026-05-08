@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Mic, Square, Trash2, Volume2 } from "lucide-react";
+import { Loader2, Mic, Plus, Square, Trash2, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface AudioRecorderProps {
@@ -34,6 +34,26 @@ function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
   return typeof candidate === "function" ? candidate : null;
 }
 
+const AUDIO_UPLOAD_LIMIT_BYTES = 16 * 1024 * 1024;
+const AUDIO_AUTO_STOP_BYTES = 14 * 1024 * 1024;
+const AUDIO_RECORDER_TIMESLICE_MS = 1000;
+const AUDIO_RECORDER_OPTIONS: MediaRecorderOptions = {
+  mimeType: "audio/webm;codecs=opus",
+  audioBitsPerSecond: 32000,
+};
+
+function normalizeHttpErrorMessage(detail: string, fallback: string) {
+  const raw = String(detail ?? "").trim();
+  if (!raw) return fallback;
+  if (/413|request entity too large/i.test(raw)) {
+    return "O áudio ficou maior do que o servidor aceitava. O limite foi ajustado; tente transcrever novamente.";
+  }
+  if (/<html|<!doctype/i.test(raw)) {
+    return fallback;
+  }
+  return raw;
+}
+
 export function AudioRecorder({
   onTranscriptionComplete,
   medicalRecordId,
@@ -46,6 +66,9 @@ export function AudioRecorder({
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [usingBrowserSpeech, setUsingBrowserSpeech] = useState(false);
+  const [hasTranscribedCurrentAudio, setHasTranscribedCurrentAudio] = useState(false);
+  const [completedSegments, setCompletedSegments] = useState(0);
+  const [recordingBytes, setRecordingBytes] = useState(0);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -53,6 +76,8 @@ export function AudioRecorder({
   const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const liveTranscriptRef = useRef("");
   const isRecordingRef = useRef(false);
+  const currentStreamRef = useRef<MediaStream | null>(null);
+  const recordingBytesRef = useRef(0);
 
   const { mutate: createTranscription } = trpc.audio.createTranscription.useMutation();
   const { mutate: updateTranscription } = trpc.audio.updateTranscription.useMutation();
@@ -62,6 +87,7 @@ export function AudioRecorder({
       if (timerRef.current) clearInterval(timerRef.current);
       if (audioUrl) URL.revokeObjectURL(audioUrl);
       speechRecognitionRef.current?.abort?.();
+      currentStreamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, [audioUrl]);
 
@@ -137,34 +163,52 @@ export function AudioRecorder({
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: "audio/webm;codecs=opus",
-      });
+      const mediaRecorder = MediaRecorder.isTypeSupported(AUDIO_RECORDER_OPTIONS.mimeType || "")
+        ? new MediaRecorder(stream, AUDIO_RECORDER_OPTIONS)
+        : new MediaRecorder(stream, { audioBitsPerSecond: 32000 });
 
       audioChunksRef.current = [];
+      recordingBytesRef.current = 0;
       liveTranscriptRef.current = "";
       setTranscription("");
       setAudioBlob(null);
+      setHasTranscribedCurrentAudio(false);
+      setRecordingBytes(0);
       if (audioUrl) {
         URL.revokeObjectURL(audioUrl);
         setAudioUrl(null);
       }
+      currentStreamRef.current = stream;
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
+          const nextSize = recordingBytesRef.current + event.data.size;
+          recordingBytesRef.current = nextSize;
+          setRecordingBytes(nextSize);
+
+          if (nextSize >= AUDIO_AUTO_STOP_BYTES && mediaRecorder.state === "recording") {
+            mediaRecorder.stop();
+            speechRecognitionRef.current?.stop();
+            isRecordingRef.current = false;
+            setIsRecording(false);
+            if (timerRef.current) clearInterval(timerRef.current);
+            toast.warning("Trecho encerrado automaticamente para manter o áudio em tamanho seguro.");
+          }
         }
       };
 
       mediaRecorder.onstop = () => {
         const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
         setAudioBlob(blob);
+        setRecordingBytes(blob.size);
         const url = URL.createObjectURL(blob);
         setAudioUrl(url);
         stream.getTracks().forEach((track) => track.stop());
+        currentStreamRef.current = null;
       };
 
-      mediaRecorder.start();
+      mediaRecorder.start(AUDIO_RECORDER_TIMESLICE_MS);
       mediaRecorderRef.current = mediaRecorder;
       isRecordingRef.current = true;
       setIsRecording(true);
@@ -183,7 +227,7 @@ export function AudioRecorder({
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
+    if (mediaRecorderRef.current && isRecording && mediaRecorderRef.current.state === "recording") {
       mediaRecorderRef.current.stop();
       speechRecognitionRef.current?.stop();
       isRecordingRef.current = false;
@@ -205,7 +249,12 @@ export function AudioRecorder({
       });
     }
 
-    onTranscriptionComplete?.(cleaned);
+    if (cleaned) {
+      onTranscriptionComplete?.(cleaned);
+      setCompletedSegments((current) => current + 1);
+    }
+
+    setHasTranscribedCurrentAudio(true);
     toast.success(usingBrowserSpeech ? "Áudio transcrito pelo navegador." : "Áudio transcrito com sucesso.");
   };
 
@@ -215,7 +264,7 @@ export function AudioRecorder({
       return;
     }
 
-    if (audioBlob.size > 16 * 1024 * 1024) {
+    if (audioBlob.size > AUDIO_UPLOAD_LIMIT_BYTES) {
       toast.error("Arquivo muito grande. O limite é de 16 MB.");
       return;
     }
@@ -240,7 +289,7 @@ export function AudioRecorder({
 
       if (!uploadResponse.ok) {
         const detail = await uploadResponse.text().catch(() => "");
-        throw new Error(detail || "Falha no upload do áudio.");
+        throw new Error(normalizeHttpErrorMessage(detail, "Falha no upload do áudio."));
       }
 
       const uploadData = await uploadResponse.json();
@@ -254,7 +303,7 @@ export function AudioRecorder({
         },
         {
           onSuccess: (result: any) => {
-            transcribeWithServer(result?.id, uploadedUrl);
+            transcribeWithServer(result?.id, uploadedUrl, localTranscript);
           },
           onError: () => {
             toast.error("Erro ao criar o registro do áudio.");
@@ -269,7 +318,7 @@ export function AudioRecorder({
     }
   };
 
-  const transcribeWithServer = async (transcriptionId: number | undefined, uploadedUrl: string) => {
+  const transcribeWithServer = async (transcriptionId: number | undefined, uploadedUrl: string, localTranscript: string) => {
     try {
       const response = await fetch("/api/transcribe", {
         method: "POST",
@@ -279,7 +328,7 @@ export function AudioRecorder({
 
       if (!response.ok) {
         const detail = await response.text().catch(() => "");
-        throw new Error(detail || "Falha ao transcrever o áudio.");
+        throw new Error(normalizeHttpErrorMessage(detail, "Falha ao transcrever o áudio."));
       }
 
       const data = await response.json();
@@ -313,8 +362,15 @@ export function AudioRecorder({
     setTranscription("");
     liveTranscriptRef.current = "";
     setRecordingTime(0);
+    setRecordingBytes(0);
+    recordingBytesRef.current = 0;
     setUsingBrowserSpeech(false);
+    setHasTranscribedCurrentAudio(false);
     isRecordingRef.current = false;
+  };
+
+  const startNextSegment = () => {
+    clearRecording();
   };
 
   const formatTime = (seconds: number) => {
@@ -340,7 +396,7 @@ export function AudioRecorder({
               className="bg-gradient-to-r from-amber-500 to-amber-600 text-white hover:from-amber-600 hover:to-amber-700"
             >
               <Mic className="mr-1.5 h-3.5 w-3.5" />
-              Iniciar Gravação
+              {completedSegments > 0 ? "Gravar novo trecho" : "Iniciar gravação"}
             </Button>
           )}
 
@@ -353,6 +409,9 @@ export function AudioRecorder({
               <Badge variant="outline" className="animate-pulse border-red-500/30 text-red-500">
                 Gravando {formatTime(recordingTime)}
               </Badge>
+              <Badge variant="outline" className="border-amber-500/30 text-amber-600">
+                {((recordingBytes / 1024) / 1024).toFixed(2)} MB
+              </Badge>
               {usingBrowserSpeech ? (
                 <Badge variant="outline" className="border-emerald-500/30 text-emerald-600">
                   Transcrição local ativa
@@ -363,21 +422,34 @@ export function AudioRecorder({
 
           {!isRecording && audioBlob && (
             <>
-              <Button onClick={handleTranscribe} size="sm" disabled={isTranscribing}>
-                {isTranscribing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Volume2 className="mr-1.5 h-3.5 w-3.5" />}
-                Transcrever
-              </Button>
-              <Button onClick={clearRecording} size="sm" variant="outline">
+              {hasTranscribedCurrentAudio ? (
+                <Button onClick={startNextSegment} size="sm" disabled={isTranscribing}>
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Gravar novo trecho
+                </Button>
+              ) : (
+                <Button onClick={handleTranscribe} size="sm" disabled={isTranscribing}>
+                  {isTranscribing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Volume2 className="mr-1.5 h-3.5 w-3.5" />}
+                  Transcrever trecho
+                </Button>
+              )}
+              <Button onClick={clearRecording} size="sm" variant="outline" disabled={isTranscribing}>
                 <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                Limpar
+                Descartar trecho
               </Button>
             </>
+          )}
+
+          {completedSegments > 0 && (
+            <Badge variant="outline" className="border-emerald-500/30 text-emerald-600">
+              {completedSegments} trecho{completedSegments > 1 ? "s" : ""} transcrito{completedSegments > 1 ? "s" : ""}
+            </Badge>
           )}
         </div>
 
         {audioUrl && (
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Reproduzir Áudio</Label>
+            <Label className="text-sm font-medium">Reproduzir trecho gravado</Label>
             <audio controls src={audioUrl} className="w-full" />
             <p className="text-xs text-muted-foreground">
               Tamanho do arquivo: {(((audioBlob?.size ?? 0) / 1024) / 1024).toFixed(2)} MB

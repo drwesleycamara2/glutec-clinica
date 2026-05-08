@@ -76,6 +76,7 @@ let ensurePrescriptionSchemaPromise: Promise<void> | null = null;
 let ensureCloudSignatureUserColumnsPromise: Promise<void> | null = null;
 let ensureOptionalModuleTablesPromise: Promise<void> | null = null;
 let ensureAppointmentFlowSchemaPromise: Promise<void> | null = null;
+let ensureEmployeeRecordsSchemaPromise: Promise<void> | null = null;
 
 function clearTableColumnCache(tableName: string) {
   tableColumnCache.delete(tableName);
@@ -4944,7 +4945,7 @@ export async function listSignatureSessions(userId: number) {
 export async function applyDocumentSignature(data: {
   documentType: string;
   documentId: number;
-  sessionId: number;
+  sessionId?: number | null;
   provider: string;
   signedByName: string;
   signatureCms: string;
@@ -4966,7 +4967,7 @@ export async function applyDocumentSignature(data: {
         signatureCertificateLabel = ${data.provider === "vidaas" ? "VIDaaS ICP-Brasil A3" : "BirdID ICP-Brasil A3"},
         signedAt = ${now},
         d4signStatus = ${"assinado"},
-        signatureSessionId = ${data.sessionId}
+        signatureSessionId = ${data.sessionId ?? null}
       where id = ${data.documentId}
     `);
   } else if (data.documentType === "atestado") {
@@ -4993,7 +4994,7 @@ export async function applyDocumentSignature(data: {
         signedByName: data.signedByName,
         signatureProvider: data.provider,
         signatureValidationCode: data.validationCode,
-        signatureSessionId: data.sessionId,
+        signatureSessionId: data.sessionId ?? null,
         signatureCms: data.signatureCms,
       });
 
@@ -5010,7 +5011,7 @@ export async function applyDocumentSignature(data: {
           signatureCms = ${data.signatureCms},
           signatureValidationCode = ${data.validationCode},
           signedAt = ${now},
-          signatureSessionId = ${data.sessionId}
+          signatureSessionId = ${data.sessionId ?? null}
         where id = ${data.documentId}
       `);
     }
@@ -5022,7 +5023,7 @@ export async function applyDocumentSignature(data: {
         signatureCms = ${data.signatureCms},
         signatureValidationCode = ${data.validationCode},
         signedAt = ${now},
-        signatureSessionId = ${data.sessionId}
+        signatureSessionId = ${data.sessionId ?? null}
       where id = ${data.documentId}
     `);
   } else if (data.documentType === "exame") {
@@ -5033,7 +5034,7 @@ export async function applyDocumentSignature(data: {
         signatureCms = ${data.signatureCms},
         signatureValidationCode = ${data.validationCode},
         signedAt = ${now},
-        signatureSessionId = ${data.sessionId}
+        signatureSessionId = ${data.sessionId ?? null}
       where id = ${data.documentId}
     `);
   }
@@ -5238,4 +5239,578 @@ export async function getUserA1CertificateStatus(userId: number) {
     fileName: u?.a1PfArquivoNome ?? null,
     updatedAt: u?.a1PfAtualizadoEm ?? null,
   };
+}
+
+// --- EMPLOYEE RECORDS --------------------------------------------------------
+const EMPLOYEE_RECORD_ALLOWED_ROLES = new Set(["admin", "gerente"]);
+const EMPLOYEE_RECORD_SUPER_ADMIN_EMAIL = "contato@drwesleycamara.com.br";
+
+type EmployeeRecordActor = {
+  id?: number | null;
+  name?: string | null;
+  email?: string | null;
+  role?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+};
+
+function normalizeRoleKey(value?: string | null) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+export function canAccessEmployeeRecords(user?: EmployeeRecordActor | null) {
+  return EMPLOYEE_RECORD_ALLOWED_ROLES.has(normalizeRoleKey(user?.role));
+}
+
+export function canPerformIrreversibleEmployeeAction(user?: EmployeeRecordActor | null) {
+  return normalizeRoleKey(user?.role) === "admin" && normalizeEmailValue(user?.email) === EMPLOYEE_RECORD_SUPER_ADMIN_EMAIL;
+}
+
+async function ensureEmployeeRecordsSchema(db: any) {
+  if (!ensureEmployeeRecordsSchemaPromise) {
+    ensureEmployeeRecordsSchemaPromise = (async () => {
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS employee_records (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, userId INT NULL, fullName VARCHAR(255) NOT NULL, email VARCHAR(320) NULL, phone VARCHAR(32) NULL, birthDate DATE NULL, cpf VARCHAR(32) NULL, rg VARCHAR(32) NULL, zipCode VARCHAR(16) NULL, address VARCHAR(255) NULL, addressNumber VARCHAR(32) NULL, addressComplement VARCHAR(160) NULL, neighborhood VARCHAR(160) NULL, city VARCHAR(160) NULL, state VARCHAR(2) NULL, role VARCHAR(64) NULL, position VARCHAR(160) NULL, department VARCHAR(160) NULL, professionalLicenseType VARCHAR(32) NULL, professionalLicenseNumber VARCHAR(80) NULL, professionalLicenseState VARCHAR(2) NULL, employmentStatus ENUM('ativo','afastado','desligado','arquivado') NOT NULL DEFAULT 'ativo', admissionDate DATE NULL, terminationDate DATE NULL, internalNotes TEXT NULL, digitalCertificateStatus ENUM('not_registered','registered','expired','revoked') NOT NULL DEFAULT 'not_registered', digitalCertificateType VARCHAR(80) NULL, digitalCertificateSubject VARCHAR(255) NULL, digitalCertificateIssuer VARCHAR(255) NULL, digitalCertificateSerial VARCHAR(160) NULL, digitalCertificateValidUntil DATE NULL, digitalCertificateFingerprint VARCHAR(128) NULL, digitalCertificateNotes TEXT NULL, digitalCertificateUpdatedAt DATETIME NULL, digitalCertificateUpdatedByUserId INT NULL, createdByUserId INT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uniq_employee_records_user (userId), KEY idx_employee_records_name (fullName), KEY idx_employee_records_status (employmentStatus)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS employee_documents (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, employeeRecordId INT NOT NULL, title VARCHAR(255) NOT NULL, documentType VARCHAR(80) NOT NULL DEFAULT 'documento', originalFileName VARCHAR(255) NULL, mimeType VARCHAR(160) NULL, fileSize INT NULL, filePath TEXT NOT NULL, sha256 VARCHAR(64) NOT NULL, uploadedByUserId INT NULL, uploadedByName VARCHAR(255) NULL, deletedAt DATETIME NULL, deletedByUserId INT NULL, deleteReason TEXT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, KEY idx_employee_documents_record (employeeRecordId, deletedAt), KEY idx_employee_documents_hash (sha256)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS employee_notes (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, employeeRecordId INT NOT NULL, kind ENUM('anotacao','advertencia','ocorrencia','avaliacao') NOT NULL DEFAULT 'anotacao', title VARCHAR(255) NOT NULL, content TEXT NOT NULL, status ENUM('rascunho','assinado') NOT NULL DEFAULT 'rascunho', createdByUserId INT NULL, createdByName VARCHAR(255) NULL, signedAt DATETIME NULL, signedByUserId INT NULL, signedByName VARCHAR(255) NULL, signatureHash VARCHAR(64) NULL, signatureSnapshot JSON NULL, deletedAt DATETIME NULL, deletedByUserId INT NULL, deleteReason TEXT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, KEY idx_employee_notes_record (employeeRecordId, deletedAt), KEY idx_employee_notes_signature (signatureHash)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS employee_audit_log (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, employeeRecordId INT NULL, targetType VARCHAR(80) NOT NULL, targetId INT NULL, action VARCHAR(120) NOT NULL, actorUserId INT NULL, actorName VARCHAR(255) NULL, actorRole VARCHAR(80) NULL, ipAddress VARCHAR(80) NULL, userAgent TEXT NULL, details JSON NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, KEY idx_employee_audit_record (employeeRecordId, createdAt), KEY idx_employee_audit_actor (actorUserId, createdAt), KEY idx_employee_audit_action (action)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+
+      const columns = await getTableColumns("employee_records");
+      const alterations: string[] = [];
+      const addColumn = (name: string, definition: string) => {
+        if (!columns.has(name)) alterations.push(`ADD COLUMN \`${name}\` ${definition}`);
+      };
+
+      addColumn("phone", "VARCHAR(32) NULL AFTER `email`");
+      addColumn("birthDate", "DATE NULL AFTER `phone`");
+      addColumn("cpf", "VARCHAR(32) NULL AFTER `birthDate`");
+      addColumn("rg", "VARCHAR(32) NULL AFTER `cpf`");
+      addColumn("zipCode", "VARCHAR(16) NULL AFTER `rg`");
+      addColumn("address", "VARCHAR(255) NULL AFTER `zipCode`");
+      addColumn("addressNumber", "VARCHAR(32) NULL AFTER `address`");
+      addColumn("addressComplement", "VARCHAR(160) NULL AFTER `addressNumber`");
+      addColumn("neighborhood", "VARCHAR(160) NULL AFTER `addressComplement`");
+      addColumn("city", "VARCHAR(160) NULL AFTER `neighborhood`");
+      addColumn("state", "VARCHAR(2) NULL AFTER `city`");
+      addColumn("professionalLicenseType", "VARCHAR(32) NULL AFTER `department`");
+      addColumn("professionalLicenseNumber", "VARCHAR(80) NULL AFTER `professionalLicenseType`");
+      addColumn("professionalLicenseState", "VARCHAR(2) NULL AFTER `professionalLicenseNumber`");
+      addColumn("digitalCertificateStatus", "ENUM('not_registered','registered','expired','revoked') NOT NULL DEFAULT 'not_registered' AFTER `internalNotes`");
+      addColumn("digitalCertificateType", "VARCHAR(80) NULL AFTER `digitalCertificateStatus`");
+      addColumn("digitalCertificateSubject", "VARCHAR(255) NULL AFTER `digitalCertificateType`");
+      addColumn("digitalCertificateIssuer", "VARCHAR(255) NULL AFTER `digitalCertificateSubject`");
+      addColumn("digitalCertificateSerial", "VARCHAR(160) NULL AFTER `digitalCertificateIssuer`");
+      addColumn("digitalCertificateValidUntil", "DATE NULL AFTER `digitalCertificateSerial`");
+      addColumn("digitalCertificateFingerprint", "VARCHAR(128) NULL AFTER `digitalCertificateValidUntil`");
+      addColumn("digitalCertificateNotes", "TEXT NULL AFTER `digitalCertificateFingerprint`");
+      addColumn("digitalCertificateUpdatedAt", "DATETIME NULL AFTER `digitalCertificateNotes`");
+      addColumn("digitalCertificateUpdatedByUserId", "INT NULL AFTER `digitalCertificateUpdatedAt`");
+
+      if (alterations.length > 0) {
+        await db.execute(sql.raw(`ALTER TABLE employee_records ${alterations.join(", ")}`));
+        clearTableColumnCache("employee_records");
+      }
+    })();
+  }
+
+  try {
+    await ensureEmployeeRecordsSchemaPromise;
+  } catch (error) {
+    ensureEmployeeRecordsSchemaPromise = null;
+    throw error;
+  }
+}
+
+function normalizeEmployeeRecordRow(row: any) {
+  if (!row) return row;
+  return {
+    ...row,
+    documentCount: Number(row.documentCount ?? 0),
+    noteCount: Number(row.noteCount ?? 0),
+    signedNoteCount: Number(row.signedNoteCount ?? 0),
+  };
+}
+
+function normalizeEmployeeDocumentRow(row: any) {
+  if (!row) return row;
+  return {
+    ...row,
+    fileSize: Number(row.fileSize ?? 0),
+    downloadUrl: `/api/employee-documents/${row.id}/download`,
+  };
+}
+
+function normalizeEmployeeNoteRow(row: any) {
+  if (!row) return row;
+  return {
+    ...row,
+    signatureSnapshot: typeof row.signatureSnapshot === "string" && row.signatureSnapshot
+      ? (() => { try { return JSON.parse(row.signatureSnapshot); } catch { return null; } })()
+      : row.signatureSnapshot ?? null,
+  };
+}
+
+async function logEmployeeAudit(db: any, params: {
+  employeeRecordId?: number | null;
+  targetType: string;
+  targetId?: number | null;
+  action: string;
+  actor?: EmployeeRecordActor | null;
+  details?: Record<string, unknown> | null;
+}) {
+  await ensureEmployeeRecordsSchema(db);
+  await db.execute(sql`
+    insert into employee_audit_log
+      (employeeRecordId, targetType, targetId, action, actorUserId, actorName, actorRole, ipAddress, userAgent, details)
+    values
+      (${params.employeeRecordId ?? null}, ${params.targetType}, ${params.targetId ?? null}, ${params.action}, ${params.actor?.id ?? null}, ${params.actor?.name ?? params.actor?.email ?? null}, ${params.actor?.role ?? null}, ${params.actor?.ipAddress ?? null}, ${params.actor?.userAgent ?? null}, ${params.details ? JSON.stringify(params.details) : null})
+  `);
+}
+
+async function syncEmployeeRecordsFromUsers(db: any) {
+  await ensureEmployeeRecordsSchema(db);
+  await db.execute(sql`
+    insert into employee_records
+      (userId, fullName, email, phone, role, position, professionalLicenseType, professionalLicenseNumber, professionalLicenseState, employmentStatus, createdByUserId)
+    select
+      u.id,
+      coalesce(nullif(u.name, ''), u.email, concat('Funcionário ', u.id)),
+      lower(u.email),
+      u.phone,
+      u.role,
+      u.profession,
+      u.professionalLicenseType,
+      u.crm,
+      u.professionalLicenseState,
+      case when u.status = 'inactive' then 'arquivado' else 'ativo' end,
+      null
+    from users u
+    where u.id is not null
+      and not exists (select 1 from employee_records er where er.userId = u.id)
+  `);
+
+  await db.execute(sql`
+    update employee_records er
+    join users u on u.id = er.userId
+    set
+      er.email = coalesce(nullif(er.email, ''), lower(u.email)),
+      er.phone = coalesce(nullif(er.phone, ''), u.phone),
+      er.role = coalesce(nullif(er.role, ''), u.role),
+      er.position = coalesce(nullif(er.position, ''), u.profession),
+      er.professionalLicenseType = coalesce(nullif(er.professionalLicenseType, ''), u.professionalLicenseType),
+      er.professionalLicenseNumber = coalesce(nullif(er.professionalLicenseNumber, ''), u.crm),
+      er.professionalLicenseState = coalesce(nullif(er.professionalLicenseState, ''), u.professionalLicenseState),
+      er.employmentStatus = case when u.status = 'inactive' and er.employmentStatus = 'ativo' then 'arquivado' else er.employmentStatus end,
+      er.updatedAt = now()
+    where er.userId is not null
+  `);
+}
+
+function saveEmployeeDocumentToPrivateDir(employeeRecordId: number, base64: string, mimeType?: string | null, originalFileName?: string | null) {
+  const cleanedBase64 = String(base64 ?? "").replace(/^data:[^;]+;base64,/, "");
+  const buffer = Buffer.from(cleanedBase64, "base64");
+  if (buffer.byteLength <= 0) throw new Error("Arquivo vazio.");
+  if (buffer.byteLength > 25 * 1024 * 1024) throw new Error("Arquivo maior que 25 MB.");
+
+  const originalExt = path.extname(String(originalFileName ?? "")).replace(/^\./, "");
+  const extension = (originalExt || inferExtensionFromMimeType(mimeType)).replace(/[^a-zA-Z0-9]/g, "").slice(0, 8) || "pdf";
+  const safeOriginal = String(originalFileName ?? "documento")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "documento";
+  const privateRoot = path.resolve(process.cwd(), "private", "employee-records");
+  const relativeDir = path.join("private", "employee-records", `employee-${employeeRecordId}`);
+  const absoluteDir = path.resolve(process.cwd(), relativeDir);
+  if (absoluteDir !== privateRoot && !absoluteDir.startsWith(`${privateRoot}${path.sep}`)) {
+    throw new Error("Caminho de arquivo inválido.");
+  }
+  fs.mkdirSync(absoluteDir, { recursive: true });
+
+  const fileName = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${safeOriginal}.${extension}`;
+  const absolutePath = path.join(absoluteDir, fileName);
+  fs.writeFileSync(absolutePath, buffer);
+  return {
+    filePath: path.relative(process.cwd(), absolutePath).replace(/\\/g, "/"),
+    fileSize: buffer.byteLength,
+    sha256: crypto.createHash("sha256").update(buffer).digest("hex"),
+  };
+}
+
+export async function listEmployeeRecords(query?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  await syncEmployeeRecordsFromUsers(db);
+
+  const normalizedQuery = String(query ?? "").trim();
+  const whereClause = normalizedQuery
+    ? sql`where er.fullName like ${`%${normalizedQuery}%`} or er.email like ${`%${normalizedQuery}%`} or er.position like ${`%${normalizedQuery}%`}`
+    : sql``;
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select
+      er.*,
+      coalesce(d.documentCount, 0) as documentCount,
+      coalesce(n.noteCount, 0) as noteCount,
+      coalesce(n.signedNoteCount, 0) as signedNoteCount
+    from employee_records er
+    left join (
+      select employeeRecordId, count(*) as documentCount
+      from employee_documents
+      where deletedAt is null
+      group by employeeRecordId
+    ) d on d.employeeRecordId = er.id
+    left join (
+      select employeeRecordId, count(*) as noteCount, sum(case when status = 'assinado' then 1 else 0 end) as signedNoteCount
+      from employee_notes
+      where deletedAt is null
+      group by employeeRecordId
+    ) n on n.employeeRecordId = er.id
+    ${whereClause}
+    order by er.fullName asc, er.id asc
+  `));
+
+  return rows.map(normalizeEmployeeRecordRow);
+}
+
+export async function getEmployeeRecord(recordId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  await ensureEmployeeRecordsSchema(db);
+
+  const records = unwrapRows<any>(await db.execute(sql`
+    select * from employee_records where id = ${recordId} limit 1
+  `));
+  const record = records[0];
+  if (!record) return null;
+
+  const documents = unwrapRows<any>(await db.execute(sql`
+    select * from employee_documents
+    where employeeRecordId = ${recordId} and deletedAt is null
+    order by createdAt desc, id desc
+  `)).map(normalizeEmployeeDocumentRow);
+
+  const notes = unwrapRows<any>(await db.execute(sql`
+    select * from employee_notes
+    where employeeRecordId = ${recordId} and deletedAt is null
+    order by createdAt desc, id desc
+  `)).map(normalizeEmployeeNoteRow);
+
+  const audit = unwrapRows<any>(await db.execute(sql`
+    select * from employee_audit_log
+    where employeeRecordId = ${recordId}
+    order by createdAt desc, id desc
+    limit 80
+  `));
+
+  return { record: normalizeEmployeeRecordRow(record), documents, notes, audit };
+}
+
+export async function createEmployeeRecord(data: any, actor: EmployeeRecordActor) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureEmployeeRecordsSchema(db);
+
+  const result = await db.execute(sql`
+    insert into employee_records
+      (
+        userId, fullName, email, phone, birthDate, cpf, rg,
+        zipCode, address, addressNumber, addressComplement, neighborhood, city, state,
+        role, position, department, professionalLicenseType, professionalLicenseNumber, professionalLicenseState,
+        employmentStatus, admissionDate, terminationDate, internalNotes,
+        digitalCertificateStatus, digitalCertificateType, digitalCertificateSubject, digitalCertificateIssuer,
+        digitalCertificateSerial, digitalCertificateValidUntil, digitalCertificateFingerprint, digitalCertificateNotes,
+        digitalCertificateUpdatedAt, digitalCertificateUpdatedByUserId, createdByUserId
+      )
+    values
+      (
+        ${data.userId ?? null}, ${data.fullName}, ${normalizeEmailValue(data.email) || null}, ${data.phone || null}, ${data.birthDate || null}, ${data.cpf || null}, ${data.rg || null},
+        ${data.zipCode || null}, ${data.address || null}, ${data.addressNumber || null}, ${data.addressComplement || null}, ${data.neighborhood || null}, ${data.city || null}, ${normalizeStateCode(data.state) || null},
+        ${data.role ?? null}, ${data.position ?? null}, ${data.department ?? null}, ${data.professionalLicenseType ?? null}, ${data.professionalLicenseNumber ?? null}, ${normalizeStateCode(data.professionalLicenseState) || null},
+        ${data.employmentStatus ?? 'ativo'}, ${data.admissionDate || null}, ${data.terminationDate || null}, ${data.internalNotes ?? null},
+        ${data.digitalCertificateStatus ?? 'not_registered'}, ${data.digitalCertificateType ?? null}, ${data.digitalCertificateSubject ?? null}, ${data.digitalCertificateIssuer ?? null},
+        ${data.digitalCertificateSerial ?? null}, ${data.digitalCertificateValidUntil || null}, ${data.digitalCertificateFingerprint ?? null}, ${data.digitalCertificateNotes ?? null},
+        ${data.digitalCertificateStatus === 'registered' || data.digitalCertificateFingerprint ? new Date() : null}, ${data.digitalCertificateStatus === 'registered' || data.digitalCertificateFingerprint ? actor.id ?? null : null}, ${actor.id ?? null}
+      )
+  `);
+  const insertedId = unwrapInsertId(result);
+  await logEmployeeAudit(db, {
+    employeeRecordId: insertedId,
+    targetType: "employee_record",
+    targetId: insertedId,
+    action: "employee_record_created",
+    actor,
+    details: { fullName: data.fullName, email: normalizeEmailValue(data.email) || null },
+  });
+  return getEmployeeRecord(insertedId);
+}
+
+export async function updateEmployeeRecord(recordId: number, data: any, actor: EmployeeRecordActor) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureEmployeeRecordsSchema(db);
+
+  await db.execute(sql`
+    update employee_records set
+      fullName = ${data.fullName},
+      email = ${normalizeEmailValue(data.email) || null},
+      phone = ${data.phone || null},
+      birthDate = ${data.birthDate || null},
+      cpf = ${data.cpf || null},
+      rg = ${data.rg || null},
+      zipCode = ${data.zipCode || null},
+      address = ${data.address || null},
+      addressNumber = ${data.addressNumber || null},
+      addressComplement = ${data.addressComplement || null},
+      neighborhood = ${data.neighborhood || null},
+      city = ${data.city || null},
+      state = ${normalizeStateCode(data.state) || null},
+      role = ${data.role ?? null},
+      position = ${data.position ?? null},
+      department = ${data.department ?? null},
+      professionalLicenseType = ${data.professionalLicenseType ?? null},
+      professionalLicenseNumber = ${data.professionalLicenseNumber ?? null},
+      professionalLicenseState = ${normalizeStateCode(data.professionalLicenseState) || null},
+      employmentStatus = ${data.employmentStatus ?? 'ativo'},
+      admissionDate = ${data.admissionDate || null},
+      terminationDate = ${data.terminationDate || null},
+      internalNotes = ${data.internalNotes ?? null},
+      digitalCertificateStatus = ${data.digitalCertificateStatus ?? 'not_registered'},
+      digitalCertificateType = ${data.digitalCertificateType ?? null},
+      digitalCertificateSubject = ${data.digitalCertificateSubject ?? null},
+      digitalCertificateIssuer = ${data.digitalCertificateIssuer ?? null},
+      digitalCertificateSerial = ${data.digitalCertificateSerial ?? null},
+      digitalCertificateValidUntil = ${data.digitalCertificateValidUntil || null},
+      digitalCertificateFingerprint = ${data.digitalCertificateFingerprint ?? null},
+      digitalCertificateNotes = ${data.digitalCertificateNotes ?? null},
+      digitalCertificateUpdatedAt = case
+        when coalesce(digitalCertificateStatus, '') <> ${data.digitalCertificateStatus ?? 'not_registered'}
+          or coalesce(digitalCertificateFingerprint, '') <> ${data.digitalCertificateFingerprint ?? ''}
+          or coalesce(digitalCertificateSerial, '') <> ${data.digitalCertificateSerial ?? ''}
+        then now()
+        else digitalCertificateUpdatedAt
+      end,
+      digitalCertificateUpdatedByUserId = case
+        when coalesce(digitalCertificateStatus, '') <> ${data.digitalCertificateStatus ?? 'not_registered'}
+          or coalesce(digitalCertificateFingerprint, '') <> ${data.digitalCertificateFingerprint ?? ''}
+          or coalesce(digitalCertificateSerial, '') <> ${data.digitalCertificateSerial ?? ''}
+        then ${actor.id ?? null}
+        else digitalCertificateUpdatedByUserId
+      end,
+      updatedAt = now()
+    where id = ${recordId}
+  `);
+  await logEmployeeAudit(db, {
+    employeeRecordId: recordId,
+    targetType: "employee_record",
+    targetId: recordId,
+    action: "employee_record_updated",
+    actor,
+    details: { fields: Object.keys(data ?? {}) },
+  });
+  return getEmployeeRecord(recordId);
+}
+
+export async function uploadEmployeeDocument(data: any, actor: EmployeeRecordActor) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureEmployeeRecordsSchema(db);
+
+  const record = await getEmployeeRecord(Number(data.employeeRecordId));
+  if (!record?.record) throw new Error("Registro funcional não encontrado.");
+  const stored = saveEmployeeDocumentToPrivateDir(Number(data.employeeRecordId), data.base64, data.mimeType, data.originalFileName);
+
+  const result = await db.execute(sql`
+    insert into employee_documents
+      (employeeRecordId, title, documentType, originalFileName, mimeType, fileSize, filePath, sha256, uploadedByUserId, uploadedByName)
+    values
+      (${Number(data.employeeRecordId)}, ${data.title}, ${data.documentType ?? 'documento'}, ${data.originalFileName ?? null}, ${data.mimeType ?? null}, ${stored.fileSize}, ${stored.filePath}, ${stored.sha256}, ${actor.id ?? null}, ${actor.name ?? actor.email ?? null})
+  `);
+  const insertedId = unwrapInsertId(result);
+  await logEmployeeAudit(db, {
+    employeeRecordId: Number(data.employeeRecordId),
+    targetType: "employee_document",
+    targetId: insertedId,
+    action: "employee_document_uploaded",
+    actor,
+    details: { title: data.title, documentType: data.documentType, sha256: stored.sha256, fileSize: stored.fileSize },
+  });
+  return getEmployeeRecord(Number(data.employeeRecordId));
+}
+
+export async function getEmployeeDocumentById(documentId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  await ensureEmployeeRecordsSchema(db);
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select * from employee_documents where id = ${documentId} limit 1
+  `));
+  return rows[0] ? normalizeEmployeeDocumentRow(rows[0]) : null;
+}
+
+export async function deleteEmployeeDocument(documentId: number, reason: string, actor: EmployeeRecordActor) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureEmployeeRecordsSchema(db);
+  const document = await getEmployeeDocumentById(documentId);
+  if (!document || document.deletedAt) throw new Error("Documento não encontrado.");
+  await db.execute(sql`
+    update employee_documents
+    set deletedAt = now(), deletedByUserId = ${actor.id ?? null}, deleteReason = ${reason}
+    where id = ${documentId}
+  `);
+  await logEmployeeAudit(db, {
+    employeeRecordId: Number(document.employeeRecordId),
+    targetType: "employee_document",
+    targetId: documentId,
+    action: "employee_document_deleted",
+    actor,
+    details: { reason, title: document.title, sha256: document.sha256 },
+  });
+  return getEmployeeRecord(Number(document.employeeRecordId));
+}
+
+export async function createEmployeeNote(data: any, actor: EmployeeRecordActor) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureEmployeeRecordsSchema(db);
+
+  const result = await db.execute(sql`
+    insert into employee_notes
+      (employeeRecordId, kind, title, content, status, createdByUserId, createdByName)
+    values
+      (${Number(data.employeeRecordId)}, ${data.kind ?? 'anotacao'}, ${data.title}, ${data.content}, 'rascunho', ${actor.id ?? null}, ${actor.name ?? actor.email ?? null})
+  `);
+  const insertedId = unwrapInsertId(result);
+  await logEmployeeAudit(db, {
+    employeeRecordId: Number(data.employeeRecordId),
+    targetType: "employee_note",
+    targetId: insertedId,
+    action: "employee_note_created",
+    actor,
+    details: { title: data.title, kind: data.kind ?? 'anotacao' },
+  });
+  return getEmployeeRecord(Number(data.employeeRecordId));
+}
+
+export async function updateEmployeeNote(noteId: number, data: any, actor: EmployeeRecordActor) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureEmployeeRecordsSchema(db);
+
+  const rows = unwrapRows<any>(await db.execute(sql`select * from employee_notes where id = ${noteId} and deletedAt is null limit 1`));
+  const note = rows[0];
+  if (!note) throw new Error("Anotação não encontrada.");
+  if (note.status === "assinado") throw new Error("Anotações assinadas não podem ser editadas.");
+
+  await db.execute(sql`
+    update employee_notes
+    set kind = ${data.kind ?? note.kind}, title = ${data.title}, content = ${data.content}, updatedAt = now()
+    where id = ${noteId}
+  `);
+  await logEmployeeAudit(db, {
+    employeeRecordId: Number(note.employeeRecordId),
+    targetType: "employee_note",
+    targetId: noteId,
+    action: "employee_note_updated",
+    actor,
+    details: { title: data.title, kind: data.kind ?? note.kind },
+  });
+  return getEmployeeRecord(Number(note.employeeRecordId));
+}
+
+export async function signEmployeeNote(noteId: number, actor: EmployeeRecordActor) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureEmployeeRecordsSchema(db);
+
+  const rows = unwrapRows<any>(await db.execute(sql`select * from employee_notes where id = ${noteId} and deletedAt is null limit 1`));
+  const note = rows[0];
+  if (!note) throw new Error("Anotação não encontrada.");
+  if (note.status === "assinado") return getEmployeeRecord(Number(note.employeeRecordId));
+
+  await syncEmployeeRecordsFromUsers(db);
+  const signerRows = actor.id
+    ? unwrapRows<any>(await db.execute(sql`select * from employee_records where userId = ${actor.id} limit 1`))
+    : [];
+  const signerRecord = signerRows[0] ?? null;
+  const signerHasDigitalCertificate =
+    signerRecord?.digitalCertificateStatus === "registered" &&
+    String(signerRecord?.digitalCertificateFingerprint ?? "").trim().length > 0;
+
+  const signedAt = new Date();
+  const contentHash = crypto.createHash("sha256").update(String(note.content ?? "")).digest("hex");
+  const snapshot = {
+    method: signerHasDigitalCertificate
+      ? "Assinatura com certificado digital cadastrado no prontuário funcional"
+      : "Assinatura eletrônica interna do Glutec System",
+    assurance: signerHasDigitalCertificate
+      ? "Usuário autenticado no sistema, com certificado digital previamente cadastrado e identificado na trilha de auditoria"
+      : "Usuário autenticado no sistema com sessão protegida e 2FA obrigatório",
+    signedAt: signedAt.toISOString(),
+    employeeRecordId: Number(note.employeeRecordId),
+    noteId,
+    title: note.title,
+    kind: note.kind,
+    contentHash,
+    signer: {
+      id: actor.id ?? null,
+      name: actor.name ?? null,
+      email: normalizeEmailValue(actor.email) || null,
+      role: actor.role ?? null,
+      professionalLicenseType: signerRecord?.professionalLicenseType ?? null,
+      professionalLicenseNumber: signerRecord?.professionalLicenseNumber ?? null,
+      professionalLicenseState: signerRecord?.professionalLicenseState ?? null,
+    },
+    certificate: signerHasDigitalCertificate ? {
+      type: signerRecord.digitalCertificateType ?? null,
+      subject: signerRecord.digitalCertificateSubject ?? null,
+      issuer: signerRecord.digitalCertificateIssuer ?? null,
+      serial: signerRecord.digitalCertificateSerial ?? null,
+      validUntil: signerRecord.digitalCertificateValidUntil ?? null,
+      fingerprint: signerRecord.digitalCertificateFingerprint ?? null,
+    } : null,
+    ipAddress: actor.ipAddress ?? null,
+    userAgent: actor.userAgent ?? null,
+  };
+  const signatureHash = crypto.createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
+
+  await db.execute(sql`
+    update employee_notes
+    set status = 'assinado', signedAt = ${signedAt}, signedByUserId = ${actor.id ?? null}, signedByName = ${actor.name ?? actor.email ?? null}, signatureHash = ${signatureHash}, signatureSnapshot = ${JSON.stringify(snapshot)}, updatedAt = now()
+    where id = ${noteId}
+  `);
+  await logEmployeeAudit(db, {
+    employeeRecordId: Number(note.employeeRecordId),
+    targetType: "employee_note",
+    targetId: noteId,
+    action: "employee_note_signed",
+    actor,
+    details: { signatureHash, contentHash, title: note.title },
+  });
+  return getEmployeeRecord(Number(note.employeeRecordId));
+}
+
+export async function deleteEmployeeNote(noteId: number, reason: string, actor: EmployeeRecordActor) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureEmployeeRecordsSchema(db);
+
+  const rows = unwrapRows<any>(await db.execute(sql`select * from employee_notes where id = ${noteId} and deletedAt is null limit 1`));
+  const note = rows[0];
+  if (!note) throw new Error("Anotação não encontrada.");
+  await db.execute(sql`
+    update employee_notes
+    set deletedAt = now(), deletedByUserId = ${actor.id ?? null}, deleteReason = ${reason}, updatedAt = now()
+    where id = ${noteId}
+  `);
+  await logEmployeeAudit(db, {
+    employeeRecordId: Number(note.employeeRecordId),
+    targetType: "employee_note",
+    targetId: noteId,
+    action: note.status === "assinado" ? "employee_signed_note_voided" : "employee_note_deleted",
+    actor,
+    details: { reason, signatureHash: note.signatureHash ?? null, title: note.title },
+  });
+  return getEmployeeRecord(Number(note.employeeRecordId));
 }

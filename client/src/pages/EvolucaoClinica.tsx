@@ -103,10 +103,10 @@ export default function EvolucaoClinica() {
           {/* Audio Recording */}
           <AudioRecorder
             onTranscriptionComplete={(transcription) =>
-              setEvolucaoData({
-                ...evolucaoData,
-                audioTranscription: transcription,
-              })
+              setEvolucaoData((current) => ({
+                ...current,
+                audioTranscription: [current.audioTranscription, transcription].filter(Boolean).join("\n\n"),
+              }))
             }
           />
 

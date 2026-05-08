@@ -40,6 +40,40 @@ function normalizeEmailForStorage(value?: string | null) {
   return String(value ?? "").trim().toLowerCase();
 }
 
+const employeeRecordInputShape = {
+  fullName: z.string().min(2),
+  email: z.string().email().optional().or(z.literal("")),
+  phone: z.string().optional(),
+  birthDate: z.string().optional().or(z.literal("")),
+  cpf: z.string().optional(),
+  rg: z.string().optional(),
+  zipCode: z.string().optional(),
+  address: z.string().optional(),
+  addressNumber: z.string().optional(),
+  addressComplement: z.string().optional(),
+  neighborhood: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().max(2).optional().or(z.literal("")),
+  role: z.string().optional(),
+  position: z.string().optional(),
+  department: z.string().optional(),
+  professionalLicenseType: z.string().optional(),
+  professionalLicenseNumber: z.string().optional(),
+  professionalLicenseState: z.string().max(2).optional().or(z.literal("")),
+  employmentStatus: z.enum(["ativo", "afastado", "desligado", "arquivado"]).default("ativo"),
+  admissionDate: z.string().optional().or(z.literal("")),
+  terminationDate: z.string().optional().or(z.literal("")),
+  internalNotes: z.string().optional(),
+  digitalCertificateStatus: z.enum(["not_registered", "registered", "expired", "revoked"]).default("not_registered"),
+  digitalCertificateType: z.string().optional(),
+  digitalCertificateSubject: z.string().optional(),
+  digitalCertificateIssuer: z.string().optional(),
+  digitalCertificateSerial: z.string().optional(),
+  digitalCertificateValidUntil: z.string().optional().or(z.literal("")),
+  digitalCertificateFingerprint: z.string().optional(),
+  digitalCertificateNotes: z.string().optional(),
+};
+
 function normalizeInviteRole(value?: string | null): InviteRole {
   return INVITE_ROLES.includes(value as InviteRole) ? (value as InviteRole) : "user";
 }
@@ -61,6 +95,30 @@ function canManageAppointmentSchedule(user: any) {
 function assertCanManageAppointmentSchedule(user: any) {
   if (!canManageAppointmentSchedule(user)) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Apenas secretária, gerente ou administrador podem criar ou alterar agendamentos." });
+  }
+}
+
+
+function makeEmployeeRecordActor(ctx: any) {
+  return {
+    id: ctx.user?.id,
+    name: ctx.user?.name,
+    email: ctx.user?.email,
+    role: ctx.user?.role,
+    ipAddress: ctx.req?.ip || null,
+    userAgent: String(ctx.req?.headers?.["user-agent"] ?? ""),
+  };
+}
+
+function assertCanAccessEmployeeRecords(user: any) {
+  if (!dbComplete.canAccessEmployeeRecords(user)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Acesso restrito ao administrador senior e a gerencia." });
+  }
+}
+
+function assertCanPerformIrreversibleEmployeeAction(user: any) {
+  if (!dbComplete.canPerformIrreversibleEmployeeAction(user)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Somente o administrador senior pode excluir documentos ou anotacoes assinadas." });
   }
 }
 
@@ -674,6 +732,103 @@ export const appRouter = router({
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
         await dbComplete.updateUserRole(input.userId, input.role);
         return { success: true };
+      }),
+  }),
+
+  // EMPLOYEE RECORDS / PRONTUARIO FUNCIONAL
+  employeeRecords: router({
+    list: protectedProcedure
+      .input(z.object({ query: z.string().optional() }).optional())
+      .query(async ({ ctx, input }) => {
+        assertCanAccessEmployeeRecords(ctx.user);
+        return dbComplete.listEmployeeRecords(input?.query);
+      }),
+
+    get: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        assertCanAccessEmployeeRecords(ctx.user);
+        const record = await dbComplete.getEmployeeRecord(input.id);
+        if (!record) throw new TRPCError({ code: "NOT_FOUND", message: "Registro funcional nao encontrado." });
+        return record;
+      }),
+
+    create: protectedProcedure
+      .input(z.object(employeeRecordInputShape))
+      .mutation(async ({ ctx, input }) => {
+        assertCanAccessEmployeeRecords(ctx.user);
+        return dbComplete.createEmployeeRecord(input, makeEmployeeRecordActor(ctx));
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number().int().positive(),
+        ...employeeRecordInputShape,
+      }))
+      .mutation(async ({ ctx, input }) => {
+        assertCanAccessEmployeeRecords(ctx.user);
+        const { id, ...data } = input;
+        return dbComplete.updateEmployeeRecord(id, data, makeEmployeeRecordActor(ctx));
+      }),
+
+    uploadDocument: protectedProcedure
+      .input(z.object({
+        employeeRecordId: z.number().int().positive(),
+        title: z.string().min(2).max(255),
+        documentType: z.string().min(2).max(80),
+        originalFileName: z.string().max(255).optional(),
+        mimeType: z.string().max(160).optional(),
+        base64: z.string().min(8),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        assertCanAccessEmployeeRecords(ctx.user);
+        return dbComplete.uploadEmployeeDocument(input, makeEmployeeRecordActor(ctx));
+      }),
+
+    deleteDocument: protectedProcedure
+      .input(z.object({ id: z.number().int().positive(), reason: z.string().min(5).max(500) }))
+      .mutation(async ({ ctx, input }) => {
+        assertCanPerformIrreversibleEmployeeAction(ctx.user);
+        return dbComplete.deleteEmployeeDocument(input.id, input.reason, makeEmployeeRecordActor(ctx));
+      }),
+
+    createNote: protectedProcedure
+      .input(z.object({
+        employeeRecordId: z.number().int().positive(),
+        kind: z.enum(["anotacao", "advertencia", "ocorrencia", "avaliacao"]),
+        title: z.string().min(2).max(255),
+        content: z.string().min(3),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        assertCanAccessEmployeeRecords(ctx.user);
+        return dbComplete.createEmployeeNote(input, makeEmployeeRecordActor(ctx));
+      }),
+
+    updateNote: protectedProcedure
+      .input(z.object({
+        id: z.number().int().positive(),
+        kind: z.enum(["anotacao", "advertencia", "ocorrencia", "avaliacao"]),
+        title: z.string().min(2).max(255),
+        content: z.string().min(3),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        assertCanAccessEmployeeRecords(ctx.user);
+        const { id, ...data } = input;
+        return dbComplete.updateEmployeeNote(id, data, makeEmployeeRecordActor(ctx));
+      }),
+
+    signNote: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        assertCanAccessEmployeeRecords(ctx.user);
+        return dbComplete.signEmployeeNote(input.id, makeEmployeeRecordActor(ctx));
+      }),
+
+    deleteNote: protectedProcedure
+      .input(z.object({ id: z.number().int().positive(), reason: z.string().min(5).max(500) }))
+      .mutation(async ({ ctx, input }) => {
+        assertCanPerformIrreversibleEmployeeAction(ctx.user);
+        return dbComplete.deleteEmployeeNote(input.id, input.reason, makeEmployeeRecordActor(ctx));
       }),
   }),
 
@@ -1537,6 +1692,12 @@ export const appRouter = router({
           patientId = Number(examRequest.patientId);
           title = "Pedido de exames";
           body = `${stripHtmlForSignature(examRequest.content)}\n\nObservações: ${examRequest.observations || "Não informadas."}`;
+        } else if (input.documentType === "patient_document") {
+          const patientDocument = await dbComplete.getPatientDocumentById(input.documentId);
+          if (!patientDocument) throw new TRPCError({ code: "NOT_FOUND", message: "Documento clínico não encontrado." });
+          patientId = Number(patientDocument.patientId);
+          title = String(patientDocument.name || patientDocument.title || "Documento clínico");
+          body = stripHtmlForSignature(patientDocument.content || patientDocument.description || patientDocument.rawDescription || "");
         } else {
           throw new TRPCError({
             code: "BAD_REQUEST",
@@ -2595,6 +2756,164 @@ export const appRouter = router({
           input.signerName ?? ctx.user.name ?? undefined,
         );
         return result;
+      }),
+
+    signClinicalDocument: protectedProcedure
+      .input(z.object({
+        documentType: z.enum(["prescricao", "exame", "documento_clinico"]),
+        documentId: z.number().int().positive(),
+        sendToWhatsApp: z.boolean().optional(),
+        phone: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const certRaw = await dbComplete.getUserA1CertificateRaw(ctx.user.id);
+        if (!certRaw?.fileBase64) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "Certificado A1 PF não configurado. Faça o upload em Perfil → Certificado Digital.",
+          });
+        }
+
+        let title = "DOCUMENTO CLÍNICO";
+        let filename = `documento_${input.documentId}.pdf`;
+        let caption = "Documento clínico assinado — Clínica Glutée";
+        let patientPhone = input.phone ?? "";
+        let applyDocumentType: "prescricao" | "exame" | "atestado" = "atestado";
+        const lines: string[] = [];
+
+        if (input.documentType === "prescricao") {
+          const prescription = await dbComplete.getPrescriptionById(input.documentId);
+          if (!prescription) throw new TRPCError({ code: "NOT_FOUND", message: "Prescrição não encontrada." });
+          const patient = await dbComplete.getPatientById(Number(prescription.patientId));
+          const patientName = patient?.fullName || patient?.name || `Paciente ${prescription.patientId}`;
+          patientPhone = patientPhone || patient?.phone || "";
+          title = "PRESCRIÇÃO MÉDICA";
+          filename = `prescricao_${input.documentId}_assinada.pdf`;
+          caption = "Prescrição médica assinada — Clínica Glutée";
+          applyDocumentType = "prescricao";
+          lines.push(
+            `Paciente: ${patientName}`,
+            `Data: ${new Date(prescription.date ?? prescription.createdAt ?? Date.now()).toLocaleDateString("pt-BR")}`,
+            `Profissional: ${ctx.user.name || ctx.user.email}`,
+            "",
+            stripHtmlForSignature(prescription.content || ""),
+          );
+          if (prescription.observations) {
+            lines.push("", `Observações: ${stripHtmlForSignature(prescription.observations)}`);
+          }
+        } else if (input.documentType === "exame") {
+          const exam = await dbComplete.getExamRequestById(input.documentId);
+          if (!exam) throw new TRPCError({ code: "NOT_FOUND", message: "Pedido de exames não encontrado." });
+          const patient = await dbComplete.getPatientById(Number(exam.patientId));
+          const patientName = exam.patientName || patient?.fullName || patient?.name || `Paciente ${exam.patientId}`;
+          patientPhone = patientPhone || exam.patientPhone || patient?.phone || "";
+          let exams = exam.exams ?? exam.content ?? "";
+          if (typeof exams === "string") {
+            try {
+              const parsed = JSON.parse(exams);
+              if (Array.isArray(parsed)) exams = parsed;
+            } catch {}
+          }
+          const examText = Array.isArray(exams)
+            ? exams.map((item: any) => typeof item === "string" ? item : [item?.name, item?.instructions].filter(Boolean).join(" - ")).filter(Boolean).join("\n")
+            : stripHtmlForSignature(String(exams ?? ""));
+          title = "PEDIDO DE EXAMES";
+          filename = `pedido_exames_${input.documentId}_assinado.pdf`;
+          caption = "Pedido de exames assinado — Clínica Glutée";
+          applyDocumentType = "exame";
+          lines.push(
+            `Paciente: ${patientName}`,
+            `Data: ${new Date(exam.date ?? exam.createdAt ?? Date.now()).toLocaleDateString("pt-BR")}`,
+            `Profissional: ${ctx.user.name || ctx.user.email}`,
+            "",
+            "Exames solicitados:",
+            examText,
+          );
+          if (exam.clinicalIndication) {
+            lines.push("", `Indicação clínica: ${stripHtmlForSignature(exam.clinicalIndication)}`);
+          }
+          if (exam.observations) {
+            lines.push("", `Observações: ${stripHtmlForSignature(exam.observations)}`);
+          }
+        } else {
+          const document = await dbComplete.getPatientDocumentById(input.documentId);
+          if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento clínico não encontrado." });
+          const patientName = document.patientName || `Paciente ${document.patientId}`;
+          patientPhone = patientPhone || document.patientPhone || "";
+          title = String(document.name || document.title || "DOCUMENTO CLÍNICO").toUpperCase();
+          filename = `documento_clinico_${input.documentId}_assinado.pdf`;
+          caption = `${document.name || "Documento clínico"} assinado — Clínica Glutée`;
+          applyDocumentType = "atestado";
+          lines.push(
+            `Paciente: ${patientName}`,
+            `Data: ${new Date(document.createdAt ?? Date.now()).toLocaleDateString("pt-BR")}`,
+            `Profissional: ${ctx.user.name || ctx.user.email}`,
+            "",
+            stripHtmlForSignature(document.content || document.description || document.rawDescription || ""),
+          );
+        }
+
+        if (input.sendToWhatsApp) {
+          if (!patientPhone) {
+            throw new TRPCError({
+              code: "PRECONDITION_FAILED",
+              message: "Telefone do paciente não encontrado. Informe o número antes de usar Assinar e enviar.",
+            });
+          }
+          const wa = await createWhatsAppService();
+          if (!wa) {
+            throw new TRPCError({
+              code: "PRECONDITION_FAILED",
+              message: "WhatsApp não configurado. Configure o Access Token e Phone Number ID nas configurações da clínica.",
+            });
+          }
+        }
+
+        const pdfBuffer = buildSimplePdfBuffer(title, lines);
+        const { signPdfWithA1 } = await import("./lib/a1-pdf-signer");
+        const signed = await signPdfWithA1(
+          pdfBuffer,
+          certRaw.fileBase64,
+          certRaw.password,
+          ctx.user.name ?? undefined,
+        );
+        const validationCode = require("crypto")
+          .createHash("sha256")
+          .update(`${signed.signedPdfBase64.slice(0, 2048)}:${applyDocumentType}:${input.documentId}:${Date.now()}`)
+          .digest("hex")
+          .slice(0, 24)
+          .toUpperCase();
+
+        await dbComplete.applyDocumentSignature({
+          documentType: applyDocumentType,
+          documentId: input.documentId,
+          sessionId: null,
+          provider: "a1_pf",
+          signedByName: signed.commonName || ctx.user.name || ctx.user.email,
+          signatureCms: `A1-PDF:${validationCode}`,
+          validationCode,
+        });
+
+        let sentToWhatsApp = false;
+        if (input.sendToWhatsApp) {
+          const wa = await createWhatsAppService();
+          if (!wa) {
+            throw new TRPCError({
+              code: "PRECONDITION_FAILED",
+              message: "WhatsApp não configurado.",
+            });
+          }
+          const mediaId = await wa.uploadMedia(Buffer.from(signed.signedPdfBase64, "base64"), filename, "application/pdf");
+          await wa.sendDocument(patientPhone, mediaId, filename, caption);
+          sentToWhatsApp = true;
+        }
+
+        return {
+          ...signed,
+          validationCode,
+          sentToWhatsApp,
+          filename,
+        };
       }),
   }),
 });

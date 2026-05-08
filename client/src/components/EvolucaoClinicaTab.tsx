@@ -292,10 +292,10 @@ export function EvolucaoClinicaTab({ patientId, patientName }: EvolucaoClinicaTa
             </div>
             <AudioRecorder
               onTranscriptionComplete={(transcription) =>
-                setCurrentEvolucao({
-                  ...currentEvolucao,
-                  audioTranscription: transcription,
-                })
+                setCurrentEvolucao((current) => ({
+                  ...current,
+                  audioTranscription: [current.audioTranscription, transcription].filter(Boolean).join("\n\n"),
+                }))
               }
             />
           </div>

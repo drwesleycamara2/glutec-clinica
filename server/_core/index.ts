@@ -780,6 +780,50 @@ async function startServer() {
     }
   });
 
+
+  app.get("/api/employee-documents/:id/download", async (req, res) => {
+    addNoIndexHeaders(res);
+
+    const user = await authenticateRequest(req);
+    if (!user) {
+      return res.status(401).send("Sessão inválida. Faça login novamente.");
+    }
+    if (!dbComplete.canAccessEmployeeRecords(user)) {
+      return res.status(403).send("Acesso restrito ao administrador sênior e à gerência.");
+    }
+
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).send("Documento inválido.");
+    }
+
+    try {
+      const document = await dbComplete.getEmployeeDocumentById(id);
+      if (!document || document.deletedAt) {
+        return res.status(404).send("Documento não encontrado.");
+      }
+
+      const privateRoot = path.resolve(process.cwd(), "private", "employee-records");
+      const absolutePath = path.resolve(process.cwd(), String(document.filePath ?? ""));
+      if (absolutePath !== privateRoot && !absolutePath.startsWith(`${privateRoot}${path.sep}`)) {
+        return res.status(403).send("Caminho de documento inválido.");
+      }
+      if (!fs.existsSync(absolutePath) || !fs.statSync(absolutePath).isFile()) {
+        return res.status(404).send("Arquivo do documento não encontrado.");
+      }
+
+      const fileName = String(document.originalFileName || document.title || `documento-${id}.pdf`).replace(/["\r\n]/g, "");
+      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("Content-Type", document.mimeType || "application/octet-stream");
+      res.setHeader("Content-Disposition", `inline; filename="${fileName}"`);
+      return res.sendFile(absolutePath);
+    } catch (error) {
+      console.error("[EmployeeDocumentDownload] Failed:", { id, error });
+      return res.status(500).send("Não foi possível abrir este documento funcional.");
+    }
+  });
+
+
   app.get("/api/admin/system-export/:token", async (req, res) => {
     const user = await authenticateRequest(req);
     if (!user || user.role !== "admin") {

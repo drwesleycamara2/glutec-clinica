@@ -11,8 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
-import { SignatureCertillionButton } from "@/components/SignatureCertillionButton";
+import { generatePremiumPdf } from "@/components/PdfExporter";
+import { ClinicalDocumentSignatureActions } from "@/components/ClinicalDocumentSignatureActions";
 import { toast } from "sonner";
 import { Plus, FlaskConical, Loader2, FileText, AlertTriangle, Clock, Trash2 } from "lucide-react";
 
@@ -86,6 +86,36 @@ export default function Exames() {
 
   const canCreate = ["admin", "medico"].includes(userRole);
 
+  const handlePrintExamRequest = async (request: any) => {
+    let exams = request.exams ?? request.content ?? "";
+    if (typeof exams === "string") {
+      try {
+        const parsed = JSON.parse(exams);
+        if (Array.isArray(parsed)) exams = parsed;
+      } catch {}
+    }
+    const examText = Array.isArray(exams)
+      ? exams.map((item: any) => typeof item === "string" ? item : [item?.name, item?.instructions].filter(Boolean).join(" - ")).filter(Boolean).join("<br />")
+      : String(exams ?? "");
+
+    await generatePremiumPdf({
+      filename: `pedido_exames_${request.id}.pdf`,
+      title: "Pedido de exames",
+      subtitle: `Paciente: ${request.patientName ?? "Paciente"}`,
+      content: `
+        <div style="font-family: Montserrat, sans-serif; font-size: 14px; line-height: 1.6;">
+          <p><strong>Paciente:</strong> ${request.patientName ?? ""}</p>
+          <p><strong>Data:</strong> ${new Date(request.createdAt ?? Date.now()).toLocaleDateString("pt-BR")}</p>
+          <p><strong>Exames solicitados:</strong></p>
+          <p>${examText}</p>
+          ${request.clinicalIndication ? `<p><strong>Indicação clínica:</strong> ${request.clinicalIndication}</p>` : ""}
+          ${request.signatureValidationCode ? `<p><strong>Assinatura:</strong> ${request.signatureProvider || "assinatura digital"} - código ${request.signatureValidationCode}</p>` : ""}
+        </div>
+      `,
+      includeWatermark: true,
+    });
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -139,29 +169,25 @@ export default function Exames() {
                       {req.specialty && <Badge variant="outline" className="text-xs">{req.specialty}</Badge>}
                       <p className="text-xs text-muted-foreground">{new Date(req.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {req.pdfUrl && (
-                        <Button size="sm" variant="outline" asChild>
-                          <a href={req.pdfUrl} target="_blank" rel="noopener noreferrer">
-                            <FileText className="h-3 w-3 mr-1" />PDF
-                          </a>
-                        </Button>
-                      )}
-                      <WhatsAppSendButton
-                        documentType="exame"
-                        documentId={req.id}
-                        defaultPhone={req.patientPhone ?? ""}
-                      />
-                      {(user as any)?.cloudSignatureCpf && (
-                        <SignatureCertillionButton
-                          documentType="exame"
-                          documentId={req.id}
-                          documentAlias={`Pedido de exames #${req.id}${req.patientName ? " — " + req.patientName : ""}`}
-                          documentContent={(req as any).content || JSON.stringify(exams)}
-                          signerCpf={(user as any).cloudSignatureCpf}
-                        />
-                      )}
-                    </div>
+                    <ClinicalDocumentSignatureActions
+                      documentType="exame"
+                      documentId={req.id}
+                      documentTitle={`Pedido de exames #${req.id}`}
+                      documentContent={(req as any).content || JSON.stringify(exams)}
+                      patientName={req.patientName ?? ""}
+                      patientPhone={req.patientPhone ?? ""}
+                      signerName={(user as any)?.name ?? ""}
+                      signerCpf={(user as any)?.cloudSignatureCpf ?? ""}
+                      isSigned={Boolean((req as any).signedAt || (req as any).signatureValidationCode)}
+                      signedAt={(req as any).signedAt}
+                      signatureProvider={(req as any).signatureProvider}
+                      signatureValidationCode={(req as any).signatureValidationCode}
+                      onPrint={() => handlePrintExamRequest(req)}
+                      onSigned={async () => {
+                        await refetch();
+                        await examUtils.examRequests.getByPatient.invalidate();
+                      }}
+                    />
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0 space-y-2">

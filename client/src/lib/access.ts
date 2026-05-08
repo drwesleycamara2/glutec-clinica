@@ -11,6 +11,7 @@ export const MODULE_LABELS: Record<string, string> = {
   assinaturas: "Assinaturas",
   orcamentos: "Orçamentos",
   financeiro: "Financeiro",
+  funcionarios: "Funcionários",
   estoque: "Estoque",
   crm: "CRM",
   relatorios: "Relatórios",
@@ -47,6 +48,7 @@ const pathModuleMap: Array<{ prefix: string; moduleId: string }> = [
   { prefix: "/assinaturas", moduleId: "assinaturas" },
   { prefix: "/orcamentos", moduleId: "orcamentos" },
   { prefix: "/financeiro", moduleId: "financeiro" },
+  { prefix: "/funcionarios", moduleId: "funcionarios" },
   { prefix: "/estoque", moduleId: "estoque" },
   { prefix: "/crm", moduleId: "crm" },
   { prefix: "/relatorios", moduleId: "relatorios" },
@@ -78,6 +80,10 @@ export function canAccessModule(
   if (user.role === "admin") return true;
 
   const granted = parsePermissions(user.permissions);
+
+  if (moduleId === "funcionarios") {
+    return user.role === "admin" || user.role === "gerente";
+  }
 
   if (moduleId === "prontuarios_any") {
     return granted.includes("prontuarios") || granted.includes("prontuarios_anotacoes");

@@ -1,0 +1,80 @@
+CREATE TABLE IF NOT EXISTS employee_records (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  userId INT NULL,
+  fullName VARCHAR(255) NOT NULL,
+  email VARCHAR(320) NULL,
+  role VARCHAR(64) NULL,
+  position VARCHAR(160) NULL,
+  department VARCHAR(160) NULL,
+  employmentStatus ENUM('ativo','afastado','desligado','arquivado') NOT NULL DEFAULT 'ativo',
+  admissionDate DATE NULL,
+  terminationDate DATE NULL,
+  internalNotes TEXT NULL,
+  createdByUserId INT NULL,
+  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_employee_records_user (userId),
+  KEY idx_employee_records_name (fullName),
+  KEY idx_employee_records_status (employmentStatus)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS employee_documents (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  employeeRecordId INT NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  documentType VARCHAR(80) NOT NULL DEFAULT 'documento',
+  originalFileName VARCHAR(255) NULL,
+  mimeType VARCHAR(160) NULL,
+  fileSize INT NULL,
+  filePath TEXT NOT NULL,
+  sha256 VARCHAR(64) NOT NULL,
+  uploadedByUserId INT NULL,
+  uploadedByName VARCHAR(255) NULL,
+  deletedAt DATETIME NULL,
+  deletedByUserId INT NULL,
+  deleteReason TEXT NULL,
+  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_employee_documents_record (employeeRecordId, deletedAt),
+  KEY idx_employee_documents_hash (sha256)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS employee_notes (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  employeeRecordId INT NOT NULL,
+  kind ENUM('anotacao','advertencia','ocorrencia','avaliacao') NOT NULL DEFAULT 'anotacao',
+  title VARCHAR(255) NOT NULL,
+  content TEXT NOT NULL,
+  status ENUM('rascunho','assinado') NOT NULL DEFAULT 'rascunho',
+  createdByUserId INT NULL,
+  createdByName VARCHAR(255) NULL,
+  signedAt DATETIME NULL,
+  signedByUserId INT NULL,
+  signedByName VARCHAR(255) NULL,
+  signatureHash VARCHAR(64) NULL,
+  signatureSnapshot JSON NULL,
+  deletedAt DATETIME NULL,
+  deletedByUserId INT NULL,
+  deleteReason TEXT NULL,
+  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_employee_notes_record (employeeRecordId, deletedAt),
+  KEY idx_employee_notes_signature (signatureHash)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS employee_audit_log (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  employeeRecordId INT NULL,
+  targetType VARCHAR(80) NOT NULL,
+  targetId INT NULL,
+  action VARCHAR(120) NOT NULL,
+  actorUserId INT NULL,
+  actorName VARCHAR(255) NULL,
+  actorRole VARCHAR(80) NULL,
+  ipAddress VARCHAR(80) NULL,
+  userAgent TEXT NULL,
+  details JSON NULL,
+  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_employee_audit_record (employeeRecordId, createdAt),
+  KEY idx_employee_audit_actor (actorUserId, createdAt),
+  KEY idx_employee_audit_action (action)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

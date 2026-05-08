@@ -37,8 +37,7 @@ import { ExportProntuarioButton } from "@/components/ExportProntuario";
 import { EvolucaoClinicaWorkspace } from "@/components/EvolucaoClinicaWorkspace";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { generatePremiumPdf } from "@/components/PdfExporter";
-import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
-import { SignatureCertillionButton } from "@/components/SignatureCertillionButton";
+import { ClinicalDocumentSignatureActions } from "@/components/ClinicalDocumentSignatureActions";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { hasModulePermission } from "@/lib/access";
 import { sanitizeHtml } from "@/lib/sanitize-html";
@@ -1126,6 +1125,10 @@ function AtestadosTab({ patientId, patientName, patientPhone }: { patientId: num
     () => ((documents as any[]) || []).filter((doc) => ["atestado", "declaracao", "laudo", "solicitacao_exames"].includes(String(doc.type || "").toLowerCase())),
     [documents],
   );
+  const activeDocument = useMemo(
+    () => activeDocumentId ? relevantDocuments.find((doc: any) => Number(doc.id) === Number(activeDocumentId)) : null,
+    [activeDocumentId, relevantDocuments],
+  );
 
   const availableTemplates = useMemo(
     () => ((templates as any[]) || []).filter(isClinicalDocumentTemplate),
@@ -1364,32 +1367,30 @@ function AtestadosTab({ patientId, patientName, patientPhone }: { patientId: num
 
             <div className="flex flex-wrap justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setShowEditor(false)} disabled={uploadTextDocumentMutation.isPending}>Fechar</Button>
-              <Button type="button" variant="outline" onClick={() => void handlePrintDocument()}>
-                <Printer className="mr-2 h-4 w-4" />
-                Salvar em PDF / imprimir
-              </Button>
               <Button type="button" className="btn-glossy-gold" onClick={saveTextDocument} disabled={uploadTextDocumentMutation.isPending}>
                 {uploadTextDocumentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                 {activeDocumentId ? "Salvar nova versão" : "Salvar no prontuário"}
               </Button>
-              {activeDocumentId ? (
-                <WhatsAppSendButton
-                  documentType="atestado"
-                  documentId={activeDocumentId}
-                  defaultPhone={patientPhone ?? ""}
-                  documentLabel={CLINICAL_DOCUMENT_TYPE_LABELS[documentType]}
-                />
-              ) : null}
             </div>
 
-            {activeDocumentId && (user as any)?.cloudSignatureCpf ? (
-              <SignatureCertillionButton
-                documentType="atestado"
+            {activeDocumentId ? (
+              <ClinicalDocumentSignatureActions
+                documentType={documentType}
                 documentId={activeDocumentId}
-                documentAlias={`${documentTitle || CLINICAL_DOCUMENT_TYPE_LABELS[documentType]} — ${patientName}`}
+                documentTitle={documentTitle || CLINICAL_DOCUMENT_TYPE_LABELS[documentType]}
                 documentContent={documentContent}
-                signerCpf={(user as any).cloudSignatureCpf}
-                onSigned={() => { void utils.medicalRecords.getDocuments.invalidate({ patientId }); }}
+                patientName={patientName}
+                patientPhone={patientPhone ?? ""}
+                signerName={(user as any)?.name ?? ""}
+                signerCpf={(user as any)?.cloudSignatureCpf ?? ""}
+                isSigned={Boolean(activeDocument?.signedAt || activeDocument?.signatureValidationCode)}
+                signedAt={activeDocument?.signedAt}
+                signatureProvider={activeDocument?.signatureProvider}
+                signatureValidationCode={activeDocument?.signatureValidationCode}
+                onPrint={() => handlePrintDocument()}
+                onSigned={async () => {
+                  await utils.medicalRecords.getDocuments.invalidate({ patientId });
+                }}
               />
             ) : null}
           </CardContent>
@@ -1435,29 +1436,29 @@ function AtestadosTab({ patientId, patientName, patientPhone }: { patientId: num
                         Abrir no editor
                       </Button>
                     ) : null}
-                    <Button size="sm" variant="outline" onClick={() => void handlePrintSavedDocument(document)}>
-                      <Printer className="mr-1.5 h-3.5 w-3.5" />
-                      Salvar em PDF / imprimir
-                    </Button>
                     {document.fileUrl ? (
                       <a href={document.fileUrl} target="_blank" rel="noopener noreferrer">
                         <Button size="sm" variant="outline"><FileDown className="mr-1.5 h-3.5 w-3.5" />Abrir arquivo</Button>
                       </a>
                     ) : null}
-                    <WhatsAppSendButton
-                      documentType="atestado"
-                      documentId={Number(document.id)}
-                      defaultPhone={patientPhone ?? ""}
-                      documentLabel={CLINICAL_DOCUMENT_TYPE_LABELS[normalizeClinicalDocumentType(document.type)]}
-                    />
-                    {canOpenInEditor && (user as any)?.cloudSignatureCpf ? (
-                      <SignatureCertillionButton
-                        documentType="atestado"
+                    {canOpenInEditor ? (
+                      <ClinicalDocumentSignatureActions
+                        documentType={normalizeClinicalDocumentType(document.type)}
                         documentId={Number(document.id)}
-                        documentAlias={`${repairMojibake(document.name || document.fileName || "Documento clínico")} — ${patientName}`}
+                        documentTitle={repairMojibake(document.name || document.fileName || "Documento clínico")}
                         documentContent={String(document.content || "")}
-                        signerCpf={(user as any).cloudSignatureCpf}
-                        onSigned={() => { void utils.medicalRecords.getDocuments.invalidate({ patientId }); }}
+                        patientName={patientName}
+                        patientPhone={patientPhone ?? ""}
+                        signerName={(user as any)?.name ?? ""}
+                        signerCpf={(user as any)?.cloudSignatureCpf ?? ""}
+                        isSigned={Boolean(document.signedAt || document.signatureValidationCode)}
+                        signedAt={document.signedAt}
+                        signatureProvider={document.signatureProvider}
+                        signatureValidationCode={document.signatureValidationCode}
+                        onPrint={() => handlePrintSavedDocument(document)}
+                        onSigned={async () => {
+                          await utils.medicalRecords.getDocuments.invalidate({ patientId });
+                        }}
                       />
                     ) : null}
                   </div>

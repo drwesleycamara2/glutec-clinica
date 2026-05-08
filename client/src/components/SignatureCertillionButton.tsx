@@ -41,6 +41,8 @@ interface Props {
   onSigned?: (validationCode: string) => void;
   disabled?: boolean;
   className?: string;
+  buttonLabel?: string;
+  buttonClassName?: string;
 }
 
 type Status = "idle" | "gerando" | "aguardando" | "assinado" | "erro";
@@ -54,7 +56,7 @@ async function sha256Base64(text: string): Promise<string> {
 export function SignatureCertillionButton(props: Props) {
   const {
     documentType, documentId, documentAlias, documentContent,
-    signerCpf, psc, onSigned, disabled, className,
+    signerCpf, psc, onSigned, disabled, className, buttonLabel, buttonClassName,
   } = props;
 
   const [status, setStatus] = useState<Status>("idle");
@@ -174,7 +176,7 @@ export function SignatureCertillionButton(props: Props) {
         type="button"
         disabled={disabled || status === "gerando" || status === "aguardando"}
         onClick={handleClick}
-        className="flex items-center gap-2 rounded-lg border border-[#C9A55B]/40 bg-[#C9A55B]/10 px-4 py-2 text-sm font-medium text-[#8A6526] transition-all hover:bg-[#C9A55B]/20 disabled:cursor-not-allowed disabled:opacity-50"
+        className={buttonClassName ?? "flex items-center gap-2 rounded-lg border border-[#C9A55B]/40 bg-[#C9A55B]/10 px-4 py-2 text-sm font-medium text-[#8A6526] transition-all hover:bg-[#C9A55B]/20 disabled:cursor-not-allowed disabled:opacity-50"}
       >
         {status === "gerando"
           ? <Loader2 size={16} className="animate-spin" />
@@ -183,7 +185,7 @@ export function SignatureCertillionButton(props: Props) {
           ? "Preparando assinatura…"
           : status === "aguardando"
           ? `Aguardando ${pscLabel}…`
-          : `Assinar via Certillion (${psc || "VIDAAS/BirdID"})`}
+          : buttonLabel || `Assinar via Certillion (${psc || "VIDAAS/BirdID"})`}
       </button>
 
       {status === "aguardando" && qrDataUrl && (

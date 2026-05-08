@@ -34,6 +34,7 @@ import {
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   BarChart3,
+  BriefcaseBusiness,
   CalendarDays,
   Camera,
   ClipboardList,
@@ -107,6 +108,7 @@ const menuSections: MenuSection[] = [
     label: "Operacional",
     items: [
       { icon: Wallet, label: "Fiscal", path: "/fiscal", adminOnly: true, moduleId: "fiscal" },
+      { icon: BriefcaseBusiness, label: "Funcionários", path: "/funcionarios", adminOrGerente: true, moduleId: "funcionarios" },
       { icon: Wallet, label: "Financeiro", path: "/financeiro", adminOrGerente: true, moduleId: "financeiro" },
       { icon: Package, label: "Estoque", path: "/estoque", moduleId: "estoque" },
       { icon: MessageSquare, label: "CRM", path: "/crm", moduleId: "crm" },

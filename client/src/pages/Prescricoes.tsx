@@ -13,10 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { exportPrescriptionPdf } from "@/components/PdfExporter";
-import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
-import { SignatureCertillionButton } from "@/components/SignatureCertillionButton";
+import { ClinicalDocumentSignatureActions } from "@/components/ClinicalDocumentSignatureActions";
 import { toast } from "sonner";
-import { CheckCircle, Clock, FileText, Loader2, Pill, Plus, Printer, Send, XCircle, Trash2 } from "lucide-react";
+import { CheckCircle, Clock, FileText, Loader2, Pill, Plus, Send, XCircle, Trash2 } from "lucide-react";
 
 const PRESCRIPTION_TYPES = [
   { value: "simples", label: "Receituário simples (1 via)", color: "bg-[#C9A55B]/10 text-[#8A6526]" },
@@ -104,14 +103,6 @@ export default function Prescricoes() {
       void utils.prescriptions.listTemplates.invalidate();
     },
     onError: (err: any) => toast.error(err.message || "Não foi possível excluir o modelo."),
-  });
-
-  const sendToSignMutation = trpc.signatures.sendForSignature.useMutation({
-    onSuccess: () => {
-      toast.success("Documento enviado para o fluxo de assinatura.");
-      void refetchAll();
-    },
-    onError: (err: any) => toast.error(err.message || "Não foi possível enviar para assinatura."),
   });
 
   const currentPatient = useMemo(
@@ -224,38 +215,26 @@ export default function Prescricoes() {
                         {new Date(rx.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
                       </p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button size="sm" variant="outline" onClick={() => void handlePrintExisting(rx)}>
-                        <Printer className="mr-1 h-3 w-3" />
-                        Imprimir / PDF
-                      </Button>
-                      <WhatsAppSendButton
-                        documentType="prescricao"
-                        documentId={rx.id}
-                        defaultPhone={patient?.phone ?? ""}
-                      />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="border-[#C9A55B]/25 text-[#8A6526] hover:bg-[#C9A55B]/5"
-                        onClick={() => sendToSignMutation.mutate({ documentId: rx.id, documentType: "prescription" })}
-                        disabled={sendToSignMutation.isPending}
-                        title="Enviar para assinatura D4Sign"
-                      >
-                        <Send className="mr-1 h-3 w-3" />
-                        D4Sign
-                      </Button>
-                      {(user as any)?.cloudSignatureCpf && (
-                        <SignatureCertillionButton
-                          documentType="prescricao"
-                          documentId={rx.id}
-                          documentAlias={`Prescricao #${rx.id} — ${patient?.fullName ?? "Paciente"}`}
-                          documentContent={rx.content || ""}
-                          signerCpf={(user as any).cloudSignatureCpf}
-                          onSigned={() => { void refetchAll(); }}
-                        />
-                      )}
-                    </div>
+                    <ClinicalDocumentSignatureActions
+                      documentType="prescricao"
+                      documentId={rx.id}
+                      documentTitle={`Prescrição #${rx.id}`}
+                      documentContent={[rx.content, rx.observations].filter(Boolean).join("\n\n")}
+                      patientName={patient?.fullName ?? `Paciente #${rx.patientId}`}
+                      patientPhone={patient?.phone ?? ""}
+                      signerName={(user as any)?.name ?? ""}
+                      signerCpf={(user as any)?.cloudSignatureCpf ?? ""}
+                      isSigned={Boolean(rx.signedAt || rx.signatureValidationCode || rx.d4signStatus === "assinado")}
+                      signedAt={rx.signedAt}
+                      signatureProvider={rx.signatureProvider || (rx.d4signStatus === "assinado" ? "d4sign" : "")}
+                      signatureValidationCode={rx.signatureValidationCode}
+                      onPrint={() => handlePrintExisting(rx)}
+                      onSigned={async () => {
+                        await refetchAll();
+                        await utils.prescriptions.getByPatient.invalidate();
+                      }}
+                      className="max-w-full"
+                    />
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-0">
@@ -412,10 +391,6 @@ export default function Prescricoes() {
               Cancelar
             </Button>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => void handleSave(true)} disabled={createMutation.isPending}>
-                <Printer className="mr-2 h-4 w-4" />
-                Salvar e imprimir
-              </Button>
               <Button onClick={() => void handleSave(false)} disabled={createMutation.isPending}>
                 {createMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
                 Salvar prescrição

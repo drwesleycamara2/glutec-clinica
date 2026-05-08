@@ -20,6 +20,7 @@ import Exames from "./pages/ExamesClinicos";
 import Assinaturas from "./pages/Assinaturas";
 import Orcamentos from "./pages/Orcamentos";
 import Financeiro from "./pages/Financeiro";
+import Funcionarios from "./pages/Funcionarios";
 import Estoque from "./pages/Estoque";
 import NfseEmissao from "./pages/NfseEmissao";
 import ConfiguracoesFiscais from "./pages/ConfiguracoesFiscaisNacional";
@@ -85,6 +86,12 @@ function AdminOrGerente({ component: Component }: { component: React.ComponentTy
   return <Component />;
 }
 
+function AdminOrGerenteStrict({ component: Component }: { component: React.ComponentType }) {
+  const { user } = useAuth();
+  const role = (user as any)?.role;
+  if (role !== "admin" && role !== "gerente") return <AccessDenied />;
+  return <Component />;
+}
 function ProtectedRoutes() {
   return (
     <DashboardLayout>
@@ -103,6 +110,7 @@ function ProtectedRoutes() {
         <Route path="/assinaturas" component={Assinaturas} />
         <Route path="/orcamentos" component={Orcamentos} />
         <Route path="/financeiro">{() => <AdminOrGerente component={Financeiro} />}</Route>
+        <Route path="/funcionarios">{() => <AdminOrGerenteStrict component={Funcionarios} />}</Route>
         <Route path="/estoque" component={Estoque} />
         <Route path="/nfse" component={NfseEmissao} />
         <Route path="/fiscal" component={ConfiguracoesFiscais} />
