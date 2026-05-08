@@ -58,7 +58,7 @@ function maskPhone(value?: string | null): string {
 export function PatientAutocomplete({
   value,
   onSelect,
-  placeholder = "Digite nome, número de prontuário ou telefone…",
+  placeholder = "Digite nome, nº do prontuário, telefone ou últimos 4 dígitos…",
   autoFocus,
   limit = 12,
   className,

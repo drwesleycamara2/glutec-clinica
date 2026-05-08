@@ -36,6 +36,10 @@ function normalizePatientCity(rowCity?: string | null, addressCity?: string | nu
   return normalizeCityNameValue(isLegacyNumericCityCode(rowCity) ? addressCity : rowCity) || normalizeCityNameValue(addressCity);
 }
 
+function digitsOnlySql(value: any) {
+  return sql`replace(replace(replace(replace(replace(replace(replace(replace(coalesce(${value}, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', ''), '/', ''), ',', '')`;
+}
+
 function unwrapInsertId(result: any): number {
   const header = Array.isArray(result) ? result[0] : result;
   return Number(header?.insertId ?? 0);
@@ -948,9 +952,14 @@ export async function listPatients(
 
   const columns = await getTableColumns("patients");
   const normalizedQuery = query?.trim();
-  const phoneDigits = normalizedQuery ? normalizedQuery.replace(/\D+/g, "") : "";
-  const phoneTermLike = phoneDigits.length >= 3 ? `%${phoneDigits}%` : null;
+  const digitQuery = normalizedQuery ? normalizedQuery.replace(/\D+/g, "") : "";
+  const digitTermLike = digitQuery.length >= 3 ? `%${digitQuery}%` : null;
+  const digitSuffixLike = digitQuery.length >= 3 ? `%${digitQuery}` : null;
   const isNumericQuery = !!normalizedQuery && /^\d+$/.test(normalizedQuery);
+  const phoneSearchExpressions = ["phone", "phone2", "cellPhone", "cellphone", "mobile", "whatsappPhone", "whatsapp"]
+    .filter((columnName) => columns.has(columnName))
+    .map((columnName) => digitsOnlySql(sql.raw(`p.${columnName}`)));
+  const phoneOrderExpression = phoneSearchExpressions[0];
 
   // Quando há busca, ordena por prefixo do primeiro nome para que digitar
   // "LET" mostre primeiro "Letícia Maria" e depois "Ana Letícia". Sem busca,
@@ -961,6 +970,10 @@ export async function listPatients(
         case when p.fullName like ${`% ${normalizedQuery}%`} then 0 else 1 end,
         ${columns.has("recordNumber") && isNumericQuery
           ? sql`case when p.recordNumber = ${Number(normalizedQuery)} then 0 else 1 end,`
+          : sql``}
+        ${digitSuffixLike && phoneOrderExpression
+          ? sql`case when ${phoneOrderExpression} = ${digitQuery} then 0 else 1 end,
+                 case when ${phoneOrderExpression} like ${digitSuffixLike} then 0 else 1 end,`
           : sql``}
         p.fullName asc
       `
@@ -980,11 +993,11 @@ export async function listPatients(
       ]
     : [];
 
-  if (phoneTermLike) {
+  if (digitTermLike) {
+    searchClauses.push(sql`${digitsOnlySql(sql`p.cpf`)} like ${digitTermLike}`);
     // Compara contra os dígitos do telefone, ignorando máscara/parênteses/espaços.
-    searchClauses.push(sql`replace(replace(replace(replace(replace(coalesce(p.phone,''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') like ${phoneTermLike}`);
-    if (columns.has("phone2")) {
-      searchClauses.push(sql`replace(replace(replace(replace(replace(coalesce(p.phone2,''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') like ${phoneTermLike}`);
+    for (const expression of phoneSearchExpressions) {
+      searchClauses.push(sql`${expression} like ${digitTermLike}`);
     }
   }
 

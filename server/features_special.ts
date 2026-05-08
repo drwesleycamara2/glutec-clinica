@@ -6,6 +6,20 @@ function unwrapRows<T = any>(result: any): T[] {
   return Array.isArray(result) ? (result as T[]) : [];
 }
 
+async function getPatientsColumns(db: any) {
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select column_name as columnName
+    from information_schema.columns
+    where table_schema = database()
+      and table_name = 'patients'
+  `));
+  return new Set(rows.map((row) => String(row.columnName)));
+}
+
+function digitsOnlySql(value: any) {
+  return sql`replace(replace(replace(replace(replace(replace(replace(replace(coalesce(${value}, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', ''), '/', ''), ',', '')`;
+}
+
 /**
  * ─── ATENDIMENTO RETROATIVO ──────────────────────────────────────────────
  * 
@@ -266,18 +280,26 @@ export async function searchPatientsAutocomplete(
   const normalizedQuery = query?.trim();
   if (!normalizedQuery) return [];
 
+  const columns = await getPatientsColumns(db);
   const searchTerm = `%${normalizedQuery}%`;
   const startsWith = `${normalizedQuery}%`;
   const onlyDigits = normalizedQuery.replace(/\D+/g, "");
   const phoneTerm = onlyDigits.length >= 3 ? `%${onlyDigits}%` : null;
+  const phoneSuffixTerm = onlyDigits.length >= 3 ? `%${onlyDigits}` : null;
+  const phoneSearchExpressions = ["phone", "phone2", "cellPhone", "cellphone", "mobile", "whatsappPhone", "whatsapp"]
+    .filter((columnName) => columns.has(columnName))
+    .map((columnName) => digitsOnlySql(sql.raw(`p.${columnName}`)));
   // Telefone: ignora máscara comparando contra os dígitos do campo do banco.
-  const phoneClause = phoneTerm
-    ? sql`or replace(replace(replace(replace(replace(coalesce(p.phone,''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') like ${phoneTerm}
-        or replace(replace(replace(replace(replace(coalesce(p.phone2,''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') like ${phoneTerm}`
+  const phoneClause = phoneTerm && phoneSearchExpressions.length > 0
+    ? sql`or ${sql.join(phoneSearchExpressions.map((expression) => sql`${expression} like ${phoneTerm}`), sql` or `)}`
     : sql``;
-  const recordNumberClause = /^\d+$/.test(normalizedQuery)
+  const cpfDigitsClause = onlyDigits.length >= 3
+    ? sql`or ${digitsOnlySql(sql`p.cpf`)} like ${phoneTerm}`
+    : sql``;
+  const recordNumberClause = columns.has("recordNumber") && /^\d+$/.test(normalizedQuery)
     ? sql`or p.recordNumber = ${Number(normalizedQuery)}`
     : sql``;
+  const phoneOrderExpression = phoneSearchExpressions[0];
 
   return unwrapRows<any>(await db.execute(sql`
     select
@@ -307,6 +329,7 @@ export async function searchPatientsAutocomplete(
         p.fullName like ${searchTerm}
         or p.cpf like ${searchTerm}
         or p.email like ${searchTerm}
+        ${cpfDigitsClause}
         ${phoneClause}
         ${recordNumberClause}
       )
@@ -316,9 +339,16 @@ export async function searchPatientsAutocomplete(
       -- 2) qualquer outro pedaço do nome começa com a query (ex.: "Ana Letícia")
       case when p.fullName like ${`% ${normalizedQuery}%`} then 0 else 1 end,
       -- 3) match por número do prontuário exato
-      case when ${/^\d+$/.test(normalizedQuery) ? Number(normalizedQuery) : -1} > 0
-            and p.recordNumber = ${/^\d+$/.test(normalizedQuery) ? Number(normalizedQuery) : -1}
-           then 0 else 1 end,
+      ${columns.has("recordNumber")
+        ? sql`case when ${/^\d+$/.test(normalizedQuery) ? Number(normalizedQuery) : -1} > 0
+                    and p.recordNumber = ${/^\d+$/.test(normalizedQuery) ? Number(normalizedQuery) : -1}
+                   then 0 else 1 end,`
+        : sql``}
+      -- 4) match por telefone completo ou pelos últimos dígitos
+      ${phoneSuffixTerm && phoneOrderExpression
+        ? sql`case when ${phoneOrderExpression} = ${onlyDigits} then 0 else 1 end,
+               case when ${phoneOrderExpression} like ${phoneSuffixTerm} then 0 else 1 end,`
+        : sql``}
       p.fullName
     limit ${limit}
   `));

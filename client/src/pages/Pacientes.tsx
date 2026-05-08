@@ -194,7 +194,7 @@ export default function Pacientes() {
       <div className="flex flex-col gap-3 md:flex-row">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Buscar por nome, CPF ou telefone..." className="pl-10 h-11" value={search} onChange={(e) => handleSearch(e.target.value)} />
+          <Input placeholder="Buscar por nome, nº do prontuário, CPF, telefone ou últimos 4 dígitos..." className="pl-10 h-11" value={search} onChange={(e) => handleSearch(e.target.value)} />
         </div>
         <div className="w-full md:w-[280px]">
           <Select value={sort} onValueChange={(value) => setSort(value as typeof sort)}>
