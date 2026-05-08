@@ -283,7 +283,7 @@ const DEFAULT_ANAMNESIS_QUESTIONS: DefaultAnamnesisQuestion[] = [
   { id: "droga", text: "Usa alguma droga ilícita?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Qual droga?", triggerValues: ["Sim"], required: true, placeholder: "Informe qual droga" } },
   { id: "hormonio", text: "Usa algum tipo de hormônio?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Quais hormônios?", triggerValues: ["Sim"], required: true, placeholder: "Informe quais hormônios" } },
   { id: "anticoagulante", text: "Faz uso de anticoagulante? (ou AAS?)", type: "radio", options: ["Sim", "Não"], required: true },
-  { id: "vitamina-d", text: "Toma vitamina D? Qual a dose e em que frequência?", type: "text", required: true, placeholder: "Descreva a dose e frequência" },
+  { id: "vitamina-d", text: "Toma vitamina D?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Qual a dose e em que frequência?", triggerValues: ["Sim"], required: true, placeholder: "Descreva a dose e frequência" } },
   { id: "medicamentos", text: "Faz uso de medicamentos regularmente?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Liste todos os medicamentos de uso regular", triggerValues: ["Sim"], required: true, placeholder: "Informe os medicamentos" } },
   { id: "problemas-saude", text: "Selecione os problemas de saúde que tem atualmente", type: "checkbox", options: ["Nenhum problema de saúde", "Diabetes", "Pressão alta", "Problemas no coração ou arritmias", "Problema nos rins ou no fígado", "Tumores", "Alterações psiquiátricas", "Outros problemas de saúde"], required: true, followUp: { prompt: "Se marcou outros problemas de saúde, escreva quais", triggerValues: ["Outros problemas de saúde"], required: true, placeholder: "Descreva os outros problemas" } },
   { id: "gestacoes", text: "Teve gestações? Se sim, quando foi o último parto?", type: "text", required: true, placeholder: "Descreva", visibleWhen: { questionId: "sexo-biologico", values: ["Feminino"] } },
@@ -297,7 +297,7 @@ const DEFAULT_ANAMNESIS_QUESTIONS: DefaultAnamnesisQuestion[] = [
   { id: "arritmia", text: "Já teve ou trata arritmia cardíaca?", type: "radio", options: ["Sim", "Não"], required: true },
   { id: "pedras-rins", text: "Tem ou já teve pedras nos rins?", type: "radio", options: ["Sim", "Não"], required: true },
   { id: "cirurgia", text: "Já realizou alguma cirurgia?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "Quais cirurgias realizou?", triggerValues: ["Sim"], required: true, placeholder: "Descreva as cirurgias" } },
-  { id: "informar-medico", text: "Há algo que gostaria de informar ao médico?", type: "text", required: true, placeholder: "Escreva aqui" },
+  { id: "informar-medico", text: "Há algo que gostaria de informar ao médico?", type: "radio", options: ["Sim", "Não"], required: true, followUp: { prompt: "O que gostaria de informar ao médico?", triggerValues: ["Sim"], required: true, placeholder: "Escreva aqui" } },
 ];
 
 function getDefaultAnamnesisDefinition(_patient: any) {
@@ -2960,43 +2960,52 @@ export async function createPatientAnamnesis(
 
   const token = crypto.randomBytes(18).toString("hex");
   const tokenHash = hashToken(token);
+  const signedAt = new Date();
+  const safeInternalExpiresAt = new Date("2037-12-31T23:59:59Z");
+  const signatureEvidence = {
+    method: "assinatura_eletronica_interna_clinica",
+    signedAt: signedAt.toISOString(),
+    respondentName: data.respondentName ?? "Preenchida pela clínica",
+    patientId: Number(data.patientId),
+    createdBy: userId,
+    answerKeys: Object.keys(data.answers ?? {}).sort(),
+  };
+  const signatureHash = crypto
+    .createHash("sha256")
+    .update(JSON.stringify({ evidence: signatureEvidence, answers: data.answers ?? {} }))
+    .digest("hex");
+  const linkColumns = await getTableColumns("anamnesis_share_links");
+  const payload = new Map<string, any>([
+    ["patientId", data.patientId],
+    ["title", data.title],
+    ["questionsJson", JSON.stringify(data.questions ?? [])],
+    ["submittedAnswers", JSON.stringify(data.answers ?? {})],
+    ["respondentName", data.respondentName ?? null],
+    ["isActive", 1],
+    ["expiresAt", safeInternalExpiresAt],
+    ["submittedAt", signedAt],
+    ["createdBy", userId],
+  ]);
+
+  if (linkColumns.has("tokenHash")) payload.set("tokenHash", tokenHash);
+  else if (linkColumns.has("token")) payload.set("token", token);
+  if (linkColumns.has("templateName")) payload.set("templateName", data.templateName ?? null);
+  if (linkColumns.has("anamnesisDate")) payload.set("anamnesisDate", data.anamnesisDate ? new Date(data.anamnesisDate) : new Date());
+  if (linkColumns.has("source")) payload.set("source", "internal");
+  if (linkColumns.has("profilePhotoUrl")) payload.set("profilePhotoUrl", profilePhotoUrl);
+  if (linkColumns.has("profilePhotoMimeType")) payload.set("profilePhotoMimeType", profilePhotoMimeType);
+  if (linkColumns.has("profilePhotoDeclarationAccepted")) payload.set("profilePhotoDeclarationAccepted", data.profilePhotoDeclarationAccepted ? 1 : 0);
+  if (linkColumns.has("signatureEvidenceJson")) payload.set("signatureEvidenceJson", JSON.stringify(signatureEvidence));
+  if (linkColumns.has("signatureHash")) payload.set("signatureHash", signatureHash);
+  if (linkColumns.has("signatureMethod")) payload.set("signatureMethod", signatureEvidence.method);
+  if (linkColumns.has("signedAt")) payload.set("signedAt", signedAt);
+
+  const entries = Array.from(payload.entries()).filter(([column]) => linkColumns.has(column));
   const result = await db.execute(sql`
-    insert into anamnesis_share_links (
-      patientId,
-      tokenHash,
-      title,
-      templateName,
-      anamnesisDate,
-      questionsJson,
-      submittedAnswers,
-      respondentName,
-      source,
-      profilePhotoUrl,
-      profilePhotoMimeType,
-      profilePhotoDeclarationAccepted,
-      isActive,
-      expiresAt,
-      submittedAt,
-      createdBy
-    )
-    values (
-      ${data.patientId},
-      ${tokenHash},
-      ${data.title},
-      ${data.templateName ?? null},
-      ${data.anamnesisDate ? new Date(data.anamnesisDate) : new Date()},
-      ${JSON.stringify(data.questions ?? [])},
-      ${JSON.stringify(data.answers ?? {})},
-      ${data.respondentName ?? null},
-      ${"internal"},
-      ${profilePhotoUrl},
-      ${profilePhotoMimeType},
-      ${data.profilePhotoDeclarationAccepted ? 1 : 0},
-      1,
-      ${new Date("2099-12-31T23:59:59Z")},
-      now(),
-      ${userId}
-    )
+    insert into anamnesis_share_links
+      (${sql.join(entries.map(([column]) => sql.raw(`\`${column}\``)), sql`, `)})
+    values
+      (${sql.join(entries.map(([, value]) => sql`${value}`), sql`, `)})
   `);
 
   const insertedId =

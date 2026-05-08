@@ -89,7 +89,14 @@ const standardQuestions: AnamnesisQuestion[] = [
     },
   }),
   createQuestion("anticoagulante", "Faz uso de anticoagulante? (ou AAS?)", "radio", ["Sim", "Não"]),
-  createQuestion("vitamina-d", "Toma vitamina D? Qual a dose e em que frequência?", "text", [], { placeholder: "Descreva a dose e frequência" }),
+  createQuestion("vitamina-d", "Toma vitamina D?", "radio", ["Sim", "Não"], {
+    followUp: {
+      prompt: "Qual a dose e em que frequência?",
+      triggerValues: ["Sim"],
+      required: true,
+      placeholder: "Descreva a dose e frequência",
+    },
+  }),
   createQuestion("medicamentos", "Faz uso de medicamentos regularmente?", "radio", ["Sim", "Não"], {
     followUp: {
       prompt: "Liste todos os medicamentos de uso regular",
@@ -146,7 +153,14 @@ const standardQuestions: AnamnesisQuestion[] = [
       placeholder: "Descreva as cirurgias",
     },
   }),
-  createQuestion("informar-medico", "Há algo que gostaria de informar ao médico?", "text", [], { placeholder: "Escreva aqui" }),
+  createQuestion("informar-medico", "Há algo que gostaria de informar ao médico?", "radio", ["Sim", "Não"], {
+    followUp: {
+      prompt: "O que gostaria de informar ao médico?",
+      triggerValues: ["Sim"],
+      required: true,
+      placeholder: "Escreva aqui",
+    },
+  }),
 ];
 
 export const SYSTEM_ANAMNESIS_TEMPLATES: AnamnesisTemplate[] = [
