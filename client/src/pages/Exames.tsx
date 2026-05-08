@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { patientDisplayName } from "@/lib/patientDisplay";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -61,6 +61,7 @@ export default function Exames() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState(defaultForm);
   const [filterPatientId, setFilterPatientId] = useState<number | null>(null);
+  const [lockedPatientId, setLockedPatientId] = useState<number | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
 
   const { data: patients } = trpc.patients.list.useQuery({ limit: 200 });
@@ -78,9 +79,39 @@ export default function Exames() {
     { patientId: filterPatientId ?? 0 },
     { enabled: !!filterPatientId }
   );
+  const lockedPatient = useMemo(
+    () => patients?.find((patient) => Number(patient.id) === Number(lockedPatientId)) ?? null,
+    [lockedPatientId, patients],
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const linkedPatientId = params.get("patientId");
+    const shouldCreate = params.get("create") === "1";
+
+    if (linkedPatientId && /^\d+$/.test(linkedPatientId)) {
+      const patientId = Number(linkedPatientId);
+      setLockedPatientId(patientId);
+      setFilterPatientId(patientId);
+      setForm((current) => ({ ...current, patientId: linkedPatientId }));
+      if (shouldCreate) {
+        setShowCreate(true);
+      }
+    }
+  }, []);
+
+  const resetFormForContext = () => setForm({ ...defaultForm, patientId: lockedPatientId ? String(lockedPatientId) : "" });
+  const openCreateDialog = () => {
+    setForm((current) => ({
+      ...current,
+      patientId: lockedPatientId ? String(lockedPatientId) : current.patientId,
+    }));
+    setShowCreate(true);
+  };
 
   const createMutation = trpc.examRequests.create.useMutation({
-    onSuccess: () => { toast.success("Pedido de exames criado!"); setShowCreate(false); setForm(defaultForm); if (filterPatientId) refetch(); },
+    onSuccess: () => { toast.success("Pedido de exames criado!"); setShowCreate(false); resetFormForContext(); if (filterPatientId) refetch(); },
     onError: (err: any) => toast.error(err.message),
   });
 
@@ -124,7 +155,7 @@ export default function Exames() {
           <p className="text-sm text-muted-foreground mt-1">Solicitação e acompanhamento de exames</p>
         </div>
         {canCreate && (
-          <Button onClick={() => setShowCreate(true)}>
+          <Button onClick={openCreateDialog}>
             <Plus className="h-4 w-4 mr-2" />Novo Pedido
           </Button>
         )}
@@ -132,13 +163,22 @@ export default function Exames() {
 
       {/* Filtro por paciente */}
       <div className="flex items-center gap-3">
-        <Select value={filterPatientId?.toString() ?? ""} onValueChange={(v) => setFilterPatientId(v ? parseInt(v) : null)}>
-          <SelectTrigger className="w-72 h-9"><SelectValue placeholder="Filtrar por paciente..." /></SelectTrigger>
-          <SelectContent>
-            {patients?.map((p) => <SelectItem key={p.id} value={p.id.toString()}>{patientDisplayName(p)}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        {filterPatientId && <Button variant="ghost" size="sm" onClick={() => setFilterPatientId(null)}>Limpar</Button>}
+        {lockedPatientId ? (
+          <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+            <span className="text-muted-foreground">Paciente do prontuário: </span>
+            <span className="font-medium">{lockedPatient ? patientDisplayName(lockedPatient) : `Paciente #${lockedPatientId}`}</span>
+          </div>
+        ) : (
+          <>
+            <Select value={filterPatientId?.toString() ?? ""} onValueChange={(v) => setFilterPatientId(v ? parseInt(v) : null)}>
+              <SelectTrigger className="w-72 h-9"><SelectValue placeholder="Filtrar por paciente..." /></SelectTrigger>
+              <SelectContent>
+                {patients?.map((p) => <SelectItem key={p.id} value={p.id.toString()}>{patientDisplayName(p)}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {filterPatientId && <Button variant="ghost" size="sm" onClick={() => setFilterPatientId(null)}>Limpar</Button>}
+          </>
+        )}
       </div>
 
       {!filterPatientId ? (
@@ -226,10 +266,16 @@ export default function Exames() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Paciente *</Label>
-                <Select value={form.patientId} onValueChange={(v) => setForm({ ...form, patientId: v })}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{patients?.map((p) => <SelectItem key={p.id} value={p.id.toString()}>{patientDisplayName(p)}</SelectItem>)}</SelectContent>
-                </Select>
+                {lockedPatientId ? (
+                  <div className="mt-1 rounded-lg border bg-muted/30 px-3 py-2 text-sm font-medium">
+                    {lockedPatient ? patientDisplayName(lockedPatient) : `Paciente #${lockedPatientId}`}
+                  </div>
+                ) : (
+                  <Select value={form.patientId} onValueChange={(v) => setForm({ ...form, patientId: v })}>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>{patients?.map((p) => <SelectItem key={p.id} value={p.id.toString()}>{patientDisplayName(p)}</SelectItem>)}</SelectContent>
+                  </Select>
+                )}
               </div>
               <div>
                 <Label>Especialidade</Label>

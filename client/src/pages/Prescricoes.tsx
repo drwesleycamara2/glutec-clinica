@@ -52,12 +52,14 @@ export default function Prescricoes() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [form, setForm] = useState<PrescriptionForm>(defaultForm);
   const [filterPatientId, setFilterPatientId] = useState<string>("all");
+  const [lockedPatientId, setLockedPatientId] = useState<string | null>(null);
   const [printAfterSave, setPrintAfterSave] = useState(false);
 
   const utils = trpc.useUtils();
   const { data: patients } = trpc.patients.list.useQuery({ limit: 5000 });
   const { data: templates } = trpc.prescriptions.listTemplates.useQuery();
-  const selectedPatientId = filterPatientId === "all" ? 0 : Number(filterPatientId);
+  const patientFilterId = lockedPatientId ?? filterPatientId;
+  const selectedPatientId = patientFilterId === "all" ? 0 : Number(patientFilterId);
   const { data: allPrescriptions, refetch: refetchAll } = trpc.prescriptions.getByPatient.useQuery({ patientId: selectedPatientId });
 
   useEffect(() => {
@@ -67,6 +69,7 @@ export default function Prescricoes() {
     const shouldCreate = params.get("create") === "1";
 
     if (linkedPatientId && /^\d+$/.test(linkedPatientId)) {
+      setLockedPatientId(linkedPatientId);
       setFilterPatientId(linkedPatientId);
       setForm((current) => ({ ...current, patientId: linkedPatientId }));
       if (shouldCreate) {
@@ -75,12 +78,21 @@ export default function Prescricoes() {
     }
   }, []);
 
+  const resetFormForContext = () => setForm({ ...defaultForm, patientId: lockedPatientId ?? "" });
+  const openCreateDialog = () => {
+    setForm((current) => ({
+      ...current,
+      patientId: lockedPatientId ?? current.patientId,
+    }));
+    setShowCreate(true);
+  };
+
   const createMutation = trpc.prescriptions.create.useMutation({
     onSuccess: async () => {
       toast.success("Prescrição salva com sucesso.");
       setShowCreate(false);
       setShowTemplates(false);
-      setForm(defaultForm);
+      resetFormForContext();
       setPrintAfterSave(false);
       await refetchAll();
       await utils.prescriptions.getByPatient.invalidate();
@@ -108,6 +120,10 @@ export default function Prescricoes() {
   const currentPatient = useMemo(
     () => patients?.find((patient) => String(patient.id) === form.patientId) ?? null,
     [form.patientId, patients],
+  );
+  const lockedPatient = useMemo(
+    () => patients?.find((patient) => String(patient.id) === lockedPatientId) ?? null,
+    [lockedPatientId, patients],
   );
 
   const filteredTemplates = (templates ?? []).filter((template: any) => !template.type || template.type === form.type);
@@ -157,21 +173,28 @@ export default function Prescricoes() {
           <p className="mt-1 text-sm text-muted-foreground">Cadastre, imprima e envie receituários com layout clínico.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={filterPatientId} onValueChange={setFilterPatientId}>
-            <SelectTrigger className="w-[260px]">
-              <SelectValue placeholder="Filtrar por paciente" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os pacientes</SelectItem>
-              {(patients ?? []).map((patient) => (
-                <SelectItem key={patient.id} value={String(patient.id)}>
-                  {patientDisplayName(patient)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {lockedPatientId ? (
+            <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+              <span className="text-muted-foreground">Paciente do prontuário: </span>
+              <span className="font-medium">{lockedPatient ? patientDisplayName(lockedPatient) : `Paciente #${lockedPatientId}`}</span>
+            </div>
+          ) : (
+            <Select value={filterPatientId} onValueChange={setFilterPatientId}>
+              <SelectTrigger className="w-[260px]">
+                <SelectValue placeholder="Filtrar por paciente" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os pacientes</SelectItem>
+                {(patients ?? []).map((patient) => (
+                  <SelectItem key={patient.id} value={String(patient.id)}>
+                    {patientDisplayName(patient)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           {canCreate ? (
-            <Button onClick={() => setShowCreate(true)}>
+            <Button onClick={openCreateDialog}>
               <Plus className="mr-2 h-4 w-4" />
               Nova prescrição
             </Button>
@@ -263,18 +286,24 @@ export default function Prescricoes() {
             <div className="grid gap-3 md:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
               <div className="min-w-0">
                 <Label>Paciente *</Label>
-                <Select value={form.patientId} onValueChange={(value) => setForm((current) => ({ ...current, patientId: value }))}>
-                  <SelectTrigger className="mt-1 w-full min-w-0">
-                    <SelectValue placeholder="Selecione o paciente" className="truncate" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(patients ?? []).map((patient) => (
-                      <SelectItem key={patient.id} value={String(patient.id)}>
-                        {patientDisplayName(patient)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {lockedPatientId ? (
+                  <div className="mt-1 rounded-lg border bg-muted/30 px-3 py-2 text-sm font-medium">
+                    {lockedPatient ? patientDisplayName(lockedPatient) : `Paciente #${lockedPatientId}`}
+                  </div>
+                ) : (
+                  <Select value={form.patientId} onValueChange={(value) => setForm((current) => ({ ...current, patientId: value }))}>
+                    <SelectTrigger className="mt-1 w-full min-w-0">
+                      <SelectValue placeholder="Selecione o paciente" className="truncate" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(patients ?? []).map((patient) => (
+                        <SelectItem key={patient.id} value={String(patient.id)}>
+                          {patientDisplayName(patient)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div className="min-w-0">

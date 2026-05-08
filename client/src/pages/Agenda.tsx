@@ -9,6 +9,7 @@ import {
   isDateTimeInsideSchedule,
   normalizeOpeningHoursConfig,
   sortTimeSlots,
+  timeToMinutes,
 } from "@shared/schedule-hours";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -56,6 +57,17 @@ const DURATION_OPTIONS = [
   { value: "360", label: "6 horas" },
   { value: "other", label: "Outro" },
 ];
+
+const STANDARD_APPOINTMENT_START_TIME = "09:00";
+const STANDARD_APPOINTMENT_START_MINUTES = timeToMinutes(STANDARD_APPOINTMENT_START_TIME);
+
+function isBeforeStandardAppointmentStart(date: Date) {
+  return date.getHours() * 60 + date.getMinutes() < STANDARD_APPOINTMENT_START_MINUTES;
+}
+
+function generateStandardVisibleSlots(date: Date, schedule: ReturnType<typeof getScheduleForProfessional>) {
+  return generateTimeSlotsForDate(date, schedule).filter((slot) => timeToMinutes(slot) >= STANDARD_APPOINTMENT_START_MINUTES);
+}
 
 function getDurationPreset(durationMinutes: unknown) {
   const value = String(durationMinutes ?? "30");
@@ -495,7 +507,7 @@ export default function Agenda() {
   }, [selectedDayAppointments, patients, doctors]);
 
   const visibleTimeSlots = useMemo(() => {
-    const configuredSlots = generateTimeSlotsForDate(selectedDate, selectedSchedule);
+    const configuredSlots = generateStandardVisibleSlots(selectedDate, selectedSchedule);
     const appointmentSlots = Object.keys(slotMap);
     return sortTimeSlots([...configuredSlots, ...appointmentSlots]);
   }, [selectedDate, selectedSchedule, slotMap]);
@@ -521,7 +533,7 @@ export default function Agenda() {
     const dayBlocks = filteredBlocks.filter((block) =>
       doesRangeOverlap(new Date(block.startsAt), new Date(block.endsAt), dayStart, dayEnd)
     );
-    const daySlots = generateTimeSlotsForDate(date, getScheduleForProfessional(openingHoursConfig, selectedDoctor));
+    const daySlots = generateStandardVisibleSlots(date, getScheduleForProfessional(openingHoursConfig, selectedDoctor));
 
     if (daySlots.length === 0) return "fechado";
     if (dayBlocks.length > 0) return "bloqueado";
@@ -573,8 +585,13 @@ export default function Agenda() {
       return;
     }
 
-    if (!isDateTimeInsideSchedule(scheduledDate, doctorSchedule, durationMinutes)) {
-      const confirmed = window.confirm(
+    const beforeStandardStart = isBeforeStandardAppointmentStart(scheduledDate);
+    const outsideConfiguredSchedule = !isDateTimeInsideSchedule(scheduledDate, doctorSchedule, durationMinutes);
+    if (beforeStandardStart || outsideConfiguredSchedule) {
+      const confirmMessage = beforeStandardStart
+        ? `Este agendamento está antes do horário padrão de marcação (${STANDARD_APPOINTMENT_START_TIME}). Deseja agendar mesmo assim?`
+        : "";
+      const confirmed = window.confirm(confirmMessage ||
         "Este horário está fora do horário de funcionamento da clínica ou da agenda aberta do profissional. Deseja agendar mesmo assim?"
       );
       if (!confirmed) return;

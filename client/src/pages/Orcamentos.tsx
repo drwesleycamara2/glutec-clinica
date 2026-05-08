@@ -127,6 +127,7 @@ export default function Orcamentos() {
   const [showNfseDialog, setShowNfseDialog] = useState(false);
   const [selectedBudget, setSelectedBudget] = useState<any | null>(null);
   const [patientId, setPatientId] = useState("");
+  const [lockedPatientId, setLockedPatientId] = useState("");
   const [patientSearch, setPatientSearch] = useState("");
   const [clinicalNotes, setClinicalNotes] = useState("");
   const [items, setItems] = useState<BudgetItemDraft[]>([]);
@@ -150,6 +151,7 @@ export default function Orcamentos() {
     const shouldCreate = params.get("create") === "1";
 
     if (linkedPatientId && /^\d+$/.test(linkedPatientId)) {
+      setLockedPatientId(linkedPatientId);
       setPatientId(linkedPatientId);
       if (shouldCreate) {
         setShowCreate(true);
@@ -225,6 +227,22 @@ export default function Orcamentos() {
     () => patients?.find((patient: any) => Number(patient.id) === Number(patientId)),
     [patients, patientId],
   );
+  const lockedPatient = useMemo(
+    () => patients?.find((patient: any) => Number(patient.id) === Number(lockedPatientId)),
+    [patients, lockedPatientId],
+  );
+
+  const displayedBudgets = useMemo(() => {
+    if (!lockedPatientId) return budgetsList ?? [];
+    return (budgetsList ?? []).filter((budget: any) => String(budget.patientId) === String(lockedPatientId));
+  }, [budgetsList, lockedPatientId]);
+
+  useEffect(() => {
+    if (lockedPatientId && lockedPatient) {
+      setPatientId(lockedPatientId);
+      setPatientSearch(patientDisplayName(lockedPatient));
+    }
+  }, [lockedPatient, lockedPatientId]);
 
   const totalInCents = useMemo(
     () => items.reduce((sum, item) => sum + item.unitPriceInCents * item.quantity, 0),
@@ -239,8 +257,8 @@ export default function Orcamentos() {
   );
 
   function resetForm() {
-    setPatientId("");
-    setPatientSearch("");
+    setPatientId(lockedPatientId || "");
+    setPatientSearch(lockedPatient ? patientDisplayName(lockedPatient) : "");
     setClinicalNotes("");
     setItems([]);
     setSelectedProcedureId(null);
@@ -249,6 +267,7 @@ export default function Orcamentos() {
   }
 
   function selectPatient(patient: any) {
+    if (lockedPatientId) return;
     setPatientId(String(patient.id));
     setPatientSearch(patientDisplayName(patient));
   }
@@ -408,7 +427,14 @@ export default function Orcamentos() {
 
         <Dialog open={showCreate} onOpenChange={setShowCreate}>
           <DialogTrigger asChild>
-            <Button>
+            <Button
+              onClick={() => {
+                if (lockedPatientId) {
+                  setPatientId(lockedPatientId);
+                  setPatientSearch(lockedPatient ? patientDisplayName(lockedPatient) : "");
+                }
+              }}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Novo orçamento
             </Button>
@@ -422,27 +448,35 @@ export default function Orcamentos() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Paciente</Label>
-                  <Input
-                    value={patientSearch}
-                    onChange={(event) => setPatientSearch(event.target.value)}
-                    placeholder="Busque por nome ou CPF"
-                  />
-                  {filteredPatients.length > 0 && (
-                    <div className="rounded-lg border bg-background p-1">
-                      {filteredPatients.map((patient: any) => (
-                        <button
-                          key={patient.id}
-                          type="button"
-                          className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
-                          onClick={() => selectPatient(patient)}
-                        >
-                          <span>{patientDisplayName(patient)}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {patient.cpf || `ID ${patient.id}`}
-                          </span>
-                        </button>
-                      ))}
+                  {lockedPatientId ? (
+                    <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm font-medium">
+                      {lockedPatient ? patientDisplayName(lockedPatient) : `Paciente #${lockedPatientId}`}
                     </div>
+                  ) : (
+                    <>
+                      <Input
+                        value={patientSearch}
+                        onChange={(event) => setPatientSearch(event.target.value)}
+                        placeholder="Busque por nome ou CPF"
+                      />
+                      {filteredPatients.length > 0 && (
+                        <div className="rounded-lg border bg-background p-1">
+                          {filteredPatients.map((patient: any) => (
+                            <button
+                              key={patient.id}
+                              type="button"
+                              className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-muted"
+                              onClick={() => selectPatient(patient)}
+                            >
+                              <span>{patientDisplayName(patient)}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {patient.cpf || `ID ${patient.id}`}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
                   {selectedPatient && (
                     <p className="text-xs text-muted-foreground">
@@ -858,7 +892,7 @@ export default function Orcamentos() {
         <div className="flex h-32 items-center justify-center">
           <p className="text-muted-foreground">Carregando orçamentos...</p>
         </div>
-      ) : !budgetsList || budgetsList.length === 0 ? (
+      ) : displayedBudgets.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Calculator className="mb-3 h-12 w-12 text-muted-foreground/30" />
@@ -867,7 +901,7 @@ export default function Orcamentos() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {budgetsList.map((budget: any) => {
+          {displayedBudgets.map((budget: any) => {
             const latestNfse = budget.latestNfse;
             const hasAuthorizedNfse = latestNfse?.status === "autorizada";
             const hasNfseError = latestNfse?.status === "erro";

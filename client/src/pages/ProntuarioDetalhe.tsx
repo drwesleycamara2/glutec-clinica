@@ -787,9 +787,6 @@ function AnamneseTab({ patientId }: { patientId: number }) {
             <Button size="sm" variant="outline" onClick={generateLink} disabled={createAnamnesisLinkMutation.isPending} className="border-[#C9A55B]/30 text-[#C9A55B] hover:bg-[#C9A55B]/10">
               {createAnamnesisLinkMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5 mr-1.5" />}Gerar link para o paciente
             </Button>
-            <Button size="sm" onClick={saveAnamnesis} disabled={createAnamnesisMutation.isPending} className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33] text-white">
-              {createAnamnesisMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1.5" />}Salvar anamnese
-            </Button>
           </div>
         </CardContent>
       </Card>
@@ -876,6 +873,12 @@ function AnamneseTab({ patientId }: { patientId: number }) {
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      <div className="flex justify-end">
+        <Button size="sm" onClick={saveAnamnesis} disabled={createAnamnesisMutation.isPending} className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33] text-white">
+          {createAnamnesisMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1.5" />}Salvar anamnese
+        </Button>
       </div>
 
       <Card className="border-border/50">
