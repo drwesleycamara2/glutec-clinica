@@ -103,7 +103,7 @@ const templates = [
     "HbsAg: 40307018",
     "TSH: 40316521",
   ]),
-  examTemplate("PMMA feminino", "", [
+  examTemplate("PMMA feminino", "Z01.7", [
     "Beta-HCG qualitativo: 40316327",
     "Glicemia: 40302040",
     "Creatinina: 40301630",
@@ -119,7 +119,7 @@ const templates = [
     "Cálcio total: 40301400",
     "PTH (Paratormônio): 40305465",
   ]),
-  examTemplate("PMMA masculino", "", [
+  examTemplate("PMMA masculino", "Z01.7", [
     "Glicemia: 40302040",
     "Creatinina: 40301630",
     "ALT/TGP: 40302512",
