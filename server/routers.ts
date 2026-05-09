@@ -31,6 +31,7 @@ import { createD4SignService, getD4SignIntegrationStatus } from "./lib/d4sign-in
 import { createWhatsAppService } from "./whatsapp";
 import { createD4SignService as createSignatureDispatchService, SAFE_MAP } from "./d4sign";
 import { createCloudSignatureClient, documentHash, type CloudSignatureProvider } from "./lib/cloud-signature";
+import { structureTranscriptForClinicalDocument } from "./lib/clinical-transcription";
 
 const SUPER_ADMIN_EMAIL = "contato@drwesleycamara.com.br";
 const INVITE_ROLES = ["user", "admin", "medico", "recepcionista", "enfermeiro", "gerente"] as const;
@@ -2158,6 +2159,16 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         return dbComplete.deleteTemplateNormalized(input.id);
+      }),
+  }),
+  clinicalDocuments: router({
+    structureDictation: prontuariosProcedure
+      .input(z.object({
+        transcript: z.string().min(1),
+        documentType: z.enum(["exame", "prescricao", "atestado", "declaracao", "outro"]).default("outro"),
+      }))
+      .mutation(async ({ input }) => {
+        return structureTranscriptForClinicalDocument(input.transcript, input.documentType);
       }),
   }),
   // MEDICAL RECORDS

@@ -36,6 +36,7 @@ import { AllergyAlert } from "@/components/AllergyAlert";
 import { ExportProntuarioButton } from "@/components/ExportProntuario";
 import { EvolucaoClinicaWorkspace } from "@/components/EvolucaoClinicaWorkspace";
 import { RichTextEditor } from "@/components/RichTextEditor";
+import { AudioRecorder } from "@/components/AudioRecorder";
 import { generatePremiumPdf } from "@/components/PdfExporter";
 import { ClinicalDocumentSignatureActions } from "@/components/ClinicalDocumentSignatureActions";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -2060,6 +2061,291 @@ function ExamesTab({ patientId }: { patientId: number }) {
   );
 }
 
+function ExamesWorkspaceTab({ patientId }: { patientId: number }) {
+  const utils = trpc.useUtils();
+  const { data: exams, isLoading } = trpc.examRequests.getByPatient.useQuery({ patientId });
+  const { data: templates } = trpc.examRequests.listTemplates.useQuery();
+  const [specialty, setSpecialty] = useState("");
+  const [clinicalIndication, setClinicalIndication] = useState("");
+  const [content, setContent] = useState("");
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+
+  function appendContent(value?: string | null) {
+    const next = String(value ?? "").trim();
+    if (!next) return;
+    setContent((current) => current.trim() ? `${current}<p><br></p>${next}` : next);
+  }
+
+  const createExamMutation = trpc.examRequests.create.useMutation({
+    onSuccess: async () => {
+      toast.success("Pedido de exames salvo no prontuário.");
+      setContent("");
+      setClinicalIndication("");
+      await utils.examRequests.getByPatient.invalidate({ patientId });
+    },
+    onError: (error: any) => toast.error(error?.message || "Não foi possível salvar o pedido de exames."),
+  });
+
+  const saveTemplateMutation = trpc.examRequests.createTemplate.useMutation({
+    onSuccess: async () => {
+      toast.success("Modelo de exames salvo.");
+      await utils.examRequests.listTemplates.invalidate();
+    },
+    onError: (error: any) => toast.error(error?.message || "Não foi possível salvar o modelo."),
+  });
+
+  const structureDictationMutation = trpc.clinicalDocuments.structureDictation.useMutation({
+    onSuccess: (draft: any) => {
+      appendContent(draft?.content || draft?.refinedTranscript || "");
+      if (draft?.notes) toast.info(draft.notes);
+      toast.success("Ditado convertido em texto clínico.");
+    },
+    onError: (error: any) => toast.error(error?.message || "Não foi possível estruturar o ditado com IA."),
+  });
+
+  const filteredTemplates = useMemo(() => {
+    const normalized = templateSearch.trim().toLowerCase();
+    return (templates ?? []).filter((template: any) => {
+      if (!normalized) return true;
+      return [template.name, template.specialty, template.content]
+        .map((value) => String(value ?? "").toLowerCase())
+        .some((value) => value.includes(normalized));
+    });
+  }, [templates, templateSearch]);
+
+  function saveExamRequest() {
+    if (!formatImportedText(content)) {
+      toast.error("Digite ou carregue o conteúdo do pedido de exames.");
+      return;
+    }
+
+    createExamMutation.mutate({
+      patientId,
+      specialty: specialty.trim() || undefined,
+      clinicalIndication: clinicalIndication.trim() || undefined,
+      content,
+    });
+  }
+
+  function saveCurrentAsTemplate() {
+    if (!formatImportedText(content)) {
+      toast.error("Digite o conteúdo antes de salvar como modelo.");
+      return;
+    }
+    const name = window.prompt("Nome do modelo de exames:");
+    if (!name?.trim()) return;
+    saveTemplateMutation.mutate({
+      name: name.trim(),
+      content,
+      specialty: specialty.trim() || undefined,
+    });
+  }
+
+  async function printDraft() {
+    if (!formatImportedText(content)) {
+      toast.error("Digite ou carregue o conteúdo antes de imprimir.");
+      return;
+    }
+    await generatePremiumPdf({
+      filename: `pedido_exames_paciente_${patientId}_${Date.now()}.pdf`,
+      title: "Pedido de exames",
+      subtitle: specialty || "Solicitação clínica",
+      content: sanitizeHtml(content),
+      includeWatermark: true,
+    });
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-[#C9A55B]" />
+      </div>
+    );
+  }
+
+  return (
+    <Tabs defaultValue="solicitacoes" className="space-y-4">
+      <TabsList className="bg-background/70">
+        <TabsTrigger value="solicitacoes">Solicitações</TabsTrigger>
+        <TabsTrigger value="resultados">Resultados</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="solicitacoes" className="space-y-5">
+        <TabHeader
+          title="Exames"
+          description="Crie pedidos de exames diretamente neste prontuário. O paciente já está fixado e não há troca para outro cadastro."
+          actions={
+            <Button size="sm" variant="outline" onClick={() => setShowVoiceRecorder((current) => !current)}>
+              <ClipboardPlus className="mr-1.5 h-3.5 w-3.5" />
+              Gravar voz
+            </Button>
+          }
+        />
+
+        {showVoiceRecorder ? (
+          <div className="rounded-2xl border border-[#C9A55B]/25 bg-[#C9A55B]/5 p-3">
+            <AudioRecorder
+              showTranscriptionEditor={false}
+              onTranscriptionComplete={(transcript) =>
+                structureDictationMutation.mutate({ transcript, documentType: "exame" })
+              }
+            />
+            {structureDictationMutation.isPending ? (
+              <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Convertendo o ditado em pedido de exames com IA...
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <Card className="border-border/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Novo pedido de exames</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Especialidade</Label>
+                  <Input value={specialty} onChange={(event) => setSpecialty(event.target.value)} placeholder="Ex.: Cirurgia plástica" />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Indicação clínica</Label>
+                  <Input value={clinicalIndication} onChange={(event) => setClinicalIndication(event.target.value)} placeholder="Motivo da solicitação" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Label>Conteúdo do pedido</Label>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" variant="outline" onClick={saveCurrentAsTemplate} disabled={saveTemplateMutation.isPending}>
+                      <Save className="mr-1.5 h-3.5 w-3.5" />
+                      Salvar modelo
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => void printDraft()}>
+                      <Printer className="mr-1.5 h-3.5 w-3.5" />
+                      Imprimir
+                    </Button>
+                  </div>
+                </div>
+                <RichTextEditor
+                  value={content}
+                  onChange={setContent}
+                  placeholder="Digite ou dite os exames solicitados, preparo e observações clínicas..."
+                  minHeight="340px"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setContent("")}>
+                  Limpar
+                </Button>
+                <Button type="button" onClick={saveExamRequest} disabled={createExamMutation.isPending}>
+                  {createExamMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  Salvar pedido
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Modelos</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} placeholder="Pesquise aqui" className="pl-9" />
+              </div>
+              <div className="max-h-[30rem] divide-y overflow-y-auto rounded-xl border border-border/50">
+                {filteredTemplates.length === 0 ? (
+                  <p className="p-4 text-sm text-muted-foreground">Nenhum modelo salvo.</p>
+                ) : filteredTemplates.map((template: any) => (
+                  <button
+                    key={template.id}
+                    type="button"
+                    className="flex w-full items-center gap-3 px-3 py-3 text-left text-sm hover:bg-muted/50"
+                    onClick={() => appendContent(template.content)}
+                    title="Acrescentar este modelo ao pedido"
+                  >
+                    <ArrowLeft className="h-4 w-4 shrink-0 text-[#0F8D7A]" />
+                    <span className="min-w-0 flex-1 truncate">{repairMojibake(template.name || "Modelo sem título")}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                A seta acrescenta o modelo ao texto atual, sem substituir o que já foi digitado.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="border-border/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Pedidos já salvos</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!exams || exams.length === 0 ? (
+              <div className="py-10 text-center">
+                <FlaskConical className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+                <p className="text-sm text-muted-foreground">Nenhuma solicitação de exame registrada para este paciente.</p>
+              </div>
+            ) : exams.map((exam: any) => (
+              <Card key={exam.id} className="border-border/50">
+                <CardContent className="p-4">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <FlaskConical className="h-4 w-4 text-[#C9A55B]" />
+                      <span className="text-sm font-semibold">Solicitação #{exam.id}</span>
+                      {exam.specialty ? <Badge variant="outline" className="text-[10px]">{repairMojibake(exam.specialty)}</Badge> : null}
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {exam.createdAt ? new Date(exam.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "-"}
+                    </span>
+                  </div>
+                  {exam.content ? (
+                    <div
+                      className="rounded-lg border border-border/50 bg-muted/30 p-3 text-sm leading-relaxed"
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(exam.content) }}
+                    />
+                  ) : null}
+                  {exam.exams && Array.isArray(exam.exams) && exam.exams.length > 0 ? (
+                    <div className="mt-2 space-y-1">
+                      {exam.exams.map((item: any, index: number) => (
+                        <div key={index} className="flex items-center gap-2 text-sm">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-[#C9A55B]" />
+                          <span>{item.name || String(item)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+            ))}
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="resultados" className="space-y-4">
+        <TabHeader
+          title="Resultados de exames"
+          description="Anexe PDFs, imagens e laudos recebidos para este paciente."
+        />
+        <DocumentUploadPanel
+          patientId={patientId}
+          defaultFolderLabel="Resultados de exames"
+          allowedTypes={["exame_pdf", "laudo", "outro"]}
+          title="Anexar resultado de exame"
+          description="Envie resultado, laudo ou imagem relacionada a exames deste paciente."
+        />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
 function ProcedimentosTab({ patientId }: { patientId: number }) {
   const [, navigate] = useLocation();
   const { data: budgets } = trpc.budgets.getByPatient.useQuery({ patientId });
@@ -2461,7 +2747,7 @@ export default function ProntuarioDetalhe() {
             <TabsContent value="imagens" className="mt-4"><ImagensTab patientId={patientId} /></TabsContent>
             <TabsContent value="galeria" className="mt-4"><GaleriaTab patientId={patientId} /></TabsContent>
             <TabsContent value="anexos" className="mt-4"><AnexosTab patientId={patientId} /></TabsContent>
-            <TabsContent value="exames" className="mt-4"><ExamesTab patientId={patientId} /></TabsContent>
+            <TabsContent value="exames" className="mt-4"><ExamesWorkspaceTab patientId={patientId} /></TabsContent>
             <TabsContent value="procedimentos" className="mt-4"><ProcedimentosTab patientId={patientId} /></TabsContent>
             <TabsContent value="agendamentos" className="mt-4"><AgendamentosTab patientId={patientId} /></TabsContent>
           </>

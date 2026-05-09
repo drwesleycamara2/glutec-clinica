@@ -16,6 +16,17 @@ export type StructuredClinicalTranscript = {
   observacoes: string;
 };
 
+export type StructuredClinicalDocumentType = "exame" | "prescricao" | "atestado" | "declaracao" | "outro";
+
+export type StructuredClinicalDocumentDraft = {
+  refinedTranscript: string;
+  title: string;
+  content: string;
+  suggestedDocumentType: StructuredClinicalDocumentType;
+  suggestedPrescriptionType: "simples" | "antimicrobiano" | "controle_especial" | "";
+  notes: string;
+};
+
 function resolveChatConfig(): ChatConfig {
   if (ENV.forgeApiUrl?.trim() && ENV.forgeApiKey?.trim()) {
     return {
@@ -130,5 +141,45 @@ export async function structureTranscriptForClinicalEvolution(transcript: string
     hipoteseDiagnostica: String(payload?.hipoteseDiagnostica || "").trim(),
     conduta: String(payload?.conduta || "").trim(),
     observacoes: String(payload?.observacoes || "").trim(),
+  };
+}
+
+export async function structureTranscriptForClinicalDocument(
+  transcript: string,
+  documentType: StructuredClinicalDocumentType = "outro",
+): Promise<StructuredClinicalDocumentDraft> {
+  const normalized = String(transcript || "").trim();
+  if (!normalized) {
+    throw new Error("Nenhuma transcrição foi informada para gerar o documento clínico.");
+  }
+
+  const payload = await invokeJsonPrompt(
+    [
+      "Você é um assistente médico que transforma ditados em documentos clínicos editáveis.",
+      "Use português do Brasil, linguagem técnica, objetiva e fiel ao que foi ditado.",
+      "Não invente dose, quantidade, tempo de uso, diagnóstico, CID, data ou dado não informado.",
+      "Para prescrições, organize por via de uso, numere os itens e siga boas práticas de receituário médico.",
+      "Quando houver antibiótico, sugira suggestedPrescriptionType='antimicrobiano'.",
+      "Quando houver medicamento controlado ou substância sujeita a controle especial, sugira suggestedPrescriptionType='controle_especial'.",
+      "Caso contrário, use suggestedPrescriptionType='simples'.",
+      "Para pedidos de exames, gere uma lista clara de exames solicitados e inclua indicação clínica somente se ditada.",
+      "Para atestados e declarações, escreva texto formal e não invente período, finalidade ou restrição.",
+      "Entregue content em HTML simples seguro usando <p>, <strong>, <br> e listas quando necessário.",
+      "Responda somente em JSON com as chaves refinedTranscript, title, content, suggestedDocumentType, suggestedPrescriptionType, notes.",
+    ].join(" "),
+    JSON.stringify({ documentType, transcript: normalized }),
+  );
+
+  return {
+    refinedTranscript: String(payload?.refinedTranscript || normalized).trim(),
+    title: String(payload?.title || "Documento clínico").trim(),
+    content: String(payload?.content || normalized).trim(),
+    suggestedDocumentType: (["exame", "prescricao", "atestado", "declaracao", "outro"].includes(String(payload?.suggestedDocumentType))
+      ? String(payload?.suggestedDocumentType)
+      : documentType) as StructuredClinicalDocumentType,
+    suggestedPrescriptionType: (["simples", "antimicrobiano", "controle_especial"].includes(String(payload?.suggestedPrescriptionType))
+      ? String(payload?.suggestedPrescriptionType)
+      : "") as StructuredClinicalDocumentDraft["suggestedPrescriptionType"],
+    notes: String(payload?.notes || "").trim(),
   };
 }
