@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { generatePremiumPdf } from "@/components/PdfExporter";
+import { exportClinicalDocumentPdf } from "@/components/PdfExporter";
 import { ClinicalDocumentSignatureActions } from "@/components/ClinicalDocumentSignatureActions";
 import { toast } from "sonner";
 import { Plus, FlaskConical, Loader2, FileText, AlertTriangle, Clock, Trash2 } from "lucide-react";
@@ -129,10 +129,12 @@ export default function Exames() {
       ? exams.map((item: any) => typeof item === "string" ? item : [item?.name, item?.instructions].filter(Boolean).join(" - ")).filter(Boolean).join("<br />")
       : String(exams ?? "");
 
-    await generatePremiumPdf({
+    const patient = patients?.find((item) => Number(item.id) === Number(request.patientId));
+    await exportClinicalDocumentPdf({
       filename: `pedido_exames_${request.id}.pdf`,
-      title: "Pedido de exames",
-      subtitle: `Paciente: ${request.patientName ?? "Paciente"}`,
+      type: "solicitacao_exames",
+      title: "Solicitação de exames",
+      patient: patient ?? request.patientName ?? "Paciente",
       content: `
         <div style="font-family: Montserrat, sans-serif; font-size: 14px; line-height: 1.6;">
           <p><strong>Paciente:</strong> ${request.patientName ?? ""}</p>
@@ -143,7 +145,6 @@ export default function Exames() {
           ${request.signatureValidationCode ? `<p><strong>Assinatura:</strong> ${request.signatureProvider || "assinatura digital"} - código ${request.signatureValidationCode}</p>` : ""}
         </div>
       `,
-      includeWatermark: true,
     });
   };
 

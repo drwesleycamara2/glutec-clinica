@@ -153,6 +153,7 @@ export default function Prescricoes() {
           type: form.type,
           content: form.content,
           observations: form.observations,
+          patient: currentPatient,
         });
       }
     } catch {
@@ -162,7 +163,10 @@ export default function Prescricoes() {
 
   const handlePrintExisting = async (prescription: any) => {
     const patient = patients?.find((item) => item.id === prescription.patientId);
-    await exportPrescriptionPdf(patient?.fullName || `Paciente ${prescription.patientId}`, prescription);
+    await exportPrescriptionPdf(patient?.fullName || `Paciente ${prescription.patientId}`, {
+      ...prescription,
+      patient,
+    });
   };
 
   return (

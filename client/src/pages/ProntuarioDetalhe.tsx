@@ -37,7 +37,7 @@ import { ExportProntuarioButton } from "@/components/ExportProntuario";
 import { EvolucaoClinicaWorkspace } from "@/components/EvolucaoClinicaWorkspace";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { AudioRecorder } from "@/components/AudioRecorder";
-import { generatePremiumPdf } from "@/components/PdfExporter";
+import { exportClinicalDocumentPdf } from "@/components/PdfExporter";
 import { ClinicalDocumentSignatureActions } from "@/components/ClinicalDocumentSignatureActions";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { hasModulePermission } from "@/lib/access";
@@ -336,18 +336,35 @@ function getClinicalDocumentTemplateGroup(type: ClinicalDocumentType) {
   return "atestado";
 }
 
-function applyDocumentPlaceholders(content: string, patientName: string) {
+function normalizeClinicalDocumentPatient(patient: string | any) {
   const today = new Date().toLocaleDateString("pt-BR");
-  return content
-    .replace(/\[NOME_PACIENTE\]/g, patientName)
-    .replace(/\{NOME_PACIENTE\}/g, patientName)
-    .replace(/\[PACIENTE\]/g, patientName)
-    .replace(/\{PACIENTE\}/g, patientName)
-    .replace(/\[DATA_ATUAL\]/g, today)
-    .replace(/\{DATA_ATUAL\}/g, today);
+  if (typeof patient === "string") {
+    return { name: patient, cpf: "", today };
+  }
+
+  return {
+    name: String(patient?.fullName ?? patient?.name ?? "").trim(),
+    cpf: String(patient?.cpf ?? "").trim(),
+    today,
+  };
 }
 
-function templateToClinicalDocumentHtml(template: any, patientName: string) {
+function applyDocumentPlaceholders(content: string, patient: string | any) {
+  const context = normalizeClinicalDocumentPatient(patient);
+  return content
+    .replace(/\[NOME_PACIENTE\]/g, context.name)
+    .replace(/\{NOME_PACIENTE\}/g, context.name)
+    .replace(/\[PACIENTE\]/g, context.name)
+    .replace(/\{PACIENTE\}/g, context.name)
+    .replace(/\[CPF_PACIENTE\]/g, context.cpf)
+    .replace(/\{CPF_PACIENTE\}/g, context.cpf)
+    .replace(/\[DATA_ATUAL\]/g, context.today)
+    .replace(/\{DATA_ATUAL\}/g, context.today)
+    .replace(/\[DATA_CLINICA\]/g, context.today)
+    .replace(/\{DATA_CLINICA\}/g, context.today);
+}
+
+function templateToClinicalDocumentHtml(template: any, patient: string | any) {
   const sections = Array.isArray(template?.sections) ? template.sections : [];
   const sectionContent = sections
     .map((section: any) => {
@@ -359,16 +376,18 @@ function templateToClinicalDocumentHtml(template: any, patientName: string) {
     .filter(Boolean)
     .join("\n\n");
 
-  const content = applyDocumentPlaceholders(sectionContent || String(template?.content ?? ""), patientName);
+  const content = applyDocumentPlaceholders(sectionContent || String(template?.content ?? ""), patient);
   if (!content.trim()) {
-    return buildDefaultClinicalDocumentHtml("atestado", patientName);
+    return buildDefaultClinicalDocumentHtml("atestado", patient);
   }
 
   return /<\/?[a-z][\s\S]*>/i.test(content) ? content : plainTextToHtml(content);
 }
 
-function buildDefaultClinicalDocumentHtml(type: ClinicalDocumentType, patientName: string) {
-  const today = new Date().toLocaleDateString("pt-BR");
+function buildDefaultClinicalDocumentHtml(type: ClinicalDocumentType, patient: string | any) {
+  const context = normalizeClinicalDocumentPatient(patient);
+  const patientName = context.name;
+  const today = context.today;
   if (type === "declaracao") {
     return [`<p><strong>DECLARAÇÃO</strong></p>`, `<p></p>`, `<p>Declaro, para os devidos fins, que ${patientName} esteve em atendimento em ${today}.</p>`].join("");
   }
@@ -379,6 +398,20 @@ function buildDefaultClinicalDocumentHtml(type: ClinicalDocumentType, patientNam
     return [`<p><strong>LAUDO / RELATÓRIO</strong></p>`, `<p></p>`, `<p>Paciente: ${patientName}</p>`, `<p>Data: ${today}</p>`, `<p></p>`].join("");
   }
   return [`<p><strong>ATESTADO MÉDICO</strong></p>`, `<p></p>`, `<p>Paciente: ${patientName}</p>`, `<p>Data: ${today}</p>`, `<p></p>`, `<p>Atesto, para os devidos fins, que ${patientName} esteve em atendimento nesta data.</p>`].join("");
+}
+
+function hasPendingAttestationRequiredFields(content: string) {
+  const normalized = formatImportedText(content)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+  return (
+    normalized.includes("[periodo_afastamento]") ||
+    normalized.includes("[preencher_periodo_afastamento]") ||
+    normalized.includes("preencher periodo") ||
+    /periodo de\s*_{3,}/.test(normalized) ||
+    /periodo\s*_{3,}/.test(normalized)
+  );
 }
 
 function isTextualClinicalDocument(document: any) {
@@ -1096,7 +1129,7 @@ function DocumentUploadPanel({
   );
 }
 
-function AtestadosTab({ patientId, patientName, patientPhone }: { patientId: number; patientName: string; patientPhone?: string | null }) {
+function AtestadosTab({ patientId, patientName, patientPhone, patient }: { patientId: number; patientName: string; patientPhone?: string | null; patient?: any }) {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
   const { user } = useAuth();
@@ -1142,7 +1175,7 @@ function AtestadosTab({ patientId, patientName, patientPhone }: { patientId: num
   const openBlankEditor = (nextType: ClinicalDocumentType = "atestado") => {
     setDocumentType(nextType);
     setDocumentTitle(`${CLINICAL_DOCUMENT_TYPE_LABELS[nextType]} - ${patientName}`);
-    setDocumentContent(buildDefaultClinicalDocumentHtml(nextType, patientName));
+    setDocumentContent(buildDefaultClinicalDocumentHtml(nextType, patient ?? patientName));
     setActiveDocumentId(null);
     setShowEditor(true);
   };
@@ -1159,7 +1192,7 @@ function AtestadosTab({ patientId, patientName, patientPhone }: { patientId: num
     const nextType = inferClinicalDocumentType(template);
     setDocumentType(nextType);
     setDocumentTitle(`${repairMojibake(template?.name || CLINICAL_DOCUMENT_TYPE_LABELS[nextType])} - ${patientName}`);
-    setDocumentContent(templateToClinicalDocumentHtml(template, patientName));
+    setDocumentContent(templateToClinicalDocumentHtml(template, patient ?? patientName));
     setActiveDocumentId(null);
     setShowTemplateDialog(false);
     setShowEditor(true);
@@ -1206,14 +1239,18 @@ function AtestadosTab({ patientId, patientName, patientPhone }: { patientId: num
       toast.error("Digite ou carregue um documento antes de gerar o PDF.");
       return;
     }
+    if (type === "atestado" && hasPendingAttestationRequiredFields(contentToPrint)) {
+      toast.error("Preencha o período de afastamento antes de salvar, imprimir ou enviar o atestado.");
+      return;
+    }
 
     try {
-      await generatePremiumPdf({
+      await exportClinicalDocumentPdf({
         filename: `${sanitizeFileName(title || CLINICAL_DOCUMENT_TYPE_LABELS[type])}.pdf`,
+        type: type === "solicitacao_exames" ? "solicitacao_exames" : type,
         title: CLINICAL_DOCUMENT_TYPE_LABELS[type],
-        subtitle: `Paciente: ${patientName}`,
         content: contentToPrint,
-        includeWatermark: true,
+        patient: patient ?? patientName,
       });
     } catch {
       toast.error("Não foi possível gerar o PDF deste documento.");
@@ -1245,6 +1282,10 @@ function AtestadosTab({ patientId, patientName, patientPhone }: { patientId: num
     const content = documentContent.trim();
     if (!formatImportedText(content)) {
       toast.error("Digite o conteúdo do documento antes de salvar.");
+      return;
+    }
+    if (documentType === "atestado" && hasPendingAttestationRequiredFields(content)) {
+      toast.error("Preencha o período de afastamento antes de salvar, imprimir ou enviar o atestado.");
       return;
     }
 
@@ -2061,7 +2102,7 @@ function ExamesTab({ patientId }: { patientId: number }) {
   );
 }
 
-function ExamesWorkspaceTab({ patientId }: { patientId: number }) {
+function ExamesWorkspaceTab({ patientId, patient }: { patientId: number; patient?: any }) {
   const utils = trpc.useUtils();
   const { data: exams, isLoading } = trpc.examRequests.getByPatient.useQuery({ patientId });
   const { data: templates } = trpc.examRequests.listTemplates.useQuery();
@@ -2147,12 +2188,29 @@ function ExamesWorkspaceTab({ patientId }: { patientId: number }) {
       toast.error("Digite ou carregue o conteúdo antes de imprimir.");
       return;
     }
-    await generatePremiumPdf({
+    await exportClinicalDocumentPdf({
       filename: `pedido_exames_paciente_${patientId}_${Date.now()}.pdf`,
+      type: "solicitacao_exames",
+      patient: patient ?? `Paciente #${patientId}`,
       title: "Pedido de exames",
       subtitle: specialty || "Solicitação clínica",
       content: sanitizeHtml(content),
-      includeWatermark: true,
+    });
+  }
+
+  async function printSavedExam(exam: any) {
+    const examContent = sanitizeHtml(String(exam?.content ?? ""));
+    if (!formatImportedText(examContent)) {
+      toast.error("Este pedido não possui conteúdo para imprimir.");
+      return;
+    }
+    await exportClinicalDocumentPdf({
+      filename: `pedido_exames_${exam.id ?? patientId}_${Date.now()}.pdf`,
+      type: "solicitacao_exames",
+      title: "Solicitação de exames",
+      patient: patient ?? `Paciente #${patientId}`,
+      createdAt: exam?.createdAt,
+      content: examContent,
     });
   }
 
@@ -2302,9 +2360,15 @@ function ExamesWorkspaceTab({ patientId }: { patientId: number }) {
                       <span className="text-sm font-semibold">Solicitação #{exam.id}</span>
                       {exam.specialty ? <Badge variant="outline" className="text-[10px]">{repairMojibake(exam.specialty)}</Badge> : null}
                     </div>
-                    <span className="text-xs text-muted-foreground">
-                      {exam.createdAt ? new Date(exam.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "-"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        {exam.createdAt ? new Date(exam.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "-"}
+                      </span>
+                      <Button type="button" size="sm" variant="outline" onClick={() => void printSavedExam(exam)}>
+                        <Printer className="mr-1.5 h-3.5 w-3.5" />
+                        Imprimir
+                      </Button>
+                    </div>
                   </div>
                   {exam.content ? (
                     <div
@@ -2740,14 +2804,14 @@ export default function ProntuarioDetalhe() {
           <>
             <TabsContent value="anamnese" className="mt-4"><AnamneseTab patientId={patientId} /></TabsContent>
             <TabsContent value="secretaria" className="mt-4"><SecretariaTab patientId={patientId} /></TabsContent>
-            <TabsContent value="atestados" className="mt-4"><AtestadosTab patientId={patientId} patientName={patient.fullName} patientPhone={patient.phone} /></TabsContent>
+            <TabsContent value="atestados" className="mt-4"><AtestadosTab patientId={patientId} patientName={patient.fullName} patientPhone={patient.phone} patient={patient} /></TabsContent>
             <TabsContent value="contratos" className="mt-4"><ContratosTab patientId={patientId} /></TabsContent>
             <TabsContent value="prescricoes" className="mt-4"><PrescricoesTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
             <TabsContent value="orcamentos" className="mt-4"><OrcamentoTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
             <TabsContent value="imagens" className="mt-4"><ImagensTab patientId={patientId} /></TabsContent>
             <TabsContent value="galeria" className="mt-4"><GaleriaTab patientId={patientId} /></TabsContent>
             <TabsContent value="anexos" className="mt-4"><AnexosTab patientId={patientId} /></TabsContent>
-            <TabsContent value="exames" className="mt-4"><ExamesWorkspaceTab patientId={patientId} /></TabsContent>
+            <TabsContent value="exames" className="mt-4"><ExamesWorkspaceTab patientId={patientId} patient={patient} /></TabsContent>
             <TabsContent value="procedimentos" className="mt-4"><ProcedimentosTab patientId={patientId} /></TabsContent>
             <TabsContent value="agendamentos" className="mt-4"><AgendamentosTab patientId={patientId} /></TabsContent>
           </>

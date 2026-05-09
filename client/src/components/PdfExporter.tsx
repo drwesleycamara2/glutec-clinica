@@ -52,6 +52,423 @@ export interface PdfExportOptions {
   includeAuditReport?: boolean;
 }
 
+export type ClinicalPdfDocumentType =
+  | "prescricao"
+  | "exame"
+  | "solicitacao_exames"
+  | "atestado"
+  | "declaracao"
+  | "laudo";
+
+export interface ClinicalPdfPatient {
+  id?: number | string;
+  name?: string | null;
+  fullName?: string | null;
+  cpf?: string | null;
+  rg?: string | null;
+  phone?: string | null;
+  address?: string | Record<string, unknown> | null;
+  street?: string | null;
+  number?: string | number | null;
+  neighborhood?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zipCode?: string | null;
+}
+
+interface DesignedPdfOptions {
+  filename: string;
+  html: string;
+  orientation?: "portrait" | "landscape";
+  widthPx?: number;
+}
+
+interface ClinicalDocumentPdfOptions {
+  filename: string;
+  type: ClinicalPdfDocumentType;
+  title?: string;
+  content: string;
+  patient?: ClinicalPdfPatient | string;
+  subtitle?: string;
+  createdAt?: string | Date;
+}
+
+const CLINIC_LOGO_PATH = "/logo-glutee.png";
+const CLINIC_STAMP_PATH = "/clinical-print/carimbo-wesley.png";
+const CLINIC_ADDRESS = "Av. Marechal Castelo Branco, 282 - Morro do Ouro - Mogi Guaçu - SP";
+const CLINIC_PHONE = "(19) 99963-3913";
+const CLINIC_EMAIL = "contato@clinicaglutee.com.br";
+const CLINIC_INSTAGRAM = "@clinicaglutee";
+const DOCTOR_NAME = "Dr. Wésley de Sousa Câmara";
+const DOCTOR_CRM = "CRM-SP: 174868";
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function stripHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function toPrintableHtml(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "<p>Sem conteúdo registrado.</p>";
+  if (/<\/?[a-z][\s\S]*>/i.test(raw)) return raw;
+  return raw
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br />")}</p>`)
+    .join("");
+}
+
+function parseAddress(value: ClinicalPdfPatient["address"]) {
+  if (!value) return {};
+  if (typeof value === "object") return value as Record<string, unknown>;
+  const raw = String(value).trim();
+  if (!raw) return {};
+  if (raw.startsWith("{")) {
+    try {
+      return JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return { street: raw };
+    }
+  }
+  return { street: raw };
+}
+
+function normalizeClinicalPatient(patient?: ClinicalPdfPatient | string): Required<Pick<ClinicalPdfPatient, "name" | "cpf" | "rg" | "phone" | "city" | "state">> & {
+  addressLine: string;
+} {
+  if (typeof patient === "string") {
+    return {
+      name: patient,
+      cpf: "",
+      rg: "",
+      phone: "",
+      city: "",
+      state: "",
+      addressLine: "",
+    };
+  }
+
+  const address = parseAddress(patient?.address);
+  const street = String(patient?.street ?? address.street ?? address.logradouro ?? "").trim();
+  const number = String(patient?.number ?? address.number ?? address.numero ?? "").trim();
+  const neighborhood = String(patient?.neighborhood ?? address.neighborhood ?? address.bairro ?? "").trim();
+  const city = String(patient?.city ?? address.city ?? address.localidade ?? "").trim();
+  const state = String(patient?.state ?? address.state ?? address.uf ?? "").trim();
+  const addressLine = [street, number, neighborhood, [city, state].filter(Boolean).join(" - ")]
+    .filter(Boolean)
+    .join(", ");
+
+  return {
+    name: String(patient?.fullName ?? patient?.name ?? "").trim(),
+    cpf: String(patient?.cpf ?? "").trim(),
+    rg: String(patient?.rg ?? "").trim(),
+    phone: String(patient?.phone ?? "").trim(),
+    city,
+    state,
+    addressLine,
+  };
+}
+
+function formatClinicalDate(value?: string | Date) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return new Date().toLocaleDateString("pt-BR");
+  return date.toLocaleDateString("pt-BR");
+}
+
+function sanitizeClinicalFilename(value: string) {
+  return value.replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, " ").trim() || "documento-clinico.pdf";
+}
+
+function compactClinicalContent(content: string) {
+  return toPrintableHtml(content)
+    .replace(/<p>\s*<strong>\s*(ATESTADO M[ÉE]DICO|DECLARA[ÇC][ÃA]O|SOLICITA[ÇC][ÃA]O DE EXAMES|PRESCRI[ÇC][ÃA]O M[ÉE]DICA)\s*<\/strong>\s*<\/p>/i, "")
+    .trim();
+}
+
+const clinicalPrintCss = `
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .page {
+    position: relative;
+    overflow: hidden;
+    background: #fff;
+    color: #111827;
+    font-family: Montserrat, Arial, sans-serif;
+  }
+  .page.portrait { width: 794px; min-height: 1123px; padding: 64px 58px 116px 82px; }
+  .page.landscape { width: 1123px; min-height: 794px; padding: 24px; display: grid; gap: 18px; grid-template-columns: 1fr 1fr; }
+  .gold-stripe {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 32px;
+    height: 100%;
+    background: linear-gradient(180deg, #8a6526 0%, #f8dfa1 28%, #c79b38 56%, #7a561d 100%);
+  }
+  .gold-corner {
+    position: absolute;
+    left: -170px;
+    top: -215px;
+    width: 920px;
+    height: 390px;
+    border-radius: 0 0 85% 0;
+    border-bottom: 38px solid transparent;
+    background:
+      radial-gradient(circle at 48% 52%, rgba(255,255,255,0.98) 0 46%, rgba(255,255,255,0) 47%),
+      linear-gradient(110deg, #a77920, #f7d875 42%, #b98222 65%, #fff0b6);
+    opacity: 0.96;
+  }
+  .clinic-logo { width: 170px; height: auto; object-fit: contain; }
+  .clinic-logo.small { width: 132px; }
+  .letterhead-header { position: relative; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; }
+  .doctor-block { text-align: right; letter-spacing: 0; }
+  .doctor-name { font-size: 25px; font-family: Georgia, 'Times New Roman', serif; font-style: italic; margin: 16px 0 8px; }
+  .doctor-crm { font-size: 14px; font-weight: 600; letter-spacing: 3px; }
+  .document-title { margin: 116px 0 38px; text-align: center; font-size: 30px; font-weight: 800; letter-spacing: 0; text-transform: uppercase; }
+  .document-body { position: relative; z-index: 1; font-size: 20px; line-height: 1.55; text-align: justify; }
+  .document-body p { margin: 0 0 12px; }
+  .document-body ul, .document-body ol { margin: 8px 0 14px 24px; }
+  .patient-line { margin: 34px 0 28px; display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: end; font-size: 22px; }
+  .line { min-height: 1.25em; border-bottom: 1.6px solid #111; padding: 0 8px 2px; }
+  .signature-area { margin-top: 54px; text-align: center; }
+  .signature-line { width: 420px; margin: 0 auto 5px; border-top: 1.5px solid #111; }
+  .stamp { width: 5cm; height: auto; display: block; margin: 0 auto -10px; opacity: 0.92; mix-blend-mode: multiply; }
+  .footer {
+    position: absolute;
+    left: 78px;
+    right: 44px;
+    bottom: 26px;
+    display: grid;
+    gap: 2px;
+    font-size: 15px;
+    color: #1f2937;
+  }
+  .footer .script { font-family: Georgia, 'Times New Roman', serif; font-size: 26px; font-style: italic; margin-bottom: 2px; }
+  .via-card {
+    position: relative;
+    overflow: hidden;
+    min-height: 746px;
+    padding: 24px 28px 24px 42px;
+    border: 1px solid #e1c574;
+    background: #fff;
+  }
+  .via-card .gold-stripe { width: 18px; }
+  .via-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+  .via-title { font-size: 21px; font-weight: 800; text-transform: uppercase; margin: 0 0 4px; }
+  .via-subtitle { font-size: 13px; color: #4b5563; }
+  .via-field { margin: 8px 0; font-size: 13px; line-height: 1.35; }
+  .via-field strong { display: inline-block; min-width: 72px; }
+  .rx-content { margin-top: 18px; font-size: 14px; line-height: 1.45; }
+  .rx-content p { margin: 0 0 8px; }
+  .rx-content ul, .rx-content ol { margin: 6px 0 10px 18px; }
+  .via-signature { position: absolute; right: 28px; bottom: 28px; width: 210px; text-align: center; font-size: 12px; }
+  .via-signature .stamp { width: 5cm; margin-bottom: -14px; }
+  .buyer-boxes { position: absolute; left: 42px; right: 28px; bottom: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .buyer-box { border: 1.5px solid #111; min-height: 118px; padding: 10px 12px; font-size: 12px; }
+  .buyer-box h4 { margin: -10px -12px 10px; padding: 6px 8px; border-bottom: 1.5px solid #111; text-align: center; font-size: 13px; text-transform: uppercase; }
+  .single-rx { min-height: 1123px; }
+  .single-rx .rx-content { margin-top: 56px; font-size: 18px; line-height: 1.65; }
+  .single-rx .signature-area { position: absolute; right: 58px; bottom: 138px; width: 300px; }
+`;
+
+async function generateDesignedPdf(options: DesignedPdfOptions): Promise<void> {
+  const { filename, html, orientation = "portrait", widthPx = orientation === "landscape" ? 1123 : 794 } = options;
+  const container = document.createElement("div");
+  container.style.position = "absolute";
+  container.style.left = "-9999px";
+  container.style.top = "0";
+  container.style.width = `${widthPx}px`;
+  container.style.background = "#fff";
+  container.innerHTML = `<style>${clinicalPrintCss}</style>${html}`;
+
+  try {
+    document.body.appendChild(container);
+    const canvas = await html2canvas(container, {
+      backgroundColor: "#ffffff",
+      scale: 2,
+      useCORS: true,
+      logging: false,
+    });
+
+    const pdf = new jsPDF({ orientation, unit: "mm", format: "a4" });
+    const imgData = canvas.toDataURL("image/png");
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgHeight = (canvas.height * pageWidth) / canvas.width;
+
+    let heightLeft = imgHeight;
+    let position = 0;
+    pdf.addImage(imgData, "PNG", 0, position, pageWidth, imgHeight);
+    heightLeft -= pageHeight;
+
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, "PNG", 0, position, pageWidth, imgHeight);
+      heightLeft -= pageHeight;
+    }
+
+    pdf.save(sanitizeClinicalFilename(filename));
+  } finally {
+    document.body.removeChild(container);
+  }
+}
+
+function renderFooter() {
+  return `
+    <div class="footer">
+      <div class="script">${DOCTOR_NAME} <span style="font-family: Montserrat, Arial, sans-serif; font-size: 14px; font-style: normal;">- Médico - ${DOCTOR_CRM}</span></div>
+      <div>Tel/WhatsApp: ${CLINIC_PHONE}</div>
+      <div>E-mail: ${CLINIC_EMAIL}</div>
+      <div>Instagram: ${CLINIC_INSTAGRAM}</div>
+      <div>${CLINIC_ADDRESS}</div>
+    </div>
+  `;
+}
+
+function renderDocumentPage(options: ClinicalDocumentPdfOptions) {
+  const patient = normalizeClinicalPatient(options.patient);
+  const date = formatClinicalDate(options.createdAt);
+  const label =
+    options.type === "declaracao" ? "Declaração" :
+    options.type === "exame" || options.type === "solicitacao_exames" ? "Solicitação de exames" :
+    options.type === "laudo" ? "Laudo / relatório" :
+    "Atestado médico";
+
+  const content = compactClinicalContent(options.content)
+    .replace(/\[NOME_PACIENTE\]|\{NOME_PACIENTE\}|\[PACIENTE\]|\{PACIENTE\}/g, escapeHtml(patient.name || ""))
+    .replace(/\[CPF_PACIENTE\]|\{CPF_PACIENTE\}/g, escapeHtml(patient.cpf || ""))
+    .replace(/\[DATA_ATUAL\]|\{DATA_ATUAL\}|\[DATA_CLINICA\]|\{DATA_CLINICA\}/g, date);
+
+  return `
+    <div class="page portrait">
+      <div class="gold-stripe"></div>
+      <div class="gold-corner"></div>
+      <div class="letterhead-header">
+        <img class="clinic-logo" src="${CLINIC_LOGO_PATH}" />
+        <div class="doctor-block">
+          <div class="doctor-name">${DOCTOR_NAME}</div>
+          <div class="doctor-crm">MÉDICO - ${DOCTOR_CRM}</div>
+        </div>
+      </div>
+      <div class="document-title">${escapeHtml(options.title || label)}</div>
+      <div class="document-body">${content}</div>
+      <div class="signature-area">
+        <img class="stamp" src="${CLINIC_STAMP_PATH}" />
+        <div class="signature-line"></div>
+        <div>Assinatura e carimbo do médico</div>
+      </div>
+      ${renderFooter()}
+    </div>
+  `;
+}
+
+function renderSinglePrescriptionPage(patientInput: ClinicalPdfPatient | string, prescription: any) {
+  const patient = normalizeClinicalPatient(patientInput);
+  const content = toPrintableHtml(prescription?.content || "");
+  return `
+    <div class="page portrait single-rx">
+      <div class="gold-stripe"></div>
+      <div class="letterhead-header">
+        <img class="clinic-logo" src="${CLINIC_LOGO_PATH}" />
+        <div class="doctor-block">
+          <div class="doctor-name">${DOCTOR_NAME}</div>
+          <div class="doctor-crm">MÉDICO - ${DOCTOR_CRM}</div>
+        </div>
+      </div>
+      <div class="patient-line">
+        <span>Nome:</span>
+        <span class="line">${escapeHtml(patient.name || "")}</span>
+      </div>
+      <div class="rx-content">${content}</div>
+      ${prescription?.observations ? `<div style="margin-top: 24px; font-size: 13px;"><strong>Observações:</strong> ${escapeHtml(prescription.observations)}</div>` : ""}
+      <div class="signature-area">
+        <img class="stamp" src="${CLINIC_STAMP_PATH}" />
+        <div class="signature-line"></div>
+        <div>Assinatura do médico</div>
+      </div>
+      ${renderFooter()}
+    </div>
+  `;
+}
+
+function renderCompactPrescriptionVia(patientInput: ClinicalPdfPatient | string, prescription: any, viaLabel: string, controleEspecial = false) {
+  const patient = normalizeClinicalPatient(patientInput);
+  const content = toPrintableHtml(prescription?.content || "");
+  return `
+    <div class="via-card">
+      <div class="gold-stripe"></div>
+      <div class="via-head">
+        <div>
+          <h2 class="via-title">${controleEspecial ? "Receituário de controle especial" : "Receituário médico"}</h2>
+          <div class="via-subtitle">${escapeHtml(viaLabel)}</div>
+        </div>
+        <img class="clinic-logo small" src="${CLINIC_LOGO_PATH}" />
+      </div>
+      ${controleEspecial ? `
+        <div style="border: 1.4px solid #111; padding: 8px 10px; margin-bottom: 14px; font-size: 12px; line-height: 1.35;">
+          <strong>IDENTIFICAÇÃO DO EMITENTE</strong><br />
+          Nome: Wésley de Sousa Câmara<br />
+          Médico - ${DOCTOR_CRM}<br />
+          Endereço: ${CLINIC_ADDRESS}<br />
+          Telefone/WhatsApp: ${CLINIC_PHONE}<br />
+          E-mail: contato@drwesleycamara.com.br
+        </div>
+      ` : ""}
+      <div class="via-field"><strong>Paciente:</strong> ${escapeHtml(patient.name || "")}</div>
+      <div class="via-field"><strong>CPF:</strong> ${escapeHtml(patient.cpf || "")}</div>
+      <div class="via-field"><strong>Endereço:</strong> ${escapeHtml(patient.addressLine || "")}</div>
+      <div class="via-field"><strong>Data:</strong> ${formatClinicalDate(prescription?.createdAt)}</div>
+      <div class="rx-content">${content}</div>
+      <div class="via-signature">
+        <img class="stamp" src="${CLINIC_STAMP_PATH}" />
+        <div class="signature-line" style="width: 190px;"></div>
+        <div>Assinatura do médico</div>
+      </div>
+      ${controleEspecial ? `
+        <div class="buyer-boxes">
+          <div class="buyer-box">
+            <h4>Identificação do comprador</h4>
+            Nome:<br /><br />
+            Documento: __________________ Órg. Emissor: _______<br />
+            Endereço:<br />
+            Cidade: __________________ UF: ____<br />
+            Telefone:
+          </div>
+          <div class="buyer-box">
+            <h4>Identificação do fornecedor</h4>
+            <br /><br /><br />
+            __________________________ &nbsp;&nbsp; ____/____/____<br />
+            Assinatura &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Data
+          </div>
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+export async function exportClinicalDocumentPdf(options: ClinicalDocumentPdfOptions): Promise<void> {
+  await generateDesignedPdf({
+    filename: options.filename,
+    orientation: "portrait",
+    widthPx: 794,
+    html: renderDocumentPage(options),
+  });
+}
+
 /**
  * Add watermark to PDF
  */
@@ -448,66 +865,29 @@ export async function exportPrescriptionPdf(
   auditLogs?: AuditLog[]
 ): Promise<void> {
   const type = prescription.type || "simples";
-  const numVias = (type === "antimicrobiano" || type === "controle_especial") ? 2 : 1;
-  const isControleEspecial = type === "controle_especial";
+  const patient = prescription?.patient ?? patientName;
 
-  const renderVia = (viaNum: number) => `
-    <div style="font-family: Montserrat, sans-serif; ${viaNum > 1 ? 'margin-top: 50px; border-top: 2px dashed #d4a853; padding-top: 50px;' : ''}">
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
-        <div>
-          <h2 style="font-size: 18px; font-weight: 600; margin: 0 0 5px 0; color: #d4a853;">
-            ${isControleEspecial ? "RECEITUÁRIO DE CONTROLE ESPECIAL" : "PRESCRIÇÃO MÉDICA"}
-          </h2>
-          <p style="margin: 0; font-size: 12px; color: #666;">${numVias > 1 ? `${viaNum}ª Via` : "Via Única"}</p>
+  if (type === "antimicrobiano" || type === "controle_especial") {
+    const controleEspecial = type === "controle_especial";
+    await generateDesignedPdf({
+      filename: `prescricao_${type}_${patientName.replace(/\s+/g, "_")}_${Date.now()}.pdf`,
+      orientation: "landscape",
+      widthPx: 1123,
+      html: `
+        <div class="page landscape">
+          ${renderCompactPrescriptionVia(patient, prescription, controleEspecial ? "1ª via: Farmácia" : "1ª via: Retida na farmácia", controleEspecial)}
+          ${renderCompactPrescriptionVia(patient, prescription, controleEspecial ? "2ª via: Paciente" : "2ª via: Paciente", controleEspecial)}
         </div>
-      </div>
-
-      <div style="margin-bottom: 20px; padding: 15px; border: 1px solid #d4a853; border-radius: 8px; background-color: ${isDarkMode ? 'rgba(212,168,83,0.05)' : '#fcf9f2'};">
-        <p style="margin: 0; font-size: 14px;"><strong>Paciente:</strong> ${patientName}</p>
-        <p style="margin: 5px 0 0 0; font-size: 14px;"><strong>Data:</strong> ${new Date().toLocaleDateString("pt-BR")}</p>
-      </div>
-
-      <div style="border-top: 1px solid #d4a853; padding-top: 15px;">
-        <h3 style="font-size: 14px; font-weight: 600; margin: 0 0 15px 0; text-transform: uppercase; letter-spacing: 1px;">Uso Interno / Prescrição:</h3>
-        <div style="font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${prescription.content || "Sem conteúdo registrado."}</div>
-      </div>
-
-      ${isControleEspecial ? `
-        <div style="margin-top: 30px; padding: 15px; border: 1px solid #d4a853; border-radius: 8px; font-size: 11px; color: #444;">
-          <p style="margin: 0 0 10px 0; font-weight: bold; text-align: center; text-transform: uppercase;">Identificação do Comprador / Fornecedor (Preenchimento Obrigatório pela Farmácia)</p>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <div style="border-bottom: 1px solid #eee; padding-bottom: 5px;">Nome: ________________________________________________</div>
-            <div style="border-bottom: 1px solid #eee; padding-bottom: 5px;">RG: __________________ Órgão Emissor: _________</div>
-            <div style="border-bottom: 1px solid #eee; padding-bottom: 5px;">Endereço: ____________________________________________</div>
-            <div style="border-bottom: 1px solid #eee; padding-bottom: 5px;">Cidade: _______________________ UF: ____ Tel: ________</div>
-          </div>
-        </div>
-      ` : ""}
-
-      ${prescription.observations ? `
-        <div style="margin-top: 20px; font-size: 12px; color: #666; font-style: italic;">
-          <strong>Observações:</strong> ${prescription.observations}
-        </div>
-      ` : ""}
-    </div>
-  `;
-
-  let fullContent = renderVia(1);
-  if (numVias > 1) {
-    fullContent += renderVia(2);
+      `,
+    });
+    return;
   }
 
-  await generatePremiumPdf({
+  await generateDesignedPdf({
     filename: `prescricao_${type}_${patientName.replace(/\s+/g, "_")}_${Date.now()}.pdf`,
-    title: isControleEspecial ? "Controle Especial" : "Prescrição Médica",
-    subtitle: `Paciente: ${patientName}`,
-    content: fullContent,
-    isDarkMode,
-    logoPath,
-    includeWatermark: true,
-    d4signSignatures,
-    auditLogs,
-    includeAuditReport: true,
+    orientation: "portrait",
+    widthPx: 794,
+    html: renderSinglePrescriptionPage(patient, prescription),
   });
 }
 
