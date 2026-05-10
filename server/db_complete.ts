@@ -1839,21 +1839,44 @@ export async function createExamRequest(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
+  const columns = await getTableColumns("exam_requests");
+  const normalizedContent = String(data.content ?? "").trim();
   const exams = Array.isArray(data.exams)
     ? data.exams
     : Array.isArray(data.content)
       ? data.content
-      : [String(data.content ?? "").trim()].filter(Boolean);
+      : [normalizedContent].filter(Boolean);
+
+  const payload: Record<string, unknown> = {
+    patientId: Number(data.patientId),
+    doctorId: Number(userId),
+  };
+
+  if (columns.has("medicalRecordId")) payload.medicalRecordId = data.medicalRecordId ?? null;
+  if (columns.has("appointmentId")) payload.appointmentId = data.appointmentId ?? null;
+  if (columns.has("date")) payload.date = formatSqlDate();
+  if (columns.has("specialty")) payload.specialty = data.specialty ?? null;
+  if (columns.has("content")) payload.content = normalizedContent || exams.join("\n");
+  if (columns.has("exams")) payload.exams = JSON.stringify(exams);
+  if (columns.has("clinicalIndication")) payload.clinicalIndication = data.clinicalIndication ?? null;
+  if (columns.has("observations")) payload.observations = data.observations ?? null;
+  if (columns.has("pdfUrl")) payload.pdfUrl = data.pdfUrl ?? null;
+  if (columns.has("pdfKey")) payload.pdfKey = data.pdfKey ?? null;
+  if (columns.has("d4signDocumentKey")) payload.d4signDocumentKey = data.d4signDocumentKey ?? null;
+  if (columns.has("d4signStatus")) payload.d4signStatus = data.d4signStatus ?? "pendente";
+  if (columns.has("status")) payload.status = data.status ?? "rascunho";
+
+  const entries = Object.entries(payload).filter(([_, value]) => value !== undefined);
+  const colNames = entries.map(([key]) => sql.raw(`\`${key}\``));
+  const colValues = entries.map(([_, value]) => sql`${value}`);
 
   const result = await db.execute(sql`
-    insert into exam_requests
-      (patientId, doctorId, medicalRecordId, appointmentId, specialty, exams, clinicalIndication, observations, pdfUrl, pdfKey, d4signDocumentKey, d4signStatus)
-    values
-      (${Number(data.patientId)}, ${userId}, ${data.medicalRecordId ?? null}, ${data.appointmentId ?? null}, ${data.specialty ?? null}, ${JSON.stringify(exams)}, ${data.clinicalIndication ?? null}, ${data.observations ?? null}, ${data.pdfUrl ?? null}, ${data.pdfKey ?? null}, ${data.d4signDocumentKey ?? null}, ${data.d4signStatus ?? 'pendente'})
+    insert into exam_requests (${sql.join(colNames, sql`, `)})
+    values (${sql.join(colValues, sql`, `)})
   `);
 
   const insertedId = unwrapInsertId(result);
-  return insertedId ? await getExamRequestById(insertedId) : { id: insertedId, ...data, doctorId: userId, exams };
+  return insertedId ? await getExamRequestById(insertedId) : { id: insertedId, ...data, doctorId: userId, exams, content: normalizedContent };
 }
 
 export async function getExamRequestsByPatient(patientId: number) {
@@ -4293,6 +4316,34 @@ export async function sendForSignature(
   const rows = insertedId
     ? unwrapRows<any>(await db.execute(sql`select * from document_signatures where id = ${insertedId} limit 1`))
     : [];
+
+  const normalizedType = String(documentType || "").toLowerCase();
+  if (["prescription", "prescricao"].includes(normalizedType)) {
+    const columns = await getTableColumns("prescriptions");
+    const updates: any[] = [];
+    if (columns.has("d4signDocumentKey")) updates.push(sql`d4signDocumentKey = ${extra.d4signDocumentKey ?? null}`);
+    if (columns.has("d4signStatus")) updates.push(sql`d4signStatus = ${extra.status || "enviado"}`);
+    if (updates.length > 0) {
+      await db.execute(sql`
+        update prescriptions
+        set ${sql.join(updates, sql`, `)}
+        where id = ${documentId}
+      `);
+    }
+  } else if (["exam_request", "exame"].includes(normalizedType)) {
+    const columns = await getTableColumns("exam_requests");
+    const updates: any[] = [];
+    if (columns.has("d4signDocumentKey")) updates.push(sql`d4signDocumentKey = ${extra.d4signDocumentKey ?? null}`);
+    if (columns.has("d4signStatus")) updates.push(sql`d4signStatus = ${extra.status || "enviado"}`);
+    if (updates.length > 0) {
+      await db.execute(sql`
+        update exam_requests
+        set ${sql.join(updates, sql`, `)}
+        where id = ${documentId}
+      `);
+    }
+  }
+
   return rows[0] ?? { id: insertedId, resourceId: documentId, resourceType: documentType, doctorId: userId };
 }
 

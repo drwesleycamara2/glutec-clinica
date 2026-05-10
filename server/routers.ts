@@ -138,6 +138,45 @@ function stripHtmlForSignature(value?: string | null) {
     .trim();
 }
 
+function formatExamItemsForSignature(value: unknown) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (!item || typeof item !== "object") return "";
+        const record = item as Record<string, unknown>;
+        return [record.name, record.code, record.instructions || record.description]
+          .filter(Boolean)
+          .join(" - ");
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    try {
+      return formatExamItemsForSignature(JSON.parse(trimmed));
+    } catch {
+      return trimmed;
+    }
+  }
+
+  return String(value ?? "").trim();
+}
+
+function safeSignatureFileName(title: string, patientName: string) {
+  const base = `${title}_${patientName}_${Date.now()}`
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 140);
+
+  return `${base || "documento_clinico"}.pdf`;
+}
+
 function escapePdfText(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 }
@@ -1692,7 +1731,14 @@ export const appRouter = router({
           if (!examRequest) throw new TRPCError({ code: "NOT_FOUND", message: "Pedido de exames não encontrado." });
           patientId = Number(examRequest.patientId);
           title = "Pedido de exames";
-          body = `${stripHtmlForSignature(examRequest.content)}\n\nObservações: ${examRequest.observations || "Não informadas."}`;
+          const examText = stripHtmlForSignature(examRequest.content || formatExamItemsForSignature(examRequest.exams));
+          const indication = stripHtmlForSignature(examRequest.clinicalIndication || "");
+          const observations = stripHtmlForSignature(examRequest.observations || "");
+          body = [
+            examText || "Exames não informados.",
+            indication ? `Indicação clínica: ${indication}` : "",
+            `Observações: ${observations || "Não informadas."}`,
+          ].filter(Boolean).join("\n\n");
         } else if (input.documentType === "patient_document") {
           const patientDocument = await dbComplete.getPatientDocumentById(input.documentId);
           if (!patientDocument) throw new TRPCError({ code: "NOT_FOUND", message: "Documento clínico não encontrado." });
@@ -1708,7 +1754,7 @@ export const appRouter = router({
 
         const patient = patientId ? await dbComplete.getPatientById(patientId) : null;
         const patientName = patient?.fullName || patient?.name || `Paciente ${patientId}`;
-        const fileName = `${title.toLowerCase().replace(/\s+/g, "_")}_${patientName.replace(/\s+/g, "_")}_${Date.now()}.pdf`;
+        const fileName = safeSignatureFileName(title, patientName);
         const pdfBuffer = buildSimplePdfBuffer(title, [
           `Paciente: ${patientName}`,
           `Profissional: ${ctx.user.name || ctx.user.email}`,

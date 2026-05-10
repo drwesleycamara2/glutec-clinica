@@ -80,6 +80,96 @@ function addNoIndexHeaders(res: express.Response) {
   res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet, noimageindex");
 }
 
+function sanitizeClinicalHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, "")
+    .replace(/<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi, "")
+    .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, "")
+    .replace(/\s(href|src)\s*=\s*(['"])\s*(javascript|vbscript):.*?\2/gi, "");
+}
+
+function renderClinicalDocumentHtml(document: any) {
+  const type = String(document?.type ?? "").toLowerCase();
+  const title =
+    type.includes("declar") ? "Declaração" :
+    type.includes("exame") || type.includes("solicitacao") ? "Solicitação de exames" :
+    type.includes("laudo") ? "Laudo / relatório" :
+    "Atestado médico";
+  const content = sanitizeClinicalHtml(document?.content || document?.description || "");
+  const patientName = document?.patientName ? `<p class="meta"><strong>Paciente:</strong> ${escapeHtml(document.patientName)}</p>` : "";
+
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(title)} - Clínica Glutée</title>
+  <style>
+    @page { size: A4 portrait; margin: 0; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f4efe4; font-family: Montserrat, Arial, sans-serif; color: #111827; }
+    .sheet { position: relative; width: 210mm; min-height: 297mm; margin: 0 auto; padding: 18mm 16mm 34mm 22mm; overflow: hidden; background: #fff; }
+    .stripe { position: absolute; left: 0; top: 0; width: 9mm; height: 100%; background: linear-gradient(180deg, #8a6526, #f8dfa1 28%, #c79b38 56%, #7a561d); }
+    .curve { position: absolute; left: -45mm; top: -55mm; width: 235mm; height: 98mm; background: radial-gradient(circle at 48% 52%, rgba(255,255,255,0.98) 0 46%, rgba(255,255,255,0) 47%), linear-gradient(110deg, #a77920, #f7d875 42%, #b98222 65%, #fff0b6); opacity: .95; border-radius: 0 0 85% 0; }
+    header { position: relative; z-index: 1; display: flex; justify-content: space-between; gap: 18mm; align-items: flex-start; }
+    .logo { width: 46mm; height: auto; }
+    .doctor { text-align: right; padding-top: 4mm; }
+    .doctor .name { font-family: Georgia, 'Times New Roman', serif; font-size: 20pt; font-style: italic; }
+    .doctor .crm { margin-top: 2mm; font-size: 10pt; font-weight: 700; letter-spacing: 2px; }
+    h1 { position: relative; z-index: 1; margin: 34mm 0 12mm; text-align: center; text-transform: uppercase; font-size: 22pt; }
+    .content { position: relative; z-index: 1; font-size: 14pt; line-height: 1.55; text-align: justify; }
+    .content p { margin: 0 0 4mm; }
+    .content ul, .content ol { margin: 2mm 0 4mm 7mm; }
+    .meta { font-size: 11pt; color: #374151; }
+    .signature { margin: 22mm auto 0; width: 92mm; text-align: center; font-size: 11pt; }
+    .stamp { width: 50mm; max-height: 28mm; object-fit: contain; display: block; margin: 0 auto -4mm; opacity: .92; mix-blend-mode: multiply; }
+    .line { border-top: 1.4px solid #111; margin: 0 0 2mm; }
+    footer { position: absolute; left: 22mm; right: 14mm; bottom: 7mm; font-size: 10pt; line-height: 1.25; color: #1f2937; }
+    footer .script { font-family: Georgia, 'Times New Roman', serif; font-size: 17pt; font-style: italic; }
+    .actions { position: fixed; right: 18px; top: 18px; display: flex; gap: 8px; }
+    .actions button { border: 1px solid #c79b38; border-radius: 8px; background: #fff8e5; padding: 8px 12px; cursor: pointer; font-weight: 700; }
+    @media print {
+      body { background: #fff; }
+      .sheet { margin: 0; box-shadow: none; }
+      .actions { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="actions"><button onclick="window.print()">Imprimir</button></div>
+  <main class="sheet">
+    <div class="stripe"></div>
+    <div class="curve"></div>
+    <header>
+      <img class="logo" src="/logo-glutee.png" alt="Clínica Glutée" />
+      <div class="doctor">
+        <div class="name">Dr. Wésley de Sousa Câmara</div>
+        <div class="crm">MÉDICO - CRM-SP: 174868</div>
+      </div>
+    </header>
+    <h1>${escapeHtml(title)}</h1>
+    <section class="content">
+      ${patientName}
+      ${content}
+    </section>
+    <section class="signature">
+      <img class="stamp" src="/clinical-print/carimbo-wesley.png" alt="Carimbo médico" />
+      <div class="line"></div>
+      <div>Assinatura e carimbo do médico</div>
+    </section>
+    <footer>
+      <div class="script">Dr. Wésley Câmara <span style="font-family: Montserrat, Arial, sans-serif; font-size: 10pt; font-style: normal;">- Médico - CRM-SP: 174868</span></div>
+      <div>Tel/WhatsApp: (19) 99963-3913</div>
+      <div>E-mail: contato@clinicaglutee.com.br</div>
+      <div>Instagram: @clinicaglutee</div>
+      <div>Av. Marechal Castelo Branco, 282 - Morro do Ouro - Mogi Guaçu - SP</div>
+    </footer>
+  </main>
+</body>
+</html>`;
+}
+
 function escapeHtml(value?: string | null) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -743,8 +833,21 @@ async function startServer() {
     const rawFileUrl = String((document as any).rawFileUrl ?? "").trim();
     const fallbackUrl = String((document as any).url ?? (document as any).fileUrl ?? "").trim();
     const fileName = `${String((document as any).name || `documento-${id}`).replace(/[\\/:*?"<>|]+/g, "-").trim() || `documento-${id}`}.pdf`;
+    const mimeType = String((document as any).mimeType ?? "").toLowerCase();
+    const isClinicalTextDocument = Boolean((document as any).content)
+      && (
+        mimeType.includes("text/html")
+        || mimeType.includes("text/plain")
+        || ["atestado", "declaracao", "laudo", "solicitacao_exames"].includes(String((document as any).type ?? "").toLowerCase())
+      );
 
     try {
+      if (isClinicalTextDocument) {
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Content-Disposition", `inline; filename="${fileName.replace(/\.pdf$/i, ".html")}"`);
+        return res.send(renderClinicalDocumentHtml(document));
+      }
+
       if (fileKey) {
         const publicRoot = path.resolve(process.cwd(), "public");
         const localCandidates = [fileKey];

@@ -81,6 +81,7 @@ interface DesignedPdfOptions {
   html: string;
   orientation?: "portrait" | "landscape";
   widthPx?: number;
+  fitToSinglePage?: boolean;
 }
 
 interface ClinicalDocumentPdfOptions {
@@ -209,7 +210,7 @@ const clinicalPrintCss = `
     font-family: Montserrat, Arial, sans-serif;
   }
   .page.portrait { width: 794px; min-height: 1123px; padding: 64px 58px 116px 82px; }
-  .page.landscape { width: 1123px; min-height: 794px; padding: 24px; display: grid; gap: 18px; grid-template-columns: 1fr 1fr; }
+  .page.landscape { width: 1123px; min-height: 794px; padding: 14px 18px; display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
   .gold-stripe {
     position: absolute;
     left: 0;
@@ -260,32 +261,46 @@ const clinicalPrintCss = `
   .via-card {
     position: relative;
     overflow: hidden;
-    min-height: 746px;
-    padding: 24px 28px 24px 42px;
+    min-height: 766px;
+    padding: 18px 22px 18px 38px;
     border: 1px solid #e1c574;
     background: #fff;
   }
   .via-card .gold-stripe { width: 18px; }
-  .via-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
-  .via-title { font-size: 21px; font-weight: 800; text-transform: uppercase; margin: 0 0 4px; }
-  .via-subtitle { font-size: 13px; color: #4b5563; }
-  .via-field { margin: 8px 0; font-size: 13px; line-height: 1.35; }
-  .via-field strong { display: inline-block; min-width: 72px; }
-  .rx-content { margin-top: 18px; font-size: 14px; line-height: 1.45; }
-  .rx-content p { margin: 0 0 8px; }
-  .rx-content ul, .rx-content ol { margin: 6px 0 10px 18px; }
-  .via-signature { position: absolute; right: 28px; bottom: 28px; width: 210px; text-align: center; font-size: 12px; }
-  .via-signature .stamp { width: 5cm; margin-bottom: -14px; }
-  .buyer-boxes { position: absolute; left: 42px; right: 28px; bottom: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .buyer-box { border: 1.5px solid #111; min-height: 118px; padding: 10px 12px; font-size: 12px; }
+  .via-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 10px; }
+  .via-title { font-size: 18px; font-weight: 800; text-transform: uppercase; word-spacing: 4px; letter-spacing: 0; margin: 0 0 4px; }
+  .via-subtitle { font-size: 12px; color: #4b5563; }
+  .via-field { margin: 4px 0; font-size: 11px; line-height: 1.25; }
+  .via-field strong { display: inline-block; min-width: 62px; }
+  .rx-content { margin-top: 10px; font-size: 11.2px; line-height: 1.26; }
+  .rx-content p { margin: 0 0 4px; }
+  .rx-content ul, .rx-content ol { margin: 4px 0 6px 16px; padding-left: 8px; }
+  .via-signature { margin: 7px 0 0 auto; width: 210px; text-align: center; font-size: 10px; }
+  .via-signature .stamp { width: 5cm; margin-bottom: -13px; }
+  .buyer-boxes { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .buyer-box { border: 1.5px solid #111; min-height: 92px; padding: 8px 10px; font-size: 10px; }
   .buyer-box h4 { margin: -10px -12px 10px; padding: 6px 8px; border-bottom: 1.5px solid #111; text-align: center; font-size: 13px; text-transform: uppercase; }
+  .via-footer { margin-top: 6px; border-top: 1px solid #e8dcc4; padding-top: 5px; font-size: 9px; line-height: 1.25; color: #374151; }
   .single-rx { min-height: 1123px; }
   .single-rx .rx-content { margin-top: 56px; font-size: 18px; line-height: 1.65; }
   .single-rx .signature-area { position: absolute; right: 58px; bottom: 138px; width: 300px; }
 `;
 
 async function generateDesignedPdf(options: DesignedPdfOptions): Promise<void> {
-  const { filename, html, orientation = "portrait", widthPx = orientation === "landscape" ? 1123 : 794 } = options;
+  const { filename, html, orientation = "portrait", widthPx = orientation === "landscape" ? 1123 : 794, fitToSinglePage = false } = options;
+  const previewWindow = window.open("", "_blank");
+  if (previewWindow) {
+    previewWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head><title>Gerando documento...</title></head>
+        <body style="font-family: Montserrat, Arial, sans-serif; padding: 32px;">
+          Gerando documento para impressão...
+        </body>
+      </html>
+    `);
+    previewWindow.document.close();
+  }
   const container = document.createElement("div");
   container.style.position = "absolute";
   container.style.left = "-9999px";
@@ -309,6 +324,28 @@ async function generateDesignedPdf(options: DesignedPdfOptions): Promise<void> {
     const pageHeight = pdf.internal.pageSize.getHeight();
     const imgHeight = (canvas.height * pageWidth) / canvas.width;
 
+    const openPdfBlob = (blob: Blob) => {
+      const url = URL.createObjectURL(blob);
+      if (previewWindow && !previewWindow.closed) {
+        previewWindow.location.href = url;
+      } else {
+        const link = document.createElement("a");
+        link.href = url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.click();
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    };
+
+    if (fitToSinglePage && imgHeight > pageHeight) {
+      const scaledWidth = pageWidth * (pageHeight / imgHeight);
+      const x = (pageWidth - scaledWidth) / 2;
+      pdf.addImage(imgData, "PNG", x, 0, scaledWidth, pageHeight);
+      openPdfBlob(pdf.output("blob"));
+      return;
+    }
+
     let heightLeft = imgHeight;
     let position = 0;
     pdf.addImage(imgData, "PNG", 0, position, pageWidth, imgHeight);
@@ -321,7 +358,7 @@ async function generateDesignedPdf(options: DesignedPdfOptions): Promise<void> {
       heightLeft -= pageHeight;
     }
 
-    pdf.save(sanitizeClinicalFilename(filename));
+    openPdfBlob(pdf.output("blob"));
   } finally {
     document.body.removeChild(container);
   }
@@ -409,7 +446,7 @@ function renderCompactPrescriptionVia(patientInput: ClinicalPdfPatient | string,
   const patient = normalizeClinicalPatient(patientInput);
   const content = toPrintableHtml(prescription?.content || "");
   return `
-    <div class="via-card">
+    <div class="via-card ${controleEspecial ? "control-rx" : ""}">
       <div class="gold-stripe"></div>
       <div class="via-head">
         <div>
@@ -456,6 +493,10 @@ function renderCompactPrescriptionVia(patientInput: ClinicalPdfPatient | string,
           </div>
         </div>
       ` : ""}
+      <div class="via-footer">
+        <strong>Clínica Glutée</strong> · Tel/WhatsApp: ${CLINIC_PHONE} · E-mail: ${CLINIC_EMAIL}<br />
+        Instagram: ${CLINIC_INSTAGRAM} · ${CLINIC_ADDRESS}
+      </div>
     </div>
   `;
 }
@@ -465,6 +506,7 @@ export async function exportClinicalDocumentPdf(options: ClinicalDocumentPdfOpti
     filename: options.filename,
     orientation: "portrait",
     widthPx: 794,
+    fitToSinglePage: true,
     html: renderDocumentPage(options),
   });
 }
@@ -873,6 +915,7 @@ export async function exportPrescriptionPdf(
       filename: `prescricao_${type}_${patientName.replace(/\s+/g, "_")}_${Date.now()}.pdf`,
       orientation: "landscape",
       widthPx: 1123,
+      fitToSinglePage: true,
       html: `
         <div class="page landscape">
           ${renderCompactPrescriptionVia(patient, prescription, controleEspecial ? "1ª via: Farmácia" : "1ª via: Retida na farmácia", controleEspecial)}
@@ -887,6 +930,7 @@ export async function exportPrescriptionPdf(
     filename: `prescricao_${type}_${patientName.replace(/\s+/g, "_")}_${Date.now()}.pdf`,
     orientation: "portrait",
     widthPx: 794,
+    fitToSinglePage: true,
     html: renderSinglePrescriptionPage(patient, prescription),
   });
 }
