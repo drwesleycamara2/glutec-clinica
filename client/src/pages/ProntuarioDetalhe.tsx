@@ -37,7 +37,7 @@ import { ExportProntuarioButton } from "@/components/ExportProntuario";
 import { EvolucaoClinicaWorkspace } from "@/components/EvolucaoClinicaWorkspace";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { AudioRecorder } from "@/components/AudioRecorder";
-import { exportClinicalDocumentPdf } from "@/components/PdfExporter";
+import { exportClinicalDocumentPdf, exportPrescriptionPdf } from "@/components/PdfExporter";
 import { ClinicalDocumentSignatureActions } from "@/components/ClinicalDocumentSignatureActions";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { hasModulePermission } from "@/lib/access";
@@ -268,6 +268,7 @@ function normalizeTemplateSearchText(value?: string | null) {
 }
 
 type ClinicalDocumentType = "atestado" | "declaracao" | "laudo" | "solicitacao_exames";
+type PrescriptionType = "simples" | "antimicrobiano" | "controle_especial";
 
 const CLINICAL_DOCUMENT_METADATA_PREFIX = "__GLUTEC_CLINICAL_DOC__:";
 const CLINICAL_DOCUMENT_TYPE_LABELS: Record<ClinicalDocumentType, string> = {
@@ -276,6 +277,24 @@ const CLINICAL_DOCUMENT_TYPE_LABELS: Record<ClinicalDocumentType, string> = {
   laudo: "Laudo / relatório",
   solicitacao_exames: "Solicitação de exames",
 };
+const PRESCRIPTION_TYPE_LABELS: Record<PrescriptionType, string> = {
+  simples: "Receituário simples (1 via)",
+  antimicrobiano: "Antimicrobiano (2 vias)",
+  controle_especial: "Controle especial C1 (2 vias)",
+};
+
+function normalizePrescriptionType(value?: string | null): PrescriptionType {
+  const normalized = normalizeTemplateSearchText(value);
+  if (normalized.includes("controle") || normalized.includes("c1")) return "controle_especial";
+  if (normalized.includes("antimicro") || normalized.includes("antibi")) return "antimicrobiano";
+  return "simples";
+}
+
+function appendRichTextContent(current: string, next?: string | null) {
+  const normalizedNext = String(next ?? "").trim();
+  if (!normalizedNext) return current;
+  return current.trim() ? `${current}<p><br></p>${normalizedNext}` : normalizedNext;
+}
 
 function escapeHtml(value: string) {
   return value
@@ -1133,18 +1152,17 @@ function AtestadosTab({ patientId, patientName, patientPhone, patient }: { patie
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
   const { user } = useAuth();
-  const [showEditor, setShowEditor] = useState(false);
+  const [showEditor, setShowEditor] = useState(true);
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   const [documentType, setDocumentType] = useState<ClinicalDocumentType>("atestado");
-  const [documentTitle, setDocumentTitle] = useState("");
-  const [documentContent, setDocumentContent] = useState("");
+  const [documentTitle, setDocumentTitle] = useState(`Atestado - ${patientName}`);
+  const [documentContent, setDocumentContent] = useState(() => buildDefaultClinicalDocumentHtml("atestado", patient ?? patientName));
   const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null);
   const [loadingDocumentId, setLoadingDocumentId] = useState<number | null>(null);
+  const [templateSearch, setTemplateSearch] = useState("");
 
   const { data: documents, isLoading } = trpc.medicalRecords.getDocuments.useQuery({ patientId });
-  const { data: templates, isLoading: templatesLoading } = trpc.templates.list.useQuery(undefined, {
-    enabled: showTemplateDialog || showEditor,
-  });
+  const { data: templates, isLoading: templatesLoading } = trpc.templates.list.useQuery();
 
   const uploadTextDocumentMutation = trpc.medicalRecords.uploadDocument.useMutation({
     onSuccess: async (savedDocument: any) => {
@@ -1168,8 +1186,23 @@ function AtestadosTab({ patientId, patientName, patientPhone, patient }: { patie
   );
 
   const availableTemplates = useMemo(
-    () => ((templates as any[]) || []).filter(isClinicalDocumentTemplate),
+    () => ((templates as any[]) || [])
+      .filter(isClinicalDocumentTemplate)
+      .filter((template) => ["atestado", "declaracao"].includes(inferClinicalDocumentType(template))),
     [templates],
+  );
+
+  const filteredTemplates = useMemo(
+    () => {
+      const normalized = normalizeTemplateSearchText(templateSearch);
+      return availableTemplates.filter((template: any) => {
+        if (!normalized) return true;
+        return [template.name, template.groupLabel, template.specialty, template.description, template.content]
+          .map((value) => normalizeTemplateSearchText(value))
+          .some((value) => value.includes(normalized));
+      });
+    },
+    [availableTemplates, templateSearch],
   );
 
   const openBlankEditor = (nextType: ClinicalDocumentType = "atestado") => {
@@ -1195,6 +1228,15 @@ function AtestadosTab({ patientId, patientName, patientPhone, patient }: { patie
     setDocumentContent(templateToClinicalDocumentHtml(template, patient ?? patientName));
     setActiveDocumentId(null);
     setShowTemplateDialog(false);
+    setShowEditor(true);
+  };
+
+  const appendTemplate = (template: any) => {
+    const nextType = inferClinicalDocumentType(template);
+    setDocumentType(nextType);
+    const nextContent = templateToClinicalDocumentHtml(template, patient ?? patientName);
+    setDocumentContent((current) => appendRichTextContent(current, nextContent));
+    setActiveDocumentId(null);
     setShowEditor(true);
   };
 
@@ -1315,10 +1357,6 @@ function AtestadosTab({ patientId, patientName, patientPhone, patient }: { patie
               <Pencil className="mr-1.5 h-3.5 w-3.5" />
               Criar novo
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setShowTemplateDialog(true)}>
-              <ClipboardPlus className="mr-1.5 h-3.5 w-3.5" />
-              Usar modelo
-            </Button>
             <Button size="sm" variant="outline" onClick={openTemplateManager}>
               <Copy className="mr-1.5 h-3.5 w-3.5" />
               Criar modelo
@@ -1368,6 +1406,7 @@ function AtestadosTab({ patientId, patientName, patientPhone, patient }: { patie
       </Dialog>
 
       {showEditor ? (
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <Card className="border-[#C9A55B]/20 bg-[#C9A55B]/5">
           <CardHeader>
             <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-base">
@@ -1440,6 +1479,54 @@ function AtestadosTab({ patientId, patientName, patientPhone, patient }: { patie
             ) : null}
           </CardContent>
         </Card>
+        <Card className="border-border/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Modelos de atestados e declarações</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} placeholder="Pesquise aqui" className="pl-9" />
+            </div>
+            <div className="max-h-[34rem] divide-y overflow-y-auto rounded-xl border border-border/50">
+              {templatesLoading ? (
+                <div className="flex items-center justify-center p-6"><Loader2 className="h-4 w-4 animate-spin text-[#C9A55B]" /></div>
+              ) : filteredTemplates.length === 0 ? (
+                <p className="p-4 text-sm text-muted-foreground">Nenhum modelo de atestado ou declaração salvo.</p>
+              ) : filteredTemplates.map((template: any) => {
+                const templateType = inferClinicalDocumentType(template);
+                return (
+                  <div key={template.id} className="flex items-center gap-2 px-3 py-3 text-sm">
+                    <button
+                      type="button"
+                      className="rounded-md p-1.5 text-[#0F8D7A] hover:bg-[#0F8D7A]/10"
+                      onClick={() => applyTemplate(template)}
+                      title="Substituir o texto por este modelo"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md p-1.5 text-[#0F8D7A] hover:bg-[#0F8D7A]/10"
+                      onClick={() => appendTemplate(template)}
+                      title="Acrescentar este modelo ao texto atual"
+                    >
+                      <ClipboardPlus className="h-4 w-4" />
+                    </button>
+                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => applyTemplate(template)}>
+                      <span className="block truncate font-medium">{repairMojibake(template.name || "Modelo sem título")}</span>
+                      <span className="text-[11px] text-muted-foreground">{CLINICAL_DOCUMENT_TYPE_LABELS[templateType]}</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              A seta substitui o texto atual; o ícone de modelo acrescenta ao texto já digitado.
+            </p>
+          </CardContent>
+        </Card>
+        </div>
       ) : null}
 
       <DocumentUploadPanel
@@ -1586,6 +1673,384 @@ function PrescricoesTab({ patientId, patientName: _pn }: { patientId: number; pa
 /* ─────────────────────────────────────────────────
    OrcamentoTab — links to budget page with patient context
    ───────────────────────────────────────────────── */
+function PrescricoesWorkspaceTab({ patientId, patientName, patient }: { patientId: number; patientName: string; patient?: any }) {
+  const utils = trpc.useUtils();
+  const { user } = useAuth();
+  const { data: prescriptions, isLoading } = trpc.prescriptions.getByPatient.useQuery({ patientId });
+  const { data: templates, isLoading: templatesLoading } = trpc.prescriptions.listTemplates.useQuery();
+  const [content, setContent] = useState("");
+  const [observations, setObservations] = useState("");
+  const [type, setType] = useState<PrescriptionType>("simples");
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+  const [activePrescriptionId, setActivePrescriptionId] = useState<number | null>(null);
+
+  const activePrescription = useMemo(
+    () => activePrescriptionId ? (prescriptions ?? []).find((item: any) => Number(item.id) === activePrescriptionId) : null,
+    [activePrescriptionId, prescriptions],
+  );
+
+  const filteredTemplates = useMemo(() => {
+    const normalized = normalizeTemplateSearchText(templateSearch);
+    return ((templates as any[]) ?? []).filter((template: any) => {
+      if (!normalized) return true;
+      return [template.name, template.type, template.description, template.content]
+        .map((value) => normalizeTemplateSearchText(value))
+        .some((value) => value.includes(normalized));
+    });
+  }, [templates, templateSearch]);
+
+  const createMutation = trpc.prescriptions.create.useMutation({
+    onSuccess: async (saved: any) => {
+      if (saved?.id) setActivePrescriptionId(Number(saved.id));
+      toast.success("Prescrição salva no prontuário.");
+      await utils.prescriptions.getByPatient.invalidate({ patientId });
+    },
+    onError: (error: any) => toast.error(error?.message || "Não foi possível salvar a prescrição."),
+  });
+
+  const saveTemplateMutation = trpc.prescriptions.createTemplate.useMutation({
+    onSuccess: async () => {
+      toast.success("Modelo de prescrição salvo.");
+      await utils.prescriptions.listTemplates.invalidate();
+    },
+    onError: (error: any) => toast.error(error?.message || "Não foi possível salvar o modelo."),
+  });
+
+  const structureDictationMutation = trpc.clinicalDocuments.structureDictation.useMutation({
+    onSuccess: (draft: any) => {
+      setContent((current) => appendRichTextContent(current, draft?.content || draft?.refinedTranscript || ""));
+      if (draft?.suggestedPrescriptionType) {
+        setType(normalizePrescriptionType(draft.suggestedPrescriptionType));
+      }
+      if (draft?.notes) toast.info(draft.notes);
+      toast.success("Ditado convertido em prescrição médica.");
+    },
+    onError: (error: any) => toast.error(error?.message || "Não foi possível estruturar o ditado com IA."),
+  });
+
+  function resetComposer() {
+    setContent("");
+    setObservations("");
+    setType("simples");
+    setActivePrescriptionId(null);
+    setShowVoiceRecorder(false);
+  }
+
+  function applyTemplate(template: any, mode: "replace" | "append" = "replace") {
+    const templateContent = String(template?.content ?? "").trim();
+    if (!templateContent) {
+      toast.error("Este modelo não possui conteúdo.");
+      return;
+    }
+    setType(normalizePrescriptionType(template?.type ?? template?.description));
+    setContent((current) => mode === "append" ? appendRichTextContent(current, templateContent) : templateContent);
+    setActivePrescriptionId(null);
+  }
+
+  function saveCurrentAsTemplate() {
+    if (!formatImportedText(content)) {
+      toast.error("Digite o conteúdo antes de salvar como modelo.");
+      return;
+    }
+    const name = window.prompt("Nome do modelo de prescrição:");
+    if (!name?.trim()) return;
+    saveTemplateMutation.mutate({ name: name.trim(), content, type });
+  }
+
+  async function savePrescription(shouldPrint = false) {
+    if (!formatImportedText(content)) {
+      toast.error("Digite ou carregue o conteúdo da prescrição.");
+      return;
+    }
+    try {
+      const saved = await createMutation.mutateAsync({
+        patientId,
+        type,
+        content,
+        observations: observations.trim() || undefined,
+      });
+      if (saved?.id) setActivePrescriptionId(Number(saved.id));
+      if (shouldPrint) {
+        await exportPrescriptionPdf(patientName, { type, content, observations, patient });
+      }
+    } catch {
+      // onError já mostra a mensagem ao usuário.
+    }
+  }
+
+  async function printCurrentPrescription() {
+    if (!formatImportedText(content)) {
+      toast.error("Digite ou carregue o conteúdo antes de imprimir.");
+      return;
+    }
+    await exportPrescriptionPdf(patientName, { type, content, observations, patient });
+  }
+
+  function openSavedPrescription(rx: any) {
+    setType(normalizePrescriptionType(rx?.type));
+    setContent(String(rx?.content ?? ""));
+    setObservations(String(rx?.observations ?? ""));
+    setActivePrescriptionId(Number(rx.id));
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-[#C9A55B]" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <TabHeader
+        title="Prescrições"
+        description="Crie prescrições dentro deste prontuário, com paciente fixado, modelos ao lado e ditado por IA para estruturar o receituário."
+        actions={
+          <Button size="sm" variant="outline" onClick={resetComposer}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            Nova prescrição
+          </Button>
+        }
+      />
+
+      {showVoiceRecorder ? (
+        <div className="rounded-2xl border border-[#C9A55B]/25 bg-[#C9A55B]/5 p-3">
+          <AudioRecorder
+            showTranscriptionEditor={false}
+            onTranscriptionComplete={(transcript) =>
+              structureDictationMutation.mutate({ transcript, documentType: "prescricao" })
+            }
+          />
+          {structureDictationMutation.isPending ? (
+            <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Convertendo o ditado em prescrição médica com IA...
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <Card className="border-[#C9A55B]/20 bg-[#C9A55B]/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-base">
+              <span className="flex items-center gap-2"><Stethoscope className="h-4 w-4 text-[#C9A55B]" />Nova prescrição médica</span>
+              {activePrescriptionId ? <Badge variant="outline">Prescrição salva #{activePrescriptionId}</Badge> : <Badge variant="secondary">Rascunho</Badge>}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_240px]">
+              <div className="space-y-2">
+                <Label>Paciente</Label>
+                <Input value={patientName} readOnly className="bg-muted/40" />
+              </div>
+              <div className="space-y-2">
+                <Label>Tipo de receituário</Label>
+                <Select value={type} onValueChange={(value) => setType(value as PrescriptionType)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="simples">{PRESCRIPTION_TYPE_LABELS.simples}</SelectItem>
+                    <SelectItem value="antimicrobiano">{PRESCRIPTION_TYPE_LABELS.antimicrobiano}</SelectItem>
+                    <SelectItem value="controle_especial">{PRESCRIPTION_TYPE_LABELS.controle_especial}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label>Conteúdo da prescrição</Label>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => setShowVoiceRecorder((current) => !current)}>
+                    <ClipboardPlus className="mr-1.5 h-3.5 w-3.5" />
+                    Gravar voz
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={saveCurrentAsTemplate} disabled={saveTemplateMutation.isPending}>
+                    <Save className="mr-1.5 h-3.5 w-3.5" />
+                    Salvar modelo
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => void printCurrentPrescription()}>
+                    <Printer className="mr-1.5 h-3.5 w-3.5" />
+                    Imprimir
+                  </Button>
+                </div>
+              </div>
+              <RichTextEditor
+                value={content}
+                onChange={(value) => {
+                  setContent(value);
+                  setActivePrescriptionId(null);
+                }}
+                placeholder="Digite, cole ou use o áudio para montar a prescrição..."
+                minHeight="420px"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Observações internas</Label>
+              <Textarea
+                value={observations}
+                onChange={(event) => setObservations(event.target.value)}
+                placeholder="Observações adicionais..."
+                className="resize-none"
+                rows={3}
+              />
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" onClick={resetComposer}>Limpar</Button>
+              <Button type="button" variant="outline" onClick={() => void savePrescription(true)} disabled={createMutation.isPending}>
+                {createMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
+                Salvar e imprimir
+              </Button>
+              <Button type="button" className="btn-glossy-gold" onClick={() => void savePrescription(false)} disabled={createMutation.isPending}>
+                {createMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Salvar prescrição
+              </Button>
+            </div>
+
+            {activePrescriptionId ? (
+              <ClinicalDocumentSignatureActions
+                documentType="prescricao"
+                documentId={activePrescriptionId}
+                documentTitle={`Prescrição ${PRESCRIPTION_TYPE_LABELS[type]}`}
+                documentContent={content}
+                patientName={patientName}
+                patientPhone={patient?.phone ?? ""}
+                signerName={(user as any)?.name ?? ""}
+                signerCpf={(user as any)?.cloudSignatureCpf ?? ""}
+                isSigned={Boolean(activePrescription?.signedAt || activePrescription?.signatureValidationCode)}
+                signedAt={activePrescription?.signedAt}
+                signatureProvider={activePrescription?.signatureProvider}
+                signatureValidationCode={activePrescription?.signatureValidationCode}
+                onPrint={() => printCurrentPrescription()}
+                onSigned={async () => {
+                  await utils.prescriptions.getByPatient.invalidate({ patientId });
+                }}
+              />
+            ) : (
+              <p className="rounded-lg border border-border/50 bg-background/70 px-4 py-3 text-xs text-muted-foreground">
+                Salve a prescrição para habilitar assinatura digital e envio.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Modelos de prescrições</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} placeholder="Pesquise aqui" className="pl-9" />
+            </div>
+            <div className="max-h-[38rem] divide-y overflow-y-auto rounded-xl border border-border/50">
+              {templatesLoading ? (
+                <div className="flex items-center justify-center p-6"><Loader2 className="h-4 w-4 animate-spin text-[#C9A55B]" /></div>
+              ) : filteredTemplates.length === 0 ? (
+                <p className="p-4 text-sm text-muted-foreground">Nenhum modelo de prescrição salvo.</p>
+              ) : filteredTemplates.map((template: any) => (
+                <div key={template.id} className="flex items-center gap-2 px-3 py-3 text-sm">
+                  <button
+                    type="button"
+                    className="rounded-md p-1.5 text-[#0F8D7A] hover:bg-[#0F8D7A]/10"
+                    onClick={() => applyTemplate(template, "replace")}
+                    title="Substituir a prescrição por este modelo"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md p-1.5 text-[#0F8D7A] hover:bg-[#0F8D7A]/10"
+                    onClick={() => applyTemplate(template, "append")}
+                    title="Acrescentar este modelo à prescrição atual"
+                  >
+                    <ClipboardPlus className="h-4 w-4" />
+                  </button>
+                  <button type="button" className="min-w-0 flex-1 text-left" onClick={() => applyTemplate(template, "replace")}>
+                    <span className="block truncate font-medium">{repairMojibake(template.name || "Modelo sem título")}</span>
+                    <span className="text-[11px] text-muted-foreground">{PRESCRIPTION_TYPE_LABELS[normalizePrescriptionType(template.type)]}</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              A seta substitui o texto atual; o ícone de modelo acrescenta ao texto já digitado.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="border-border/50">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Prescrições salvas</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!prescriptions || prescriptions.length === 0 ? (
+            <div className="py-10 text-center">
+              <Stethoscope className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">Nenhuma prescrição registrada para este paciente.</p>
+            </div>
+          ) : prescriptions.map((rx: any) => (
+            <Card key={rx.id} className="border-border/50">
+              <CardContent className="space-y-3 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Stethoscope className="h-4 w-4 text-[#C9A55B]" />
+                    <span className="text-sm font-semibold">Prescrição #{rx.id}</span>
+                    <Badge variant="outline" className="text-[10px]">{PRESCRIPTION_TYPE_LABELS[normalizePrescriptionType(rx.type)]}</Badge>
+                    {rx.signatureValidationCode ? <Badge variant="secondary" className="text-[10px]">Assinada</Badge> : null}
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {rx.createdAt ? new Date(rx.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "-"}
+                  </span>
+                </div>
+                <div
+                  className="rounded-lg border border-border/50 bg-muted/30 p-3 text-sm leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(rx.content) || "<p>Sem conteúdo registrado.</p>" }}
+                />
+                {rx.observations ? <p className="text-xs italic text-muted-foreground">{rx.observations}</p> : null}
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => openSavedPrescription(rx)}>
+                    <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                    Abrir no editor
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => exportPrescriptionPdf(patientName, { ...rx, patient })}>
+                    <Printer className="mr-1.5 h-3.5 w-3.5" />
+                    Imprimir
+                  </Button>
+                  <ClinicalDocumentSignatureActions
+                    documentType="prescricao"
+                    documentId={Number(rx.id)}
+                    documentTitle={`Prescrição #${rx.id}`}
+                    documentContent={String(rx.content || "")}
+                    patientName={patientName}
+                    patientPhone={patient?.phone ?? ""}
+                    signerName={(user as any)?.name ?? ""}
+                    signerCpf={(user as any)?.cloudSignatureCpf ?? ""}
+                    isSigned={Boolean(rx.signedAt || rx.signatureValidationCode)}
+                    signedAt={rx.signedAt}
+                    signatureProvider={rx.signatureProvider}
+                    signatureValidationCode={rx.signatureValidationCode}
+                    onPrint={() => exportPrescriptionPdf(patientName, { ...rx, patient })}
+                    onSigned={async () => {
+                      await utils.prescriptions.getByPatient.invalidate({ patientId });
+                    }}
+                    className="max-w-full"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function OrcamentoTab({ patientId, patientName: _pn }: { patientId: number; patientName: string }) {
   const [, navigate] = useLocation();
   const { data: budgets, isLoading } = trpc.budgets.getByPatient.useQuery({ patientId });
@@ -2806,7 +3271,7 @@ export default function ProntuarioDetalhe() {
             <TabsContent value="secretaria" className="mt-4"><SecretariaTab patientId={patientId} /></TabsContent>
             <TabsContent value="atestados" className="mt-4"><AtestadosTab patientId={patientId} patientName={patient.fullName} patientPhone={patient.phone} patient={patient} /></TabsContent>
             <TabsContent value="contratos" className="mt-4"><ContratosTab patientId={patientId} /></TabsContent>
-            <TabsContent value="prescricoes" className="mt-4"><PrescricoesTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
+            <TabsContent value="prescricoes" className="mt-4"><PrescricoesWorkspaceTab patientId={patientId} patientName={patient.fullName} patient={patient} /></TabsContent>
             <TabsContent value="orcamentos" className="mt-4"><OrcamentoTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
             <TabsContent value="imagens" className="mt-4"><ImagensTab patientId={patientId} /></TabsContent>
             <TabsContent value="galeria" className="mt-4"><GaleriaTab patientId={patientId} /></TabsContent>
