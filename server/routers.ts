@@ -101,6 +101,13 @@ function assertCanManageAppointmentSchedule(user: any) {
 }
 
 
+function assertIsInventoryMasterAdmin(user: any) {
+  const email = normalizeEmailForStorage(user?.email);
+  if (user?.role !== "admin" || email !== SUPER_ADMIN_EMAIL) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Apenas o ADM master pode alterar cadastros estruturais do estoque." });
+  }
+}
+
 function makeEmployeeRecordActor(ctx: any) {
   return {
     id: ctx.user?.id,
@@ -1361,6 +1368,8 @@ export const appRouter = router({
         size: z.string().optional(),
         presentation: z.string().optional(),
         category: z.string().optional(),
+        subcategory: z.string().optional(),
+        itemType: z.string().optional(),
         description: z.string().optional(),
         unit: z.string().default("unidade"),
         unitPurchase: z.string().optional(),
@@ -1384,6 +1393,14 @@ export const appRouter = router({
         controlledMedication: z.boolean().optional(),
         highCost: z.boolean().optional(),
         criticalCare: z.boolean().optional(),
+        emergencyCartItem: z.boolean().optional(),
+        emergencyCartMinimumStock: z.number().optional().nullable(),
+        gasType: z.string().optional(),
+        cylinderIdentifier: z.string().optional(),
+        patrimonyTag: z.string().optional(),
+        serialNumber: z.string().optional(),
+        maintenanceDueDate: z.string().optional().nullable(),
+        calibrationDueDate: z.string().optional().nullable(),
         anvisaRegistry: z.string().optional(),
         notes: z.string().optional(),
       }))
@@ -1438,8 +1455,38 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => dbComplete.createInventoryLot(input, ctx.user.id)),
 
     createCategory: estoqueProcedure
-      .input(z.object({ name: z.string().min(2), description: z.string().optional() }))
-      .mutation(async ({ ctx, input }) => dbComplete.createInventoryCategory(input, ctx.user.id)),
+      .input(z.object({
+        name: z.string().min(2),
+        description: z.string().optional(),
+        parentCategoryId: z.number().optional().nullable(),
+        sortOrder: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        assertIsInventoryMasterAdmin(ctx.user);
+        return dbComplete.createInventoryCategory(input, ctx.user.id);
+      }),
+
+    updateCategory: estoqueProcedure
+      .input(z.object({
+        id: z.number(),
+        data: z.object({
+          name: z.string().min(2),
+          description: z.string().optional().nullable(),
+          parentCategoryId: z.number().optional().nullable(),
+          sortOrder: z.number().optional(),
+        }),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        assertIsInventoryMasterAdmin(ctx.user);
+        return dbComplete.updateInventoryCategory(input.id, input.data, ctx.user.id);
+      }),
+
+    deleteCategory: estoqueProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        assertIsInventoryMasterAdmin(ctx.user);
+        return dbComplete.deleteInventoryCategory(input.id, ctx.user.id);
+      }),
 
     createLocation: estoqueProcedure
       .input(z.object({
@@ -1453,7 +1500,37 @@ export const appRouter = router({
         responsibleUserId: z.number().optional().nullable(),
         parentLocationId: z.number().optional().nullable(),
       }))
-      .mutation(async ({ ctx, input }) => dbComplete.createInventoryLocation(input, ctx.user.id)),
+      .mutation(async ({ ctx, input }) => {
+        assertIsInventoryMasterAdmin(ctx.user);
+        return dbComplete.createInventoryLocation(input, ctx.user.id);
+      }),
+
+    updateLocation: estoqueProcedure
+      .input(z.object({
+        id: z.number(),
+        data: z.object({
+          name: z.string().min(2),
+          type: z.string().optional(),
+          description: z.string().optional().nullable(),
+          allowsStock: z.boolean().optional(),
+          requiresTemperatureControl: z.boolean().optional(),
+          temperatureMin: z.number().optional().nullable(),
+          temperatureMax: z.number().optional().nullable(),
+          responsibleUserId: z.number().optional().nullable(),
+          parentLocationId: z.number().optional().nullable(),
+        }),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        assertIsInventoryMasterAdmin(ctx.user);
+        return dbComplete.updateInventoryLocation(input.id, input.data, ctx.user.id);
+      }),
+
+    deleteLocation: estoqueProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        assertIsInventoryMasterAdmin(ctx.user);
+        return dbComplete.deleteInventoryLocation(input.id, ctx.user.id);
+      }),
 
     createSupplier: estoqueProcedure
       .input(z.object({
@@ -1465,7 +1542,35 @@ export const appRouter = router({
         address: z.string().optional(),
         notes: z.string().optional(),
       }))
-      .mutation(async ({ ctx, input }) => dbComplete.createInventorySupplier(input, ctx.user.id)),
+      .mutation(async ({ ctx, input }) => {
+        assertIsInventoryMasterAdmin(ctx.user);
+        return dbComplete.createInventorySupplier(input, ctx.user.id);
+      }),
+
+    updateSupplier: estoqueProcedure
+      .input(z.object({
+        id: z.number(),
+        data: z.object({
+          name: z.string().min(2),
+          documentNumber: z.string().optional().nullable(),
+          contactName: z.string().optional().nullable(),
+          phone: z.string().optional().nullable(),
+          email: z.string().optional().nullable(),
+          address: z.string().optional().nullable(),
+          notes: z.string().optional().nullable(),
+        }),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        assertIsInventoryMasterAdmin(ctx.user);
+        return dbComplete.updateInventorySupplier(input.id, input.data, ctx.user.id);
+      }),
+
+    deleteSupplier: estoqueProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        assertIsInventoryMasterAdmin(ctx.user);
+        return dbComplete.deleteInventorySupplier(input.id, ctx.user.id);
+      }),
 
     reverseMovement: estoqueProcedure
       .input(z.object({ movementId: z.number(), reason: z.string().min(8) }))

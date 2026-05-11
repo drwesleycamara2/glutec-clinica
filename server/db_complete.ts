@@ -240,6 +240,19 @@ async function ensureInventorySchema(db: any) {
       await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS inventory_purchase_orders (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, supplierId INT NULL, status ENUM('rascunho','enviado','recebido','cancelado') NOT NULL DEFAULT 'rascunho', expectedAt DATE NULL, notes TEXT NULL, createdBy INT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, KEY idx_inventory_po_supplier (supplierId), KEY idx_inventory_po_status (status)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
       await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS inventory_purchase_order_items (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, purchaseOrderId INT NOT NULL, productId INT NOT NULL, quantity DECIMAL(12,3) NOT NULL, unitCostInCents INT NULL, notes TEXT NULL, KEY idx_inventory_po_items_order (purchaseOrderId), KEY idx_inventory_po_items_product (productId)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
 
+      const categoryColumns = await getTableColumns("inventory_categories");
+      const categoryAlterations: string[] = [];
+      const addCategoryColumn = (name: string, ddl: string) => {
+        if (!categoryColumns.has(name)) categoryAlterations.push(`ADD COLUMN ${ddl}`);
+      };
+      addCategoryColumn("parentCategoryId", "`parentCategoryId` INT NULL");
+      addCategoryColumn("sortOrder", "`sortOrder` INT NOT NULL DEFAULT 0");
+      addCategoryColumn("updatedBy", "`updatedBy` INT NULL");
+      if (categoryAlterations.length > 0) {
+        await db.execute(sql.raw(`ALTER TABLE inventory_categories ${categoryAlterations.join(", ")}`));
+        clearTableColumnCache("inventory_categories");
+      }
+
       const productColumns = await getTableColumns("inventory_products");
       const productAlterations: string[] = [];
       const addProductColumn = (name: string, ddl: string) => {
@@ -251,6 +264,8 @@ async function ensureInventorySchema(db: any) {
       addProductColumn("size", "`size` VARCHAR(96) NULL");
       addProductColumn("barcode", "`barcode` VARCHAR(96) NULL");
       addProductColumn("presentation", "`presentation` VARCHAR(160) NULL");
+      addProductColumn("subcategory", "`subcategory` VARCHAR(128) NULL");
+      addProductColumn("itemType", "`itemType` VARCHAR(64) NOT NULL DEFAULT 'consumivel'");
       addProductColumn("unitPurchase", "`unitPurchase` VARCHAR(48) NULL");
       addProductColumn("conversionFactor", "`conversionFactor` DECIMAL(12,3) NOT NULL DEFAULT 1");
       addProductColumn("supplierId", "`supplierId` INT NULL");
@@ -263,6 +278,14 @@ async function ensureInventorySchema(db: any) {
       addProductColumn("controlledMedication", "`controlledMedication` TINYINT(1) NOT NULL DEFAULT 0");
       addProductColumn("highCost", "`highCost` TINYINT(1) NOT NULL DEFAULT 0");
       addProductColumn("criticalCare", "`criticalCare` TINYINT(1) NOT NULL DEFAULT 0");
+      addProductColumn("emergencyCartItem", "`emergencyCartItem` TINYINT(1) NOT NULL DEFAULT 0");
+      addProductColumn("emergencyCartMinimumStock", "`emergencyCartMinimumStock` DECIMAL(12,3) NULL");
+      addProductColumn("gasType", "`gasType` VARCHAR(64) NULL");
+      addProductColumn("cylinderIdentifier", "`cylinderIdentifier` VARCHAR(128) NULL");
+      addProductColumn("patrimonyTag", "`patrimonyTag` VARCHAR(128) NULL");
+      addProductColumn("serialNumber", "`serialNumber` VARCHAR(128) NULL");
+      addProductColumn("maintenanceDueDate", "`maintenanceDueDate` DATE NULL");
+      addProductColumn("calibrationDueDate", "`calibrationDueDate` DATE NULL");
       addProductColumn("anvisaRegistry", "`anvisaRegistry` VARCHAR(96) NULL");
       addProductColumn("reorderPoint", "`reorderPoint` INT NULL");
       addProductColumn("maximumStock", "`maximumStock` INT NULL");
@@ -298,14 +321,47 @@ async function ensureInventorySchema(db: any) {
         clearTableColumnCache("inventory_movements");
       }
 
+      const ensureCategorySeed = async (name: string, parentCategoryId: number | null = null, description: string | null = null) => {
+        await db.execute(sql`
+          insert into inventory_categories (name, parentCategoryId, description, active)
+          values (${name}, ${parentCategoryId}, ${description}, 1)
+          on duplicate key update
+            parentCategoryId = values(parentCategoryId),
+            description = coalesce(values(description), description),
+            active = 1,
+            updatedAt = now()
+        `);
+        const rows = unwrapRows<any>(await db.execute(sql`select id from inventory_categories where name = ${name} limit 1`));
+        return Number(rows[0]?.id || 0);
+      };
+
+      const curativosId = await ensureCategorySeed("Curativos");
+      for (const name of ["Fios/sutura", "Tape", "Micropore", "Algodão", "Gaze", "Compressa"]) {
+        await ensureCategorySeed(name, curativosId);
+      }
+
+      const emergencyId = await ensureCategorySeed("Carrinho de emergência", null, "Itens que precisam de contagem e reposição rigorosa.");
+      for (const name of ["Medicamentos de emergência", "Via aérea", "Acesso venoso", "Monitorização", "Descartáveis críticos"]) {
+        await ensureCategorySeed(name, emergencyId);
+      }
+
+      const gasesId = await ensureCategorySeed("Gases medicinais");
+      for (const name of ["Oxigênio medicinal", "Óxido nitroso", "Reguladores e acessórios"]) {
+        await ensureCategorySeed(name, gasesId);
+      }
+
+      const equipamentosId = await ensureCategorySeed("Equipamentos e eletrônicos");
+      for (const name of ["Equipamentos assistenciais", "Eletrônicos", "Manutenção preventiva", "Calibração"]) {
+        await ensureCategorySeed(name, equipamentosId);
+      }
+
       const seedCategories = [
         "Materiais descartáveis", "Medicamentos", "Medicamentos controlados", "Materiais estéreis",
-        "Produtos para procedimento", "Fios/suturas", "Curativos", "Injetáveis", "EPIs",
-        "Saneantes e limpeza", "Materiais administrativos", "Equipamentos pequenos", "Produtos consignados",
-        "Quarentena/descarte", "Outros",
+        "Produtos para procedimento", "Injetáveis", "EPIs", "Saneantes e limpeza",
+        "Materiais administrativos", "Produtos consignados", "Quarentena/descarte", "Outros",
       ];
       for (const name of seedCategories) {
-        await db.execute(sql`insert into inventory_categories (name, active) values (${name}, 1) on duplicate key update active = active`);
+        await ensureCategorySeed(name);
       }
 
       const seedLocations = [
@@ -315,6 +371,10 @@ async function ensureInventorySchema(db: any) {
         ["Enfermagem", "assistencial"],
         ["Farmácia/medicamentos", "medicamentos"],
         ["Geladeira principal", "refrigerado"],
+        ["Carrinho de emergência", "emergencia"],
+        ["Cilindros de oxigênio medicinal", "gases_medicinais"],
+        ["Óxido nitroso", "gases_medicinais"],
+        ["Equipamentos e eletrônicos", "equipamentos"],
         ["Quarentena", "quarentena"],
         ["Expurgo/descarte", "descarte"],
         ["Materiais esterilizados", "esterilizados"],
@@ -2426,7 +2486,7 @@ export async function listInventoryProducts(filters: any = {}) {
   const search = String(filters.search ?? "").trim();
   if (search) {
     const q = `%${search}%`;
-    whereParts.push(sql`(p.name like ${q} or coalesce(p.sku, '') like ${q} or coalesce(p.barcode, '') like ${q} or coalesce(p.brand, '') like ${q} or coalesce(p.supplierName, '') like ${q})`);
+    whereParts.push(sql`(p.name like ${q} or coalesce(p.sku, '') like ${q} or coalesce(p.barcode, '') like ${q} or coalesce(p.brand, '') like ${q} or coalesce(p.category, '') like ${q} or coalesce(p.subcategory, '') like ${q} or coalesce(p.itemType, '') like ${q} or coalesce(p.supplierName, '') like ${q})`);
   }
   if (filters.category && filters.category !== "all") {
     whereParts.push(sql`p.category = ${filters.category}`);
@@ -2482,19 +2542,26 @@ export async function createInventoryProduct(data: any, userId: number) {
 
   const result = await db.execute(sql`
     insert into inventory_products
-      (name, technicalName, sku, barcode, category, brand, manufacturer, size, presentation,
+      (name, technicalName, sku, barcode, category, subcategory, itemType, brand, manufacturer, size, presentation,
        description, unit, unitPurchase, conversionFactor, currentStock, minimumStock, reorderPoint, maximumStock,
        costPriceInCents, supplierId, supplierName, supplierContact, defaultLocationId,
        allowsProcedureUse, controlsLot, controlsExpiration, requiresTemperatureControl,
-       controlledMedication, highCost, criticalCare, anvisaRegistry, expirationDate, notes, active, createdBy, updatedBy)
+       controlledMedication, highCost, criticalCare, emergencyCartItem, emergencyCartMinimumStock,
+       gasType, cylinderIdentifier, patrimonyTag, serialNumber, maintenanceDueDate, calibrationDueDate,
+       anvisaRegistry, expirationDate, notes, active, createdBy, updatedBy)
     values
       (${data.name}, ${data.technicalName ?? null}, ${data.sku ?? null}, ${data.barcode ?? null}, ${data.category ?? null},
+       ${data.subcategory ?? null}, ${data.itemType ?? "consumivel"},
        ${data.brand ?? null}, ${data.manufacturer ?? null}, ${data.size ?? null}, ${data.presentation ?? null},
        ${data.description ?? null}, ${data.unit ?? 'un'}, ${data.unitPurchase ?? null}, ${Number(data.conversionFactor || 1)},
        0, ${Number(data.minimumStock ?? 5)}, ${data.reorderPoint ?? null}, ${data.maximumStock ?? null},
        ${data.costPriceInCents ?? null}, ${data.supplierId ?? null}, ${data.supplierName ?? null}, ${data.supplierContact ?? null}, ${defaultLocationId},
        ${data.allowsProcedureUse === false ? 0 : 1}, ${data.controlsLot ? 1 : 0}, ${data.controlsExpiration ? 1 : 0}, ${data.requiresTemperatureControl ? 1 : 0},
-       ${data.controlledMedication ? 1 : 0}, ${data.highCost ? 1 : 0}, ${data.criticalCare ? 1 : 0}, ${data.anvisaRegistry ?? null}, ${data.expirationDate || null}, ${data.notes ?? null}, 1, ${userId}, ${userId})
+       ${data.controlledMedication ? 1 : 0}, ${data.highCost ? 1 : 0}, ${data.criticalCare ? 1 : 0},
+       ${data.emergencyCartItem || data.itemType === "emergencia" ? 1 : 0}, ${data.emergencyCartMinimumStock ?? null},
+       ${data.gasType ?? null}, ${data.cylinderIdentifier ?? null}, ${data.patrimonyTag ?? null}, ${data.serialNumber ?? null},
+       ${data.maintenanceDueDate || null}, ${data.calibrationDueDate || null},
+       ${data.anvisaRegistry ?? null}, ${data.expirationDate || null}, ${data.notes ?? null}, 1, ${userId}, ${userId})
   `);
 
   const insertedId = unwrapInsertId(result);
@@ -2538,6 +2605,8 @@ export async function updateInventoryProduct(productId: number, data: any, userI
       sku = ${data.sku ?? null},
       barcode = ${data.barcode ?? null},
       category = ${data.category ?? null},
+      subcategory = ${data.subcategory ?? null},
+      itemType = ${data.itemType ?? before.itemType ?? "consumivel"},
       brand = ${data.brand ?? null},
       manufacturer = ${data.manufacturer ?? null},
       size = ${data.size ?? null},
@@ -2561,6 +2630,14 @@ export async function updateInventoryProduct(productId: number, data: any, userI
       controlledMedication = ${data.controlledMedication ? 1 : 0},
       highCost = ${data.highCost ? 1 : 0},
       criticalCare = ${data.criticalCare ? 1 : 0},
+      emergencyCartItem = ${data.emergencyCartItem || data.itemType === "emergencia" ? 1 : 0},
+      emergencyCartMinimumStock = ${data.emergencyCartMinimumStock ?? null},
+      gasType = ${data.gasType ?? null},
+      cylinderIdentifier = ${data.cylinderIdentifier ?? null},
+      patrimonyTag = ${data.patrimonyTag ?? null},
+      serialNumber = ${data.serialNumber ?? null},
+      maintenanceDueDate = ${data.maintenanceDueDate || null},
+      calibrationDueDate = ${data.calibrationDueDate || null},
       anvisaRegistry = ${data.anvisaRegistry ?? null},
       expirationDate = ${data.expirationDate || null},
       notes = ${data.notes ?? null},
@@ -2781,7 +2858,13 @@ export async function listInventoryCategories() {
   const db = await getDb();
   if (!db) return [];
   await ensureInventorySchema(db);
-  return unwrapRows<any>(await db.execute(sql`select * from inventory_categories where active = 1 order by name asc`));
+  return unwrapRows<any>(await db.execute(sql`
+    select c.*, parent.name as parentName
+    from inventory_categories c
+    left join inventory_categories parent on parent.id = c.parentCategoryId
+    where c.active = 1
+    order by coalesce(parent.name, c.name) asc, case when c.parentCategoryId is null then 0 else 1 end, c.sortOrder asc, c.name asc
+  `));
 }
 
 export async function createInventoryCategory(data: any, userId: number) {
@@ -2789,10 +2872,60 @@ export async function createInventoryCategory(data: any, userId: number) {
   if (!db) throw new Error("DB unavailable");
   await ensureInventorySchema(db);
   await db.execute(sql`
-    insert into inventory_categories (name, description, active, createdBy)
-    values (${data.name}, ${data.description ?? null}, 1, ${userId})
-    on duplicate key update description = values(description), active = 1, updatedAt = now()
+    insert into inventory_categories (name, parentCategoryId, description, sortOrder, active, createdBy, updatedBy)
+    values (${data.name}, ${data.parentCategoryId ?? null}, ${data.description ?? null}, ${Number(data.sortOrder ?? 0)}, 1, ${userId}, ${userId})
+    on duplicate key update parentCategoryId = values(parentCategoryId), description = values(description), sortOrder = values(sortOrder), active = 1, updatedBy = ${userId}, updatedAt = now()
   `);
+  return listInventoryCategories();
+}
+
+export async function updateInventoryCategory(categoryId: number, data: any, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureInventorySchema(db);
+  const before = unwrapRows<any>(await db.execute(sql`select * from inventory_categories where id = ${categoryId} limit 1`))[0];
+  if (!before || !before.active) throw new Error("Categoria não encontrada.");
+  if (data.parentCategoryId && Number(data.parentCategoryId) === Number(categoryId)) {
+    throw new Error("Uma categoria não pode ser subcategoria dela mesma.");
+  }
+  await db.execute(sql`
+    update inventory_categories
+    set name = ${data.name ?? before.name},
+        parentCategoryId = ${data.parentCategoryId ?? null},
+        description = ${data.description ?? null},
+        sortOrder = ${Number(data.sortOrder ?? before.sortOrder ?? 0)},
+        updatedBy = ${userId},
+        updatedAt = now()
+    where id = ${categoryId}
+  `);
+  await createInventoryAuditLog(db, {
+    actorUserId: userId,
+    action: "inventory.category.update",
+    entityType: "inventory_categories",
+    entityId: categoryId,
+    beforeJson: before,
+    afterJson: data,
+  });
+  return listInventoryCategories();
+}
+
+export async function deleteInventoryCategory(categoryId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureInventorySchema(db);
+  const before = unwrapRows<any>(await db.execute(sql`select * from inventory_categories where id = ${categoryId} limit 1`))[0];
+  if (!before || !before.active) throw new Error("Categoria não encontrada.");
+  const children = unwrapRows<any>(await db.execute(sql`select id from inventory_categories where parentCategoryId = ${categoryId} and active = 1 limit 1`));
+  if (children.length > 0) throw new Error("Exclua ou edite as subcategorias antes de excluir esta categoria.");
+  await db.execute(sql`update inventory_categories set active = 0, updatedBy = ${userId}, updatedAt = now() where id = ${categoryId}`);
+  await createInventoryAuditLog(db, {
+    actorUserId: userId,
+    action: "inventory.category.delete",
+    entityType: "inventory_categories",
+    entityId: categoryId,
+    beforeJson: before,
+    afterJson: { active: 0 },
+  });
   return listInventoryCategories();
 }
 
@@ -2820,6 +2953,57 @@ export async function createInventoryLocation(data: any, userId: number) {
   return listInventoryLocations();
 }
 
+export async function updateInventoryLocation(locationId: number, data: any, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureInventorySchema(db);
+  const before = unwrapRows<any>(await db.execute(sql`select * from inventory_locations where id = ${locationId} limit 1`))[0];
+  if (!before || !before.active) throw new Error("Local não encontrado.");
+  await db.execute(sql`
+    update inventory_locations
+    set name = ${data.name ?? before.name},
+        type = ${data.type ?? before.type ?? "estoque"},
+        description = ${data.description ?? null},
+        allowsStock = ${data.allowsStock === false ? 0 : 1},
+        requiresTemperatureControl = ${data.requiresTemperatureControl ? 1 : 0},
+        temperatureMin = ${data.temperatureMin ?? null},
+        temperatureMax = ${data.temperatureMax ?? null},
+        responsibleUserId = ${data.responsibleUserId ?? null},
+        parentLocationId = ${data.parentLocationId ?? null},
+        updatedAt = now()
+    where id = ${locationId}
+  `);
+  await createInventoryAuditLog(db, {
+    actorUserId: userId,
+    action: "inventory.location.update",
+    entityType: "inventory_locations",
+    entityId: locationId,
+    beforeJson: before,
+    afterJson: data,
+  });
+  return listInventoryLocations();
+}
+
+export async function deleteInventoryLocation(locationId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureInventorySchema(db);
+  const before = unwrapRows<any>(await db.execute(sql`select * from inventory_locations where id = ${locationId} limit 1`))[0];
+  if (!before || !before.active) throw new Error("Local não encontrado.");
+  const balances = unwrapRows<any>(await db.execute(sql`select id from inventory_balances where locationId = ${locationId} and quantityAvailable <> 0 limit 1`));
+  if (balances.length > 0) throw new Error("Este local ainda possui saldo. Transfira o estoque antes de excluir.");
+  await db.execute(sql`update inventory_locations set active = 0, updatedAt = now() where id = ${locationId}`);
+  await createInventoryAuditLog(db, {
+    actorUserId: userId,
+    action: "inventory.location.delete",
+    entityType: "inventory_locations",
+    entityId: locationId,
+    beforeJson: before,
+    afterJson: { active: 0 },
+  });
+  return listInventoryLocations();
+}
+
 export async function listInventorySuppliers() {
   const db = await getDb();
   if (!db) return [];
@@ -2841,6 +3025,53 @@ export async function createInventorySupplier(data: any, userId: number) {
   return { id: unwrapInsertId(result), ...data, active: true };
 }
 
+export async function updateInventorySupplier(supplierId: number, data: any, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureInventorySchema(db);
+  const before = unwrapRows<any>(await db.execute(sql`select * from inventory_suppliers where id = ${supplierId} limit 1`))[0];
+  if (!before || !before.active) throw new Error("Fornecedor não encontrado.");
+  await db.execute(sql`
+    update inventory_suppliers
+    set name = ${data.name ?? before.name},
+        documentNumber = ${data.documentNumber ?? null},
+        contactName = ${data.contactName ?? null},
+        phone = ${data.phone ?? null},
+        email = ${data.email ?? null},
+        address = ${data.address ?? null},
+        notes = ${data.notes ?? null},
+        updatedAt = now()
+    where id = ${supplierId}
+  `);
+  await createInventoryAuditLog(db, {
+    actorUserId: userId,
+    action: "inventory.supplier.update",
+    entityType: "inventory_suppliers",
+    entityId: supplierId,
+    beforeJson: before,
+    afterJson: data,
+  });
+  return listInventorySuppliers();
+}
+
+export async function deleteInventorySupplier(supplierId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureInventorySchema(db);
+  const before = unwrapRows<any>(await db.execute(sql`select * from inventory_suppliers where id = ${supplierId} limit 1`))[0];
+  if (!before || !before.active) throw new Error("Fornecedor não encontrado.");
+  await db.execute(sql`update inventory_suppliers set active = 0, updatedAt = now() where id = ${supplierId}`);
+  await createInventoryAuditLog(db, {
+    actorUserId: userId,
+    action: "inventory.supplier.delete",
+    entityType: "inventory_suppliers",
+    entityId: supplierId,
+    beforeJson: before,
+    afterJson: { active: 0 },
+  });
+  return listInventorySuppliers();
+}
+
 export async function getInventoryDashboard() {
   const db = await getDb();
   if (!db) return { summary: {}, alerts: [], purchaseSuggestions: [] };
@@ -2855,6 +3086,22 @@ export async function getInventoryDashboard() {
   });
   const expired = lots.filter((lot: any) => lot.expirationDate && new Date(lot.expirationDate).getTime() < today.getTime());
   const critical = products.filter((product: any) => normalizeInventoryQuantity(product.availableStock ?? product.currentStock) <= Number(product.minimumStock ?? 0));
+  const emergencyItems = products.filter((product: any) => Boolean(product.emergencyCartItem) || product.itemType === "emergencia");
+  const emergencyCritical = emergencyItems.filter((product: any) => {
+    const available = normalizeInventoryQuantity(product.availableStock ?? product.currentStock);
+    const minimum = Number(product.emergencyCartMinimumStock ?? product.minimumStock ?? 0);
+    return available <= minimum;
+  });
+  const gasItems = products.filter((product: any) => product.itemType === "gas_medicinal");
+  const equipmentItems = products.filter((product: any) => product.itemType === "equipamento" || product.itemType === "eletronico");
+  const equipmentMaintenanceDue = equipmentItems.filter((product: any) => {
+    const timestamps = [product.maintenanceDueDate, product.calibrationDueDate]
+      .filter(Boolean)
+      .map((value: string) => new Date(value).getTime())
+      .filter((value: number) => Number.isFinite(value));
+    if (timestamps.length === 0) return false;
+    return Math.min(...timestamps) <= today.getTime() + 1000 * 60 * 60 * 24 * 30;
+  });
   const purchaseSuggestions = critical.map((product: any) => {
     const available = normalizeInventoryQuantity(product.availableStock ?? product.currentStock);
     const target = Number(product.maximumStock ?? product.reorderPoint ?? product.minimumStock ?? 0);
@@ -2871,9 +3118,16 @@ export async function getInventoryDashboard() {
       expiringCount: expiringSoon.length,
       expiredCount: expired.length,
       lotCount: lots.length,
+      emergencyCartCount: emergencyItems.length,
+      emergencyCartCriticalCount: emergencyCritical.length,
+      gasItemCount: gasItems.length,
+      equipmentItemCount: equipmentItems.length,
+      equipmentMaintenanceDueCount: equipmentMaintenanceDue.length,
       totalValueInCents: products.reduce((sum: number, product: any) => sum + Math.round(normalizeInventoryQuantity(product.availableStock ?? product.currentStock) * Number(product.costPriceInCents ?? 0)), 0),
     },
     alerts: [
+      ...emergencyCritical.map((product: any) => ({ type: "emergencia", title: "Carrinho de emergência", message: `${product.name} precisa estar completo no carrinho. Saldo: ${product.availableStock ?? product.currentStock} ${product.unit || "un"}.`, productId: product.id })),
+      ...equipmentMaintenanceDue.map((product: any) => ({ type: "manutencao", title: "Manutenção/calibração próxima", message: `${product.name} tem manutenção ou calibração vencendo em até 30 dias.`, productId: product.id })),
       ...critical.map((product: any) => ({ type: "critico", title: "Estoque crítico", message: `${product.name} está em ${product.availableStock ?? product.currentStock} ${product.unit || "un"}.`, productId: product.id })),
       ...expiringSoon.map((lot: any) => ({ type: "validade", title: "Lote próximo do vencimento", message: `${lot.productName} lote ${lot.lotNumber} vence em ${new Date(lot.expirationDate).toLocaleDateString("pt-BR")}.`, productId: lot.productId, lotId: lot.id })),
       ...expired.map((lot: any) => ({ type: "vencido", title: "Lote vencido", message: `${lot.productName} lote ${lot.lotNumber} está vencido.`, productId: lot.productId, lotId: lot.id })),
