@@ -689,10 +689,10 @@ export default function Agenda() {
   };
 
   return (
-    <div className="flex items-start gap-5">
-      <div className="flex min-w-0 flex-1 flex-col">
+    <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
+      <div className="flex w-full min-w-0 flex-1 flex-col">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex gap-2">
+          <div className="mobile-stack-actions flex flex-wrap gap-2 sm:w-auto">
             {canManageSchedule ? (
               <Button
                 onClick={() => {
@@ -728,7 +728,7 @@ export default function Agenda() {
             </Button>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {(["day", "week"] as ViewMode[]).map((mode) => (
               <Button
                 key={mode}
@@ -747,7 +747,7 @@ export default function Agenda() {
             Opções
           </Button>
         </div>
-        <div className="mb-4 grid gap-3 xl:grid-cols-4">
+        <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
           <div className="rounded-2xl border border-gray-300 bg-white p-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-500">Total no filtro</p>
             <p className="mt-2 text-3xl font-semibold text-gray-900">{filteredAppointments.length}</p>
@@ -772,7 +772,80 @@ export default function Agenda() {
               <h2 className="text-lg font-bold text-foreground">{formatDateHeader(selectedDate)}</h2>
             </div>
 
-            <div className="rounded-lg border border-gray-300 bg-white">
+            <div className="space-y-3 md:hidden">
+              {visibleTimeSlots.length === 0 ? (
+                <div className="rounded-2xl border border-gray-300 bg-white p-5 text-center text-sm text-gray-500">
+                  Agenda fechada neste dia para o filtro selecionado.
+                </div>
+              ) : null}
+              {visibleTimeSlots.map((slot) => {
+                const appointmentsInSlot = slotMap[slot] ?? [];
+                const activeBlock = blockForSlot(slot);
+
+                if (appointmentsInSlot.length === 0 && activeBlock) {
+                  return (
+                    <button
+                      key={`mobile-block-${slot}`}
+                      type="button"
+                      className="w-full rounded-2xl border border-gray-800 bg-black/90 p-4 text-left text-white shadow-sm"
+                      onClick={() => openBlockDetails(activeBlock)}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-base font-semibold">{slot}</span>
+                        <Badge className="border border-white/15 bg-amber-400/15 text-amber-100">Bloqueado</Badge>
+                      </div>
+                      <p className="mt-3 text-sm font-medium">{activeBlock.title}</p>
+                      <p className="mt-1 text-xs text-white/70">Sala: {activeBlock.room || "Todas"}</p>
+                    </button>
+                  );
+                }
+
+                if (appointmentsInSlot.length === 0) {
+                  return (
+                    <button
+                      key={`mobile-free-${slot}`}
+                      type="button"
+                      className="w-full rounded-2xl border border-green-200 bg-white p-4 text-left shadow-sm"
+                      onClick={() => openCreateDialogForSlot(slot)}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-base font-semibold text-green-700">{slot}</span>
+                        <Badge className="border border-green-200 bg-green-100 text-green-700">Livre</Badge>
+                      </div>
+                      <p className="mt-2 text-xs text-gray-500">Toque para criar um agendamento neste horário.</p>
+                    </button>
+                  );
+                }
+
+                return appointmentsInSlot.map((appointment, index) => (
+                  <button
+                    key={`mobile-${slot}-${appointment.id}-${index}`}
+                    type="button"
+                    className="w-full rounded-2xl border border-gray-300 bg-white p-4 text-left shadow-sm"
+                    onClick={() => openAppointmentDetails(appointment)}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-base font-semibold text-gray-900">{slot}</p>
+                        <p className="mt-1 text-sm font-semibold text-gray-900">{appointment.patientName}</p>
+                      </div>
+                      <Badge className={getStatusBadgeClass(appointment.status)}>
+                        {STATUS_LABELS[appointment.status] ?? appointment.status}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-600">
+                      <span className="rounded-lg bg-gray-50 px-2 py-1 capitalize">{appointment.type ?? "Consulta"}</span>
+                      <span className="rounded-lg bg-gray-50 px-2 py-1">{appointment.room || "Não informado"}</span>
+                    </div>
+                    {appointment.status === "cancelada" ? (
+                      <p className="mt-2 text-xs text-rose-600">{getCancellationSummary(appointment)}</p>
+                    ) : null}
+                  </button>
+                ));
+              })}
+            </div>
+
+            <div className="responsive-table-scroll hidden rounded-lg border border-gray-300 bg-white md:block">
               <table className="w-full">
                 <thead className="bg-gray-100 backdrop-blur">
                   <tr className="text-xs font-semibold text-gray-700">
@@ -972,7 +1045,7 @@ export default function Agenda() {
         )}
       </div>
 
-      <div className="flex w-80 flex-col gap-4">
+      <div className="flex w-full flex-col gap-4 xl:w-80 xl:shrink-0">
         <div className="rounded-lg border border-gray-300 bg-white p-4">
           <Label className="mb-2 block text-sm font-semibold text-gray-700">Profissional selecionado</Label>
           <Select value={selectedDoctor} onValueChange={setSelectedDoctor}>

@@ -4,6 +4,8 @@
   font-family: "Montserrat", sans-serif;
   font-size: 14px;
   outline: none;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .ProseMirror p {
@@ -83,4 +85,20 @@
   border: none;
   border-top: 1px solid #d4a853;
   margin: 1rem 0;
+}
+
+.rich-text-toolbar {
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rich-text-toolbar > * {
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .rich-text-editor .ProseMirror {
+    min-height: min(48vh, 360px) !important;
+    padding: 0.875rem;
+  }
 }

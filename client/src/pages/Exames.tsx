@@ -150,7 +150,7 @@ export default function Exames() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-semibold">Pedidos de Exames</h1>
           <p className="text-sm text-muted-foreground mt-1">Solicitação e acompanhamento de exames</p>
@@ -163,7 +163,7 @@ export default function Exames() {
       </div>
 
       {/* Filtro por paciente */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
         {lockedPatientId ? (
           <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
             <span className="text-muted-foreground">Paciente do prontuário: </span>
@@ -172,7 +172,7 @@ export default function Exames() {
         ) : (
           <>
             <Select value={filterPatientId?.toString() ?? ""} onValueChange={(v) => setFilterPatientId(v ? parseInt(v) : null)}>
-              <SelectTrigger className="w-72 h-9"><SelectValue placeholder="Filtrar por paciente..." /></SelectTrigger>
+              <SelectTrigger className="h-9 w-full sm:w-72"><SelectValue placeholder="Filtrar por paciente..." /></SelectTrigger>
               <SelectContent>
                 {patients?.map((p) => <SelectItem key={p.id} value={p.id.toString()}>{patientDisplayName(p)}</SelectItem>)}
               </SelectContent>
@@ -261,10 +261,10 @@ export default function Exames() {
 
       {/* Modal criar pedido */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-full">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><FlaskConical className="h-5 w-5 text-primary" />Novo Pedido de Exames</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <Label>Paciente *</Label>
                 {lockedPatientId ? (
@@ -290,9 +290,9 @@ export default function Exames() {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-2">
+              <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <Label>Exames Solicitados *</Label>
-                <div className="flex gap-2">
+                <div className="mobile-stack-actions flex gap-2 sm:w-auto">
                   <Button type="button" size="sm" variant="outline" onClick={() => setShowTemplates(!showTemplates)}>Modelos</Button>
                   <Button type="button" size="sm" variant="outline" onClick={() => {
                     if (!form.content) return toast.error("Digite os exames para salvar como modelo.");

@@ -229,13 +229,13 @@ export function ClinicalDocumentSignatureActions({
   };
 
   const sharedButtonClass =
-    "gap-2 border-[#C9A55B]/35 bg-background text-foreground hover:bg-[#C9A55B]/10";
+    "gap-2 border-[#C9A55B]/35 bg-background text-foreground hover:bg-[#C9A55B]/10 max-sm:w-full";
   const certillionButtonClass =
-    "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#C9A55B]/35 bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-[#C9A55B]/10 disabled:pointer-events-none disabled:opacity-50";
+    "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-[#C9A55B]/35 bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-[#C9A55B]/10 disabled:pointer-events-none disabled:opacity-50 max-sm:w-full";
 
   return (
-    <div className={cn("flex flex-wrap items-end gap-2 rounded-lg border border-border/60 bg-muted/20 p-2", className)}>
-      <div className="min-w-[220px] space-y-1">
+    <div className={cn("flex flex-wrap items-end gap-2 rounded-lg border border-border/60 bg-muted/20 p-2 max-sm:flex-col max-sm:items-stretch", className)}>
+      <div className="min-w-[220px] space-y-1 max-sm:min-w-0">
         <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Assinatura digital</Label>
         <Select value={method} onValueChange={(value) => setMethod(value as SignatureMethod)}>
           <SelectTrigger className="h-9">

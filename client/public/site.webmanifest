@@ -1,0 +1,29 @@
+{
+  "name": "Glutec System | Clínica Glutée",
+  "short_name": "Glutec",
+  "description": "Sistema seguro de atendimento, agenda, prontuário e gestão da Clínica Glutée.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#c9a55b",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/favicon-128.png",
+      "sizes": "128x128",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon-256.png",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

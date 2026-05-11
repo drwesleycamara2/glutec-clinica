@@ -135,6 +135,7 @@ body {
   transition: background-color var(--transition-base), color var(--transition-base);
   position: relative;
   overflow-x: hidden;
+  touch-action: manipulation;
 }
 
 body::before,
@@ -796,6 +797,7 @@ body::after {
 .app-main-shell {
   position: relative;
   z-index: 1;
+  min-width: 0;
 }
 
 .app-main-shell::before {
@@ -824,6 +826,8 @@ body::after {
 
 .app-main-content {
   position: relative;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .app-main-content::before {
@@ -902,6 +906,10 @@ body::after {
 
 /* Responsividade */
 @media (max-width: 768px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
   .card-premium {
     padding: 1rem;
   }
@@ -922,5 +930,59 @@ body::after {
 
   .dark .app-main-header {
     background: linear-gradient(180deg, rgba(9, 9, 9, 0.94), rgba(9, 9, 9, 0.82));
+  }
+
+  .app-main-content {
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+    padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
+  }
+
+  .app-main-content h1,
+  .app-main-content h2 {
+    overflow-wrap: anywhere;
+  }
+
+  .app-main-content [data-slot="card"] {
+    border-radius: 1rem;
+  }
+
+  .app-main-content button,
+  .app-main-content [role="button"] {
+    min-height: 2.5rem;
+  }
+
+  .mobile-stack-actions {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .mobile-stack-actions > * {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  [data-slot="dialog-content"] {
+    overscroll-behavior: contain;
+  }
+
+  [data-slot="dialog-footer"] {
+    gap: 0.75rem;
+  }
+
+  [data-slot="dialog-footer"] button {
+    width: 100%;
+  }
+
+  .responsive-table-scroll {
+    margin-inline: -0.25rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .responsive-table-scroll > table {
+    min-width: 48rem;
   }
 }

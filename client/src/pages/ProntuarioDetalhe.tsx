@@ -2689,7 +2689,7 @@ function ExamesWorkspaceTab({ patientId, patient }: { patientId: number; patient
 
   return (
     <Tabs defaultValue="solicitacoes" className="space-y-4">
-      <TabsList className="bg-background/70">
+      <TabsList className="max-w-full justify-start overflow-x-auto bg-background/70">
         <TabsTrigger value="solicitacoes">Solicitações</TabsTrigger>
         <TabsTrigger value="resultados">Resultados</TabsTrigger>
       </TabsList>
@@ -3120,13 +3120,13 @@ export default function ProntuarioDetalhe() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
         <Button variant="ghost" size="sm" onClick={() => setLocation("/prontuarios")}><ArrowLeft className="h-4 w-4 mr-1" />Voltar</Button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <PatientAttentionMark patient={patient} />
             <PatientRecordBadge patient={patient} />
-            <h1 className="truncate text-xl font-semibold">{patient.fullName}</h1>
+            <h1 className="min-w-0 break-words text-xl font-semibold sm:truncate">{patient.fullName}</h1>
             <Badge variant="outline" className="text-[10px] shrink-0">PEP · CFM 1821/2007</Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -3198,7 +3198,7 @@ export default function ProntuarioDetalhe() {
         }}
         className="w-full"
       >
-        <TabsList className="w-full justify-start flex-wrap bg-muted/50 h-auto p-1 gap-0.5">
+        <TabsList className="w-full justify-start flex-nowrap overflow-x-auto bg-muted/50 h-auto p-1 gap-0.5 sm:flex-wrap">
           {!isNotesOnly && (
             <>
               <TabsTrigger value="historico" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">

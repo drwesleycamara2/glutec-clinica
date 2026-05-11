@@ -160,8 +160,8 @@ export function RichTextEditor({
   };
 
   return (
-    <div className="space-y-2 overflow-hidden rounded-lg border bg-background">
-      <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 p-3">
+    <div className="rich-text-editor space-y-2 overflow-hidden rounded-lg border bg-background">
+      <div className="rich-text-toolbar flex items-center gap-2 overflow-x-auto border-b bg-muted/30 p-3">
         <Select value={fontSize} onValueChange={applyFontSize}>
           <SelectTrigger className="h-9 w-24">
             <SelectValue placeholder="Tamanho" />
@@ -192,7 +192,7 @@ export function RichTextEditor({
           size="sm"
           variant={editor.isActive("bold") ? "default" : "outline"}
           onClick={() => editor.chain().focus().toggleBold().run()}
-          className="h-9 w-9 p-0"
+          className="h-9 w-9 shrink-0 p-0"
           title="Negrito"
         >
           <Bold className="h-4 w-4" />
@@ -202,7 +202,7 @@ export function RichTextEditor({
           size="sm"
           variant={editor.isActive("italic") ? "default" : "outline"}
           onClick={() => editor.chain().focus().toggleItalic().run()}
-          className="h-9 w-9 p-0"
+          className="h-9 w-9 shrink-0 p-0"
           title="Itálico"
         >
           <Italic className="h-4 w-4" />
@@ -211,7 +211,7 @@ export function RichTextEditor({
           size="sm"
           variant={editor.isActive("underline") ? "default" : "outline"}
           onClick={() => editor.chain().focus().toggleUnderline().run()}
-          className="h-9 w-9 p-0"
+          className="h-9 w-9 shrink-0 p-0"
           title="Sublinhado"
         >
           <UnderlineIcon className="h-4 w-4" />
@@ -223,7 +223,7 @@ export function RichTextEditor({
           size="sm"
           variant={textAlign === "left" ? "default" : "outline"}
           onClick={() => setTextAlign("left")}
-          className="h-9 w-9 p-0"
+          className="h-9 w-9 shrink-0 p-0"
           title="Alinhar à esquerda"
         >
           <AlignLeft className="h-4 w-4" />
@@ -232,7 +232,7 @@ export function RichTextEditor({
           size="sm"
           variant={textAlign === "center" ? "default" : "outline"}
           onClick={() => setTextAlign("center")}
-          className="h-9 w-9 p-0"
+          className="h-9 w-9 shrink-0 p-0"
           title="Centralizar"
         >
           <AlignCenter className="h-4 w-4" />
@@ -241,7 +241,7 @@ export function RichTextEditor({
           size="sm"
           variant={textAlign === "right" ? "default" : "outline"}
           onClick={() => setTextAlign("right")}
-          className="h-9 w-9 p-0"
+          className="h-9 w-9 shrink-0 p-0"
           title="Alinhar à direita"
         >
           <AlignRight className="h-4 w-4" />
@@ -250,7 +250,7 @@ export function RichTextEditor({
           size="sm"
           variant={textAlign === "justify" ? "default" : "outline"}
           onClick={() => setTextAlign("justify")}
-          className="h-9 px-3"
+          className="h-9 shrink-0 px-3"
           title="Justificar"
         >
           J
@@ -262,7 +262,7 @@ export function RichTextEditor({
           size="sm"
           variant={editor.isActive("bulletList") ? "default" : "outline"}
           onClick={() => editor.chain().focus().toggleBulletList().run()}
-          className="h-9 w-9 p-0"
+          className="h-9 w-9 shrink-0 p-0"
           title="Lista com marcadores"
         >
           <List className="h-4 w-4" />
@@ -272,7 +272,7 @@ export function RichTextEditor({
           size="sm"
           variant={editor.isActive("orderedList") ? "default" : "outline"}
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          className="h-9 w-9 p-0"
+          className="h-9 w-9 shrink-0 p-0"
           title="Lista numerada"
         >
           <ListOrdered className="h-4 w-4" />
@@ -285,7 +285,7 @@ export function RichTextEditor({
           variant="outline"
           onClick={() => editor.chain().focus().undo().run()}
           disabled={!editor.can().undo()}
-          className="h-9 w-9 p-0"
+          className="h-9 w-9 shrink-0 p-0"
           title="Desfazer"
         >
           <Undo2 className="h-4 w-4" />
@@ -296,7 +296,7 @@ export function RichTextEditor({
           variant="outline"
           onClick={() => editor.chain().focus().redo().run()}
           disabled={!editor.can().redo()}
-          className="h-9 w-9 p-0"
+          className="h-9 w-9 shrink-0 p-0"
           title="Refazer"
         >
           <Redo2 className="h-4 w-4" />

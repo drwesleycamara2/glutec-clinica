@@ -171,12 +171,12 @@ export default function Prescricoes() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-semibold">Prescrições</h1>
           <p className="mt-1 text-sm text-muted-foreground">Cadastre, imprima e envie receituários com layout clínico.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="mobile-stack-actions flex flex-wrap items-center gap-2 sm:w-auto">
           {lockedPatientId ? (
             <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
               <span className="text-muted-foreground">Paciente do prontuário: </span>
@@ -184,7 +184,7 @@ export default function Prescricoes() {
             </div>
           ) : (
             <Select value={filterPatientId} onValueChange={setFilterPatientId}>
-              <SelectTrigger className="w-[260px]">
+              <SelectTrigger className="w-full sm:w-[260px]">
                 <SelectValue placeholder="Filtrar por paciente" />
               </SelectTrigger>
               <SelectContent>
@@ -278,7 +278,7 @@ export default function Prescricoes() {
       )}
 
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-h-[90vh] w-[min(92vw,56rem)] max-w-4xl overflow-y-auto">
+        <DialogContent className="max-h-[90vh] w-[min(92vw,56rem)] max-w-4xl overflow-y-auto max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-full">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Pill className="h-5 w-5 text-primary" />
@@ -331,9 +331,9 @@ export default function Prescricoes() {
             </div>
 
             <div>
-              <div className="mb-2 flex items-center justify-between">
+              <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <Label>Conteúdo da prescrição *</Label>
-                <div className="flex gap-2">
+                <div className="mobile-stack-actions flex gap-2 sm:w-auto">
                   <Button type="button" size="sm" variant="outline" onClick={() => setShowTemplates((current) => !current)}>
                     Modelos
                   </Button>

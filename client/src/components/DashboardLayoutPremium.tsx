@@ -238,7 +238,7 @@ function DashboardLayoutPremiumContent({
   const { user, logout } = useAuth();
   const { setStorageScope } = useTheme();
   const [location, setLocation] = useLocation();
-  const { state, toggleSidebar, isMobile } = useSidebar();
+  const { state, toggleSidebar, isMobile, setOpenMobile } = useSidebar();
   const [isResizing, setIsResizing] = useState(false);
   const [openClinicalDrafts, setOpenClinicalDrafts] = useState<ClinicalDraftMeta[]>(() => readClinicalDraftMetas());
   const [navigationPromptOpen, setNavigationPromptOpen] = useState(false);
@@ -393,6 +393,10 @@ function DashboardLayoutPremiumContent({
   }, [activeClinicalDraft, location]);
 
   const navigateWithDraftProtection = (nextPath: string) => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+
     if (activeClinicalDraft && location === activeDraftBasePath && nextPath !== activeClinicalDraft.path) {
       window.dispatchEvent(new CustomEvent(CLINICAL_DRAFT_AUTOSAVE_EVENT));
       setPendingNavigationPath(nextPath);
@@ -611,7 +615,7 @@ function DashboardLayoutPremiumContent({
                     ) : null}
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-[22rem] rounded-2xl border-gold/20 bg-background/95 p-2">
+                <DropdownMenuContent align="end" className="w-[min(calc(100vw-1rem),22rem)] rounded-2xl border-gold/20 bg-background/95 p-2">
                   <DropdownMenuLabel className="px-3 py-2 text-sm font-semibold text-text-primary">
                     Prontuários abertos
                   </DropdownMenuLabel>
@@ -646,7 +650,7 @@ function DashboardLayoutPremiumContent({
           </div>
         )}
 
-        <main className="app-main-content flex-1 px-4 pb-6 pt-4 lg:px-6 lg:pb-8 lg:pt-6">
+        <main className="app-main-content min-w-0 flex-1 px-4 pb-6 pt-4 lg:px-6 lg:pb-8 lg:pt-6">
           {activeClinicalDraft ? (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#C9A55B]/25 bg-[linear-gradient(135deg,rgba(201,165,91,0.12),rgba(255,255,255,0.04))] px-4 py-3 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
               <div>
@@ -655,7 +659,7 @@ function DashboardLayoutPremiumContent({
                   Paciente: {activeClinicalDraft.patientName} • Atualizado em {new Date(activeClinicalDraft.updatedAt).toLocaleString("pt-BR")}
                 </p>
               </div>
-              <Button variant="outline" className="rounded-xl" onClick={() => navigateWithDraftProtection(activeClinicalDraft.path)}>
+              <Button variant="outline" className="w-full rounded-xl sm:w-auto" onClick={() => navigateWithDraftProtection(activeClinicalDraft.path)}>
                 Voltar ao prontuário em aberto
               </Button>
             </div>
