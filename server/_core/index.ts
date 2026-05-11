@@ -15,6 +15,7 @@ import { resolveSystemExport } from "../lib/system-export";
 import { refineTranscriptToPtBr } from "../lib/clinical-transcription";
 import * as dbComplete from "../db_complete";
 import { storageGet } from "../storage";
+import { verifyWhatsAppWebhookChallenge, verifyWhatsAppWebhookSignature } from "../whatsapp";
 
 function getRequestBaseUrl(req: express.Request) {
   const forwardedProto = req.headers["x-forwarded-proto"];
@@ -341,8 +342,14 @@ async function startServer() {
     return next();
   });
 
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
+  // Configure body parser with larger size limit for file uploads.
+  // Keep raw body for Meta webhook signature verification.
+  app.use(express.json({
+    limit: "50mb",
+    verify: (req: any, _res, buf) => {
+      req.rawBody = Buffer.from(buf);
+    },
+  }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
   app.get("/robots.txt", (_req, res) => {
@@ -351,6 +358,38 @@ async function startServer() {
   });
 
   registerAuthRoutes(app);
+
+  app.get("/api/whatsapp/webhook", (req, res) => {
+    addNoIndexHeaders(res);
+
+    const challenge = verifyWhatsAppWebhookChallenge(
+      req.query["hub.mode"],
+      req.query["hub.verify_token"],
+      req.query["hub.challenge"],
+    );
+
+    if (!challenge) {
+      return res.status(403).send("Webhook do WhatsApp nao autorizado.");
+    }
+
+    return res.status(200).send(challenge);
+  });
+
+  app.post("/api/whatsapp/webhook", async (req: any, res) => {
+    addNoIndexHeaders(res);
+
+    if (!verifyWhatsAppWebhookSignature(req.rawBody, req.headers["x-hub-signature-256"])) {
+      return res.status(403).json({ error: "Assinatura do webhook invalida." });
+    }
+
+    try {
+      const result = await dbComplete.processWhatsAppWebhookPayload(req.body);
+      return res.json(result);
+    } catch (error) {
+      console.error("[WhatsAppWebhook] Failed:", error);
+      return res.status(500).json({ error: "Nao foi possivel processar o webhook do WhatsApp." });
+    }
+  });
 
   // ─── Cloud Signature OAuth2 Callback ─────────────────────────────────────
   app.get("/api/cloud-signature/callback", async (req, res) => {

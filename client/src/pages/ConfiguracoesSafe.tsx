@@ -24,7 +24,6 @@ import {
   Moon,
   Sun,
   Palette,
-  Bell,
   Shield,
   User,
   FileStack,
@@ -34,6 +33,7 @@ import {
   FolderOpen,
   CalendarClock,
   FileLock2,
+  MessageCircle,
 } from "lucide-react";
 
 const DEFAULT_STRUCTURAL_SECTORS = ["Consultório", "Centro Cirúrgico"];
@@ -53,6 +53,7 @@ export default function ConfiguracoesSafe() {
     onError: (error) => toast.error(error.message),
   });
   const doctorsQuery = trpc.admin.getDoctors.useQuery(undefined, { enabled: isSeniorAdmin });
+  const whatsappStatusQuery = trpc.whatsapp.status.useQuery(undefined, { enabled: isSeniorAdmin });
 
   const [newSector, setNewSector] = useState("");
   const [newAttachmentFolder, setNewAttachmentFolder] = useState("");
@@ -427,16 +428,35 @@ export default function ConfiguracoesSafe() {
             </CardContent>
           </Card>
         ) : null}
-        <Card className="border-primary/10 bg-card/50 backdrop-blur-sm opacity-60">
+        <Card className="border-primary/10 bg-card/50 backdrop-blur-sm">
           <CardHeader>
             <div className="flex items-center gap-2">
-              <Bell className="h-5 w-5 text-primary" />
-              <CardTitle>Notificações</CardTitle>
+              <MessageCircle className="h-5 w-5 text-primary" />
+              <CardTitle>WhatsApp oficial</CardTitle>
             </div>
-            <CardDescription>Configure como você recebe alertas.</CardDescription>
+            <CardDescription>Envios pela API oficial da Meta e retorno automatico de confirmacao/cancelamento.</CardDescription>
           </CardHeader>
-          <CardContent className="flex h-[140px] items-center justify-center italic text-sm text-muted-foreground">
-            Em breve: alertas via WhatsApp e e-mail.
+          <CardContent className="space-y-3 text-sm">
+            {whatsappStatusQuery.isLoading ? (
+              <p className="text-muted-foreground">Verificando configuracao...</p>
+            ) : whatsappStatusQuery.data?.configured ? (
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-emerald-800 dark:text-emerald-200">
+                WhatsApp conectado para {whatsappStatusQuery.data.businessPhoneNumber || "+55 19 99963-3913"}.
+              </div>
+            ) : (
+              <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 p-3 text-amber-900 dark:text-amber-100">
+                Integracao preparada. Faltam credenciais da Meta:
+                <span className="mt-1 block font-medium">
+                  {(whatsappStatusQuery.data?.missing ?? []).join(", ") || "verifique o ambiente do VPS"}
+                </span>
+              </div>
+            )}
+            <div className="rounded-lg border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground">
+              Webhook: <span className="font-mono text-foreground">{whatsappStatusQuery.data?.webhookUrl || "https://sistema.drwesleycamara.com.br/api/whatsapp/webhook"}</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Tokens ficam no ambiente seguro do servidor. Esta tela mostra apenas status e identificadores mascarados.
+            </p>
           </CardContent>
         </Card>
 

@@ -2375,13 +2375,27 @@ export const appRouter = router({
 
   // WHATSAPP
   whatsapp: router({
+    status: protectedProcedure
+      .query(async ({ ctx }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        return dbComplete.getWhatsAppIntegrationStatus();
+      }),
+    messages: protectedProcedure
+      .input(z.object({ limit: z.number().min(1).max(200).optional() }).optional())
+      .query(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        return dbComplete.listWhatsAppMessages(input?.limit ?? 50);
+      }),
     sendMessage: protectedProcedure
       .input(z.object({
         phoneNumber: z.string(),
         message: z.string(),
       }))
       .mutation(async ({ ctx, input }) => {
-        return dbComplete.sendWhatsAppMessage(input.phoneNumber, input.message);
+        return dbComplete.sendWhatsAppMessage(input.phoneNumber, input.message, {
+          purpose: "manual_text",
+          createdBy: ctx.user.id,
+        });
       }),
     sendAnamnesisRequest: protectedProcedure
       .input(z.object({
@@ -2427,20 +2441,19 @@ export const appRouter = router({
         phone: z.string().optional(), // sobrescreve o telefone do paciente se informado
       }))
       .mutation(async ({ ctx, input }) => {
-        const wa = await createWhatsAppService();
-        if (!wa) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "WhatsApp não configurado. Configure o Access Token e Phone Number ID nas configurações da clínica." });
-
         const { documentType, documentId } = input;
         let phone = input.phone ?? "";
         let pdfBuffer: Buffer;
         let filename: string;
         let caption: string;
+        let targetPatientId: number | null = null;
 
         // ── Prescrição ────────────────────────────────────────────────────────
         if (documentType === "prescricao") {
           const rx = await dbComplete.getPrescriptionById(documentId);
           if (!rx) throw new TRPCError({ code: "NOT_FOUND", message: "Prescrição não encontrada." });
           if (!phone) phone = rx.patientPhone ?? rx.phone ?? "";
+          targetPatientId = Number(rx.patientId ?? 0) || null;
 
           const content = stripHtmlForSignature(rx.content ?? rx.medicamentos ?? "");
           pdfBuffer = buildSimplePdfBuffer("PRESCRIÇÃO MÉDICA", [
@@ -2461,6 +2474,7 @@ export const appRouter = router({
           const exam = await dbComplete.getExamRequestById(documentId);
           if (!exam) throw new TRPCError({ code: "NOT_FOUND", message: "Pedido de exames não encontrado." });
           if (!phone) phone = exam.patientPhone ?? exam.phone ?? "";
+          targetPatientId = Number(exam.patientId ?? 0) || null;
 
           const exams = Array.isArray(exam.exams) ? exam.exams.join(", ") : String(exam.exams ?? exam.content ?? "");
           pdfBuffer = buildSimplePdfBuffer("PEDIDO DE EXAMES", [
@@ -2482,6 +2496,7 @@ export const appRouter = router({
           const budget = await dbComplete.getBudgetById(documentId);
           if (!budget) throw new TRPCError({ code: "NOT_FOUND", message: "Orçamento não encontrado." });
           if (!phone) phone = budget.patientPhone ?? "";
+          targetPatientId = Number(budget.patientId ?? 0) || null;
 
           const total = (budget.totalInCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
           const itemLines = (budget.items ?? []).map((item: any) =>
@@ -2508,6 +2523,7 @@ export const appRouter = router({
           const doc = await dbComplete.getPatientDocumentById(documentId);
           if (!doc) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado." });
           if (!phone) phone = (doc as any).patientPhone ?? "";
+          targetPatientId = Number((doc as any).patientId ?? 0) || null;
 
           const docContent = stripHtmlForSignature((doc as any).content ?? (doc as any).text ?? "");
           pdfBuffer = buildSimplePdfBuffer(((doc as any).title ?? "ATESTADO MÉDICO").toUpperCase(), [
@@ -2527,6 +2543,7 @@ export const appRouter = router({
           const nfse = await dbComplete.getNfseById(documentId);
           if (!nfse) throw new TRPCError({ code: "NOT_FOUND", message: "Nota Fiscal não encontrada." });
           if (!phone) phone = (nfse as any).patientPhone ?? "";
+          targetPatientId = Number((nfse as any).patientId ?? 0) || null;
 
           const valor = ((nfse as any).valorServicos ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
           pdfBuffer = buildSimplePdfBuffer("NOTA FISCAL DE SERVIÇO ELETRÔNICA (NFS-e)", [
@@ -2547,11 +2564,15 @@ export const appRouter = router({
 
         if (!phone) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Telefone do paciente não encontrado. Informe o número antes de enviar." });
 
-        // Upload do PDF e envio
-        const mediaId = await wa.uploadMedia(pdfBuffer!, filename!, "application/pdf");
-        await wa.sendDocument(phone, mediaId, filename!, caption!);
+        const result = await dbComplete.sendWhatsAppDocumentWithLog(phone, pdfBuffer!, filename!, caption!, {
+          purpose: "clinical_document",
+          patientId: targetPatientId,
+          documentType,
+          documentId,
+          createdBy: ctx.user.id,
+        });
 
-        return { success: true, phone, filename };
+        return { success: true, phone, filename, ...result };
       }),
   }),
 
@@ -2946,12 +2967,14 @@ export const appRouter = router({
         let caption = "Documento clínico assinado — Clínica Glutée";
         let patientPhone = input.phone ?? "";
         let applyDocumentType: "prescricao" | "exame" | "atestado" = "atestado";
+        let targetPatientId: number | null = null;
         const lines: string[] = [];
 
         if (input.documentType === "prescricao") {
           const prescription = await dbComplete.getPrescriptionById(input.documentId);
           if (!prescription) throw new TRPCError({ code: "NOT_FOUND", message: "Prescrição não encontrada." });
           const patient = await dbComplete.getPatientById(Number(prescription.patientId));
+          targetPatientId = Number(prescription.patientId ?? 0) || null;
           const patientName = patient?.fullName || patient?.name || `Paciente ${prescription.patientId}`;
           patientPhone = patientPhone || patient?.phone || "";
           title = "PRESCRIÇÃO MÉDICA";
@@ -2972,6 +2995,7 @@ export const appRouter = router({
           const exam = await dbComplete.getExamRequestById(input.documentId);
           if (!exam) throw new TRPCError({ code: "NOT_FOUND", message: "Pedido de exames não encontrado." });
           const patient = await dbComplete.getPatientById(Number(exam.patientId));
+          targetPatientId = Number(exam.patientId ?? 0) || null;
           const patientName = exam.patientName || patient?.fullName || patient?.name || `Paciente ${exam.patientId}`;
           patientPhone = patientPhone || exam.patientPhone || patient?.phone || "";
           let exams = exam.exams ?? exam.content ?? "";
@@ -3006,6 +3030,7 @@ export const appRouter = router({
           const document = await dbComplete.getPatientDocumentById(input.documentId);
           if (!document) throw new TRPCError({ code: "NOT_FOUND", message: "Documento clínico não encontrado." });
           const patientName = document.patientName || `Paciente ${document.patientId}`;
+          targetPatientId = Number(document.patientId ?? 0) || null;
           patientPhone = patientPhone || document.patientPhone || "";
           title = String(document.name || document.title || "DOCUMENTO CLÍNICO").toUpperCase();
           filename = `documento_clinico_${input.documentId}_assinado.pdf`;
@@ -3070,8 +3095,19 @@ export const appRouter = router({
               message: "WhatsApp não configurado.",
             });
           }
-          const mediaId = await wa.uploadMedia(Buffer.from(signed.signedPdfBase64, "base64"), filename, "application/pdf");
-          await wa.sendDocument(patientPhone, mediaId, filename, caption);
+          await dbComplete.sendWhatsAppDocumentWithLog(
+            patientPhone,
+            Buffer.from(signed.signedPdfBase64, "base64"),
+            filename,
+            caption,
+            {
+              purpose: "signed_clinical_document",
+              patientId: targetPatientId,
+              documentType: applyDocumentType,
+              documentId: input.documentId,
+              createdBy: ctx.user.id,
+            },
+          );
           sentToWhatsApp = true;
         }
 

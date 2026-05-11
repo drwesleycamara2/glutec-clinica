@@ -21,7 +21,7 @@ import {
   parseStoredPatientAddress,
 } from "./lib/patient-normalization-safe";
 import { encryptSensitiveValue, maskStoredValue } from "./lib/secure-storage";
-import { createWhatsAppService } from "./whatsapp";
+import { createWhatsAppService, getWhatsAppConfigStatus } from "./whatsapp";
 import { DEFAULT_OPENING_HOURS_CONFIG, normalizeOpeningHoursConfig } from "../shared/schedule-hours";
 
 function unwrapRows<T = any>(result: any): T[] {
@@ -82,6 +82,7 @@ let ensureOptionalModuleTablesPromise: Promise<void> | null = null;
 let ensureAppointmentFlowSchemaPromise: Promise<void> | null = null;
 let ensureEmployeeRecordsSchemaPromise: Promise<void> | null = null;
 let ensureInventorySchemaPromise: Promise<void> | null = null;
+let ensureWhatsAppIntegrationSchemaPromise: Promise<void> | null = null;
 
 function clearTableColumnCache(tableName: string) {
   tableColumnCache.delete(tableName);
@@ -115,6 +116,48 @@ async function getTableColumns(tableName: string) {
   }
 
   return cached;
+}
+
+async function ensureWhatsAppIntegrationSchema(db: any) {
+  if (!ensureWhatsAppIntegrationSchemaPromise) {
+    ensureWhatsAppIntegrationSchemaPromise = (async () => {
+      await db.execute(sql.raw(`
+        CREATE TABLE IF NOT EXISTS whatsapp_message_logs (
+          id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+          provider VARCHAR(64) NOT NULL DEFAULT 'meta_cloud_api',
+          direction ENUM('outbound','inbound','status') NOT NULL,
+          purpose VARCHAR(96) NULL,
+          patientId INT NULL,
+          appointmentId INT NULL,
+          documentType VARCHAR(64) NULL,
+          documentId INT NULL,
+          phone VARCHAR(32) NULL,
+          messageType VARCHAR(32) NULL,
+          templateName VARCHAR(128) NULL,
+          content TEXT NULL,
+          providerMessageId VARCHAR(255) NULL,
+          status VARCHAR(64) NOT NULL DEFAULT 'pending',
+          rawPayload JSON NULL,
+          errorMessage TEXT NULL,
+          createdBy INT NULL,
+          createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          KEY idx_whatsapp_message_provider_id (providerMessageId),
+          KEY idx_whatsapp_message_patient (patientId),
+          KEY idx_whatsapp_message_appointment (appointmentId),
+          KEY idx_whatsapp_message_phone (phone),
+          KEY idx_whatsapp_message_created (createdAt)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `));
+    })();
+  }
+
+  try {
+    await ensureWhatsAppIntegrationSchemaPromise;
+  } catch (error) {
+    ensureWhatsAppIntegrationSchemaPromise = null;
+    throw error;
+  }
 }
 
 async function ensureAppointmentFlowSchema(db: any) {
@@ -461,6 +504,37 @@ function buildAppointmentReminderWhatsappMessage(params: {
   }
 
   return lines.join("\n");
+}
+
+function normalizeWhatsAppPhone(value?: string | null) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length <= 11) return `55${digits}`;
+  return digits;
+}
+
+function normalizeWhatsAppReply(value?: string | null) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function makeWhatsAppTextParameter(text: unknown) {
+  return {
+    type: "text",
+    text: String(text ?? "").slice(0, 1024),
+  };
+}
+
+function makeWhatsAppBodyComponent(...values: unknown[]) {
+  return values.length
+    ? [{
+        type: "body" as const,
+        parameters: values.map((value) => makeWhatsAppTextParameter(value)),
+      }]
+    : [];
 }
 
 type TussCatalogEntry = {
@@ -3411,7 +3485,19 @@ export async function sendPatientAnamnesisRequestViaWhatsApp(
     expiresInDays: options?.expiresInDays ?? 14,
   }, userId, baseUrl);
 
-  const result = await sendWhatsAppMessage(patient.phone, buildAnamnesisWhatsappMessage(patient.fullName, link.shareUrl));
+  const message = buildAnamnesisWhatsappMessage(patient.fullName, link.shareUrl);
+  const result = await sendWhatsAppTemplateOrText(
+    patient.phone,
+    "WHATSAPP_TEMPLATE_ANAMNESIS",
+    makeWhatsAppBodyComponent(patient.fullName, link.shareUrl),
+    message,
+    {
+      purpose: "anamnesis_request",
+      patientId,
+      createdBy: userId,
+      contentPreview: message,
+    },
+  );
   return {
     success: true,
     patientId,
@@ -3474,7 +3560,27 @@ export async function sendAppointmentReminderViaWhatsApp(
     anamnesisLink,
   });
 
-  const result = await sendWhatsAppMessage(appointment.patientPhone, message);
+  const date = new Date(appointment.scheduledAt);
+  const result = await sendWhatsAppTemplateOrText(
+    appointment.patientPhone,
+    "WHATSAPP_TEMPLATE_APPOINTMENT_REMINDER",
+    makeWhatsAppBodyComponent(
+      appointment.patientName,
+      date.toLocaleDateString("pt-BR"),
+      date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+      appointment.doctorName || "Clínica Glutée",
+      appointment.room || "-",
+      anamnesisLink || "-",
+    ),
+    message,
+    {
+      purpose: "appointment_reminder",
+      patientId: Number(appointment.patientId),
+      appointmentId,
+      createdBy: userId,
+      contentPreview: message,
+    },
+  );
   return {
     success: true,
     appointmentId,
@@ -5099,7 +5205,7 @@ export async function createExamTemplateNormalized(data: any, userId: number) {
 }
 
 // --- WHATSAPP -----------------------------------------------------------------
-export async function sendWhatsAppMessage(phoneNumber: string, message: string) {
+async function sendWhatsAppMessageLegacy(phoneNumber: string, message: string) {
   const service = await createWhatsAppService();
   if (!service) {
     throw new Error("A API oficial do WhatsApp ainda não foi configurada. Informe Token, Phone Number ID e Business Account ID da Meta.");
@@ -5112,6 +5218,398 @@ export async function sendWhatsAppMessage(phoneNumber: string, message: string) 
     messageId: result?.messages?.[0]?.id ?? `msg_${Date.now()}`,
     raw: result,
   };
+}
+
+type WhatsAppLogInput = {
+  direction: "outbound" | "inbound" | "status";
+  purpose?: string | null;
+  patientId?: number | null;
+  appointmentId?: number | null;
+  documentType?: string | null;
+  documentId?: number | null;
+  phone?: string | null;
+  messageType?: string | null;
+  templateName?: string | null;
+  content?: string | null;
+  providerMessageId?: string | null;
+  status?: string | null;
+  rawPayload?: unknown;
+  errorMessage?: string | null;
+  createdBy?: number | null;
+};
+
+async function createWhatsAppMessageLog(data: WhatsAppLogInput) {
+  const db = await getDb();
+  if (!db) return 0;
+  await ensureWhatsAppIntegrationSchema(db);
+
+  const result = await db.execute(sql`
+    insert into whatsapp_message_logs (
+      provider, direction, purpose, patientId, appointmentId, documentType,
+      documentId, phone, messageType, templateName, content, providerMessageId,
+      status, rawPayload, errorMessage, createdBy
+    ) values (
+      'meta_cloud_api',
+      ${data.direction},
+      ${data.purpose ?? null},
+      ${data.patientId ?? null},
+      ${data.appointmentId ?? null},
+      ${data.documentType ?? null},
+      ${data.documentId ?? null},
+      ${normalizeWhatsAppPhone(data.phone)},
+      ${data.messageType ?? null},
+      ${data.templateName ?? null},
+      ${data.content ?? null},
+      ${data.providerMessageId ?? null},
+      ${data.status ?? "pending"},
+      ${data.rawPayload === undefined ? null : JSON.stringify(data.rawPayload)},
+      ${data.errorMessage ?? null},
+      ${data.createdBy ?? null}
+    )
+  `);
+
+  return unwrapInsertId(result);
+}
+
+async function updateWhatsAppMessageLog(
+  logId: number | null | undefined,
+  data: Partial<Pick<WhatsAppLogInput, "status" | "providerMessageId" | "rawPayload" | "errorMessage">>,
+) {
+  const db = await getDb();
+  if (!db || !logId) return;
+  await ensureWhatsAppIntegrationSchema(db);
+
+  await db.execute(sql`
+    update whatsapp_message_logs
+    set
+      status = ${data.status ?? "sent"},
+      providerMessageId = ${data.providerMessageId ?? null},
+      rawPayload = ${data.rawPayload === undefined ? null : JSON.stringify(data.rawPayload)},
+      errorMessage = ${data.errorMessage ?? null},
+      updatedAt = NOW()
+    where id = ${logId}
+  `);
+}
+
+async function updateWhatsAppStatusByProviderId(providerMessageId: string, status: string, rawPayload: unknown) {
+  const db = await getDb();
+  if (!db || !providerMessageId) return;
+  await ensureWhatsAppIntegrationSchema(db);
+
+  await db.execute(sql`
+    update whatsapp_message_logs
+    set status = ${status}, rawPayload = ${JSON.stringify(rawPayload)}, updatedAt = NOW()
+    where providerMessageId = ${providerMessageId}
+  `);
+}
+
+export async function getWhatsAppIntegrationStatus() {
+  const status = getWhatsAppConfigStatus();
+  const db = await getDb();
+  if (!db) return { ...status, totals: null };
+  await ensureWhatsAppIntegrationSchema(db);
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select
+      count(*) as total,
+      sum(case when status in ('sent','delivered','read') then 1 else 0 end) as sent,
+      sum(case when status in ('failed','erro') then 1 else 0 end) as failed,
+      max(createdAt) as lastMessageAt
+    from whatsapp_message_logs
+  `));
+
+  return { ...status, totals: rows[0] ?? null };
+}
+
+export async function listWhatsAppMessages(limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  await ensureWhatsAppIntegrationSchema(db);
+
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 50, 200));
+  return unwrapRows<any>(await db.execute(sql`
+    select *
+    from whatsapp_message_logs
+    order by createdAt desc, id desc
+    limit ${safeLimit}
+  `));
+}
+
+export async function sendWhatsAppMessage(
+  phoneNumber: string,
+  message: string,
+  meta?: {
+    purpose?: string;
+    patientId?: number | null;
+    appointmentId?: number | null;
+    documentType?: string | null;
+    documentId?: number | null;
+    createdBy?: number | null;
+  },
+) {
+  const service = await createWhatsAppService();
+  if (!service) {
+    throw new Error("A API oficial do WhatsApp ainda não foi configurada. Informe Token, Phone Number ID e Business Account ID da Meta.");
+  }
+
+  const phone = normalizeWhatsAppPhone(phoneNumber);
+  const logId = await createWhatsAppMessageLog({
+    direction: "outbound",
+    purpose: meta?.purpose ?? "manual_text",
+    patientId: meta?.patientId ?? null,
+    appointmentId: meta?.appointmentId ?? null,
+    documentType: meta?.documentType ?? null,
+    documentId: meta?.documentId ?? null,
+    phone,
+    messageType: "text",
+    content: message,
+    createdBy: meta?.createdBy ?? null,
+  });
+
+  try {
+    const result = await service.sendTextMessage(phone, message);
+    const messageId = result?.messages?.[0]?.id ?? `msg_${Date.now()}`;
+    await updateWhatsAppMessageLog(logId, { status: "sent", providerMessageId: messageId, rawPayload: result });
+    return { success: true, provider: "meta_cloud_api", messageId, logId, raw: result };
+  } catch (error: any) {
+    await updateWhatsAppMessageLog(logId, { status: "failed", errorMessage: error?.message || "Falha no envio." });
+    throw error;
+  }
+}
+
+export async function sendWhatsAppTemplateMessage(
+  phoneNumber: string,
+  templateName: string,
+  components: Array<Record<string, any>> = [],
+  meta?: {
+    purpose?: string;
+    patientId?: number | null;
+    appointmentId?: number | null;
+    documentType?: string | null;
+    documentId?: number | null;
+    createdBy?: number | null;
+    contentPreview?: string | null;
+  },
+) {
+  const service = await createWhatsAppService();
+  if (!service) {
+    throw new Error("A API oficial do WhatsApp ainda não foi configurada. Informe Token, Phone Number ID e Business Account ID da Meta.");
+  }
+
+  const phone = normalizeWhatsAppPhone(phoneNumber);
+  const language = String(process.env.WHATSAPP_TEMPLATE_LANGUAGE || "pt_BR");
+  const logId = await createWhatsAppMessageLog({
+    direction: "outbound",
+    purpose: meta?.purpose ?? "template",
+    patientId: meta?.patientId ?? null,
+    appointmentId: meta?.appointmentId ?? null,
+    documentType: meta?.documentType ?? null,
+    documentId: meta?.documentId ?? null,
+    phone,
+    messageType: "template",
+    templateName,
+    content: meta?.contentPreview ?? null,
+    rawPayload: { templateName, language, components },
+    createdBy: meta?.createdBy ?? null,
+  });
+
+  try {
+    const result = await service.sendTemplateMessage(phone, templateName, language, components as any);
+    const messageId = result?.messages?.[0]?.id ?? `msg_${Date.now()}`;
+    await updateWhatsAppMessageLog(logId, { status: "sent", providerMessageId: messageId, rawPayload: result });
+    return { success: true, provider: "meta_cloud_api", messageId, logId, raw: result };
+  } catch (error: any) {
+    await updateWhatsAppMessageLog(logId, { status: "failed", errorMessage: error?.message || "Falha no envio." });
+    throw error;
+  }
+}
+
+export async function sendWhatsAppTemplateOrText(
+  phoneNumber: string,
+  templateEnvKey: string,
+  templateComponents: Array<Record<string, any>>,
+  fallbackText: string,
+  meta?: Parameters<typeof sendWhatsAppMessage>[2] & { contentPreview?: string | null },
+) {
+  const templateName = String(process.env[templateEnvKey] ?? "").trim();
+  if (templateName) {
+    return sendWhatsAppTemplateMessage(phoneNumber, templateName, templateComponents, {
+      ...meta,
+      contentPreview: meta?.contentPreview ?? fallbackText,
+    });
+  }
+
+  return sendWhatsAppMessage(phoneNumber, fallbackText, meta);
+}
+
+export async function sendWhatsAppDocumentWithLog(
+  phoneNumber: string,
+  buffer: Buffer,
+  filename: string,
+  caption: string,
+  meta?: {
+    purpose?: string;
+    patientId?: number | null;
+    appointmentId?: number | null;
+    documentType?: string | null;
+    documentId?: number | null;
+    createdBy?: number | null;
+  },
+) {
+  const service = await createWhatsAppService();
+  if (!service) {
+    throw new Error("A API oficial do WhatsApp ainda não foi configurada. Informe Token, Phone Number ID e Business Account ID da Meta.");
+  }
+
+  const phone = normalizeWhatsAppPhone(phoneNumber);
+  const logId = await createWhatsAppMessageLog({
+    direction: "outbound",
+    purpose: meta?.purpose ?? "clinical_document",
+    patientId: meta?.patientId ?? null,
+    appointmentId: meta?.appointmentId ?? null,
+    documentType: meta?.documentType ?? null,
+    documentId: meta?.documentId ?? null,
+    phone,
+    messageType: "document",
+    content: caption,
+    status: "uploading",
+    rawPayload: { filename },
+    createdBy: meta?.createdBy ?? null,
+  });
+
+  try {
+    const mediaId = await service.uploadMedia(buffer, filename, "application/pdf");
+    const result = await service.sendDocument(phone, mediaId, filename, caption);
+    const messageId = result?.messages?.[0]?.id ?? `msg_${Date.now()}`;
+    await updateWhatsAppMessageLog(logId, {
+      status: "sent",
+      providerMessageId: messageId,
+      rawPayload: { mediaId, result },
+    });
+    return { success: true, provider: "meta_cloud_api", messageId, logId, mediaId, raw: result };
+  } catch (error: any) {
+    await updateWhatsAppMessageLog(logId, { status: "failed", errorMessage: error?.message || "Falha no envio do documento." });
+    throw error;
+  }
+}
+
+export async function processWhatsAppWebhookPayload(payload: any) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureWhatsAppIntegrationSchema(db);
+
+  const entries = Array.isArray(payload?.entry) ? payload.entry : [];
+  const processed: Array<Record<string, any>> = [];
+
+  for (const entry of entries) {
+    const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+    for (const change of changes) {
+      const value = change?.value ?? {};
+      const statuses = Array.isArray(value?.statuses) ? value.statuses : [];
+      const messages = Array.isArray(value?.messages) ? value.messages : [];
+
+      for (const item of statuses) {
+        const providerMessageId = String(item?.id ?? "");
+        const status = String(item?.status ?? "status");
+        if (providerMessageId) {
+          await updateWhatsAppStatusByProviderId(providerMessageId, status, item);
+          await createWhatsAppMessageLog({
+            direction: "status",
+            phone: item?.recipient_id ?? null,
+            providerMessageId,
+            status,
+            rawPayload: item,
+          });
+          processed.push({ type: "status", providerMessageId, status });
+        }
+      }
+
+      for (const item of messages) {
+        const phone = normalizeWhatsAppPhone(item?.from);
+        const providerMessageId = String(item?.id ?? "");
+        const type = String(item?.type ?? "message");
+        const text =
+          item?.text?.body ??
+          item?.button?.text ??
+          item?.interactive?.button_reply?.title ??
+          item?.interactive?.list_reply?.title ??
+          "";
+
+        await createWhatsAppMessageLog({
+          direction: "inbound",
+          phone,
+          providerMessageId,
+          messageType: type,
+          content: String(text ?? ""),
+          status: "received",
+          rawPayload: item,
+        });
+
+        const appointmentResult = await applyWhatsAppAppointmentReply(phone, String(text ?? ""));
+        processed.push({ type: "message", phone, providerMessageId, appointment: appointmentResult });
+      }
+    }
+  }
+
+  return { success: true, processed };
+}
+
+async function applyWhatsAppAppointmentReply(phone: string, text: string) {
+  const normalized = normalizeWhatsAppReply(text);
+  if (!phone || !normalized) return { matched: false, reason: "empty" };
+
+  const isCancel =
+    normalized.includes("cancel") ||
+    normalized.includes("desmar") ||
+    normalized === "nao" ||
+    normalized === "n" ||
+    normalized.includes("nao posso");
+  const isConfirm =
+    normalized.includes("confirm") ||
+    normalized.includes("sim") ||
+    normalized === "s" ||
+    normalized.includes("estarei");
+
+  if (!isCancel && !isConfirm) {
+    return { matched: false, reason: "neutral_reply" };
+  }
+
+  const db = await getDb();
+  if (!db) return { matched: false, reason: "db_unavailable" };
+  await ensureAppointmentFlowSchema(db);
+
+  const phoneExpression = digitsOnlySql(sql.raw("p.phone"));
+  const phoneLocalDigits = phone.slice(-11);
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select a.id, a.status, a.patientId, p.fullName as patientName
+    from appointments a
+    inner join patients p on p.id = a.patientId
+    where (${phoneExpression} = ${phone} or right(${phoneExpression}, 11) = ${phoneLocalDigits})
+      and a.scheduledAt >= DATE_SUB(NOW(), INTERVAL 6 HOUR)
+      and a.status not in ('cancelada','concluida','falta')
+    order by a.scheduledAt asc, a.id asc
+    limit 1
+  `));
+
+  const appointment = rows[0];
+  if (!appointment) {
+    return { matched: false, reason: "no_future_appointment" };
+  }
+
+  if (isCancel) {
+    await updateAppointmentStatus(Number(appointment.id), {
+      status: "cancelada",
+      cancelledBy: "paciente",
+      note: `Cancelado automaticamente por resposta no WhatsApp: ${text}`,
+    });
+    return { matched: true, appointmentId: Number(appointment.id), status: "cancelada" };
+  }
+
+  await updateAppointmentStatus(Number(appointment.id), {
+    status: "confirmada",
+    note: `Confirmado automaticamente por resposta no WhatsApp: ${text}`,
+  });
+  return { matched: true, appointmentId: Number(appointment.id), status: "confirmada" };
 }
 
 // --- AI -----------------------------------------------------------------------
