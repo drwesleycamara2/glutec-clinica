@@ -95,7 +95,6 @@ interface ClinicalDocumentPdfOptions {
 }
 
 const CLINIC_LOGO_PATH = "/logo-glutee.png";
-const CLINIC_STAMP_PATH = "/clinical-print/carimbo-wesley.png";
 const CLINIC_ADDRESS = "Av. Marechal Castelo Branco, 282 - Morro do Ouro - Mogi Guaçu - SP";
 const CLINIC_PHONE = "(19) 99963-3913";
 const CLINIC_EMAIL = "contato@clinicaglutee.com.br";
@@ -209,13 +208,13 @@ const clinicalPrintCss = `
     color: #111827;
     font-family: Montserrat, Arial, sans-serif;
   }
-  .page.portrait { width: 794px; min-height: 1123px; padding: 64px 58px 116px 82px; }
+  .page.portrait { width: 794px; min-height: 1123px; padding: 52px 52px 104px 58px; }
   .page.landscape { width: 1123px; min-height: 794px; padding: 14px 18px; display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
   .gold-stripe {
     position: absolute;
     left: 0;
     top: 0;
-    width: 32px;
+    width: 26px;
     height: 100%;
     background: linear-gradient(180deg, #8a6526 0%, #f8dfa1 28%, #c79b38 56%, #7a561d 100%);
   }
@@ -238,26 +237,32 @@ const clinicalPrintCss = `
   .doctor-block { text-align: right; letter-spacing: 0; }
   .doctor-name { font-size: 25px; font-family: Georgia, 'Times New Roman', serif; font-style: italic; margin: 16px 0 8px; }
   .doctor-crm { font-size: 14px; font-weight: 600; letter-spacing: 3px; }
-  .document-title { margin: 116px 0 38px; text-align: center; font-size: 30px; font-weight: 800; letter-spacing: 0; text-transform: uppercase; }
-  .document-body { position: relative; z-index: 1; font-size: 20px; line-height: 1.55; text-align: justify; }
-  .document-body p { margin: 0 0 12px; }
-  .document-body ul, .document-body ol { margin: 8px 0 14px 24px; }
+  .document-title { margin: 82px 0 26px; text-align: center; font-size: 26px; font-weight: 800; letter-spacing: 0; text-transform: uppercase; }
+  .document-body { position: relative; z-index: 1; padding-bottom: 86px; font-size: 16px; line-height: 1.42; text-align: justify; }
+  .document-body p { margin: 0 0 8px; }
+  .document-body ul, .document-body ol { margin: 6px 0 10px 20px; padding-left: 12px; }
+  .document-body li { margin: 0 0 3px; }
+  .page.exam-doc .document-title { margin-top: 58px; margin-bottom: 18px; font-size: 23px; }
+  .page.exam-doc .document-body { padding-bottom: 80px; font-size: 13.2px; line-height: 1.28; text-align: left; }
+  .page.exam-doc .document-body p { margin-bottom: 5px; }
+  .page.exam-doc .document-body ul, .page.exam-doc .document-body ol { margin: 4px 0 7px 17px; padding-left: 10px; }
   .patient-line { margin: 34px 0 28px; display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: end; font-size: 22px; }
   .line { min-height: 1.25em; border-bottom: 1.6px solid #111; padding: 0 8px 2px; }
-  .signature-area { margin-top: 54px; text-align: center; }
-  .signature-line { width: 420px; margin: 0 auto 5px; border-top: 1.5px solid #111; }
-  .stamp { width: 5cm; height: auto; display: block; margin: 0 auto -10px; opacity: 0.92; mix-blend-mode: multiply; }
+  .signature-area { position: absolute; left: 118px; right: 78px; bottom: 106px; text-align: center; font-size: 13px; }
+  .signature-line { width: 360px; margin: 0 auto 5px; border-top: 1.5px solid #111; }
   .footer {
     position: absolute;
-    left: 78px;
-    right: 44px;
-    bottom: 26px;
+    left: 58px;
+    right: 42px;
+    bottom: 22px;
     display: grid;
     gap: 2px;
-    font-size: 15px;
+    border-top: 1px solid #eadfca;
+    padding-top: 8px;
+    font-size: 12px;
     color: #1f2937;
   }
-  .footer .script { font-family: Georgia, 'Times New Roman', serif; font-size: 26px; font-style: italic; margin-bottom: 2px; }
+  .footer .clinic { font-weight: 700; color: #111827; }
   .via-card {
     position: relative;
     overflow: hidden;
@@ -275,15 +280,14 @@ const clinicalPrintCss = `
   .rx-content { margin-top: 10px; font-size: 11.2px; line-height: 1.26; }
   .rx-content p { margin: 0 0 4px; }
   .rx-content ul, .rx-content ol { margin: 4px 0 6px 16px; padding-left: 8px; }
-  .via-signature { margin: 7px 0 0 auto; width: 210px; text-align: center; font-size: 10px; }
-  .via-signature .stamp { width: 5cm; margin-bottom: -13px; }
+  .via-signature { margin: 9px 0 0 auto; width: 210px; text-align: center; font-size: 10px; }
   .buyer-boxes { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .buyer-box { border: 1.5px solid #111; min-height: 92px; padding: 8px 10px; font-size: 10px; }
   .buyer-box h4 { margin: -10px -12px 10px; padding: 6px 8px; border-bottom: 1.5px solid #111; text-align: center; font-size: 13px; text-transform: uppercase; }
   .via-footer { margin-top: 6px; border-top: 1px solid #e8dcc4; padding-top: 5px; font-size: 9px; line-height: 1.25; color: #374151; }
   .single-rx { min-height: 1123px; }
   .single-rx .rx-content { margin-top: 56px; font-size: 18px; line-height: 1.65; }
-  .single-rx .signature-area { position: absolute; right: 58px; bottom: 138px; width: 300px; }
+  .single-rx .signature-area { position: absolute; right: 58px; bottom: 138px; left: auto; width: 300px; }
 `;
 
 async function generateDesignedPdf(options: DesignedPdfOptions): Promise<void> {
@@ -340,8 +344,7 @@ async function generateDesignedPdf(options: DesignedPdfOptions): Promise<void> {
 
     if (fitToSinglePage && imgHeight > pageHeight) {
       const scaledWidth = pageWidth * (pageHeight / imgHeight);
-      const x = (pageWidth - scaledWidth) / 2;
-      pdf.addImage(imgData, "PNG", x, 0, scaledWidth, pageHeight);
+      pdf.addImage(imgData, "PNG", 0, 0, scaledWidth, pageHeight);
       openPdfBlob(pdf.output("blob"));
       return;
     }
@@ -367,10 +370,8 @@ async function generateDesignedPdf(options: DesignedPdfOptions): Promise<void> {
 function renderFooter() {
   return `
     <div class="footer">
-      <div class="script">${DOCTOR_NAME} <span style="font-family: Montserrat, Arial, sans-serif; font-size: 14px; font-style: normal;">- Médico - ${DOCTOR_CRM}</span></div>
-      <div>Tel/WhatsApp: ${CLINIC_PHONE}</div>
-      <div>E-mail: ${CLINIC_EMAIL}</div>
-      <div>Instagram: ${CLINIC_INSTAGRAM}</div>
+      <div class="clinic">Clínica Glutée</div>
+      <div>Tel/WhatsApp: ${CLINIC_PHONE} · E-mail: ${CLINIC_EMAIL} · Instagram: ${CLINIC_INSTAGRAM}</div>
       <div>${CLINIC_ADDRESS}</div>
     </div>
   `;
@@ -384,6 +385,7 @@ function renderDocumentPage(options: ClinicalDocumentPdfOptions) {
     options.type === "exame" || options.type === "solicitacao_exames" ? "Solicitação de exames" :
     options.type === "laudo" ? "Laudo / relatório" :
     "Atestado médico";
+  const pageClass = options.type === "exame" || options.type === "solicitacao_exames" ? "page portrait exam-doc" : "page portrait";
 
   const content = compactClinicalContent(options.content)
     .replace(/\[NOME_PACIENTE\]|\{NOME_PACIENTE\}|\[PACIENTE\]|\{PACIENTE\}/g, escapeHtml(patient.name || ""))
@@ -391,7 +393,7 @@ function renderDocumentPage(options: ClinicalDocumentPdfOptions) {
     .replace(/\[DATA_ATUAL\]|\{DATA_ATUAL\}|\[DATA_CLINICA\]|\{DATA_CLINICA\}/g, date);
 
   return `
-    <div class="page portrait">
+    <div class="${pageClass}">
       <div class="gold-stripe"></div>
       <div class="gold-corner"></div>
       <div class="letterhead-header">
@@ -404,9 +406,8 @@ function renderDocumentPage(options: ClinicalDocumentPdfOptions) {
       <div class="document-title">${escapeHtml(options.title || label)}</div>
       <div class="document-body">${content}</div>
       <div class="signature-area">
-        <img class="stamp" src="${CLINIC_STAMP_PATH}" />
         <div class="signature-line"></div>
-        <div>Assinatura e carimbo do médico</div>
+        <div>Assinatura do profissional</div>
       </div>
       ${renderFooter()}
     </div>
@@ -433,9 +434,8 @@ function renderSinglePrescriptionPage(patientInput: ClinicalPdfPatient | string,
       <div class="rx-content">${content}</div>
       ${prescription?.observations ? `<div style="margin-top: 24px; font-size: 13px;"><strong>Observações:</strong> ${escapeHtml(prescription.observations)}</div>` : ""}
       <div class="signature-area">
-        <img class="stamp" src="${CLINIC_STAMP_PATH}" />
         <div class="signature-line"></div>
-        <div>Assinatura do médico</div>
+        <div>Assinatura do profissional</div>
       </div>
       ${renderFooter()}
     </div>
@@ -471,9 +471,8 @@ function renderCompactPrescriptionVia(patientInput: ClinicalPdfPatient | string,
       <div class="via-field"><strong>Data:</strong> ${formatClinicalDate(prescription?.createdAt)}</div>
       <div class="rx-content">${content}</div>
       <div class="via-signature">
-        <img class="stamp" src="${CLINIC_STAMP_PATH}" />
         <div class="signature-line" style="width: 190px;"></div>
-        <div>Assinatura do médico</div>
+        <div>Assinatura do profissional</div>
       </div>
       ${controleEspecial ? `
         <div class="buyer-boxes">

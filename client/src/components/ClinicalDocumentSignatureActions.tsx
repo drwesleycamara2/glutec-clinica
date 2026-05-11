@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SignatureCertillionButton, type CertillionDocType } from "@/components/SignatureCertillionButton";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
-import { Download, Loader2, PenTool, Printer, Send, ShieldCheck } from "lucide-react";
+import { Download, Loader2, Printer, Send, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 export type ClinicalDocumentActionType =
@@ -14,7 +14,8 @@ export type ClinicalDocumentActionType =
   | "atestado"
   | "declaracao"
   | "laudo"
-  | "solicitacao_exames";
+  | "solicitacao_exames"
+  | "orcamento";
 
 type SignatureMethod = "a1_pf" | "d4sign" | "certisign_vidaas_birdid";
 
@@ -51,18 +52,21 @@ function mapToD4SignType(type: ClinicalDocumentActionType) {
 function mapToCertillionType(type: ClinicalDocumentActionType): CertillionDocType {
   if (type === "prescricao") return "prescricao";
   if (type === "exame" || type === "solicitacao_exames") return "exame";
+  if (type === "orcamento") return "outro";
   return "atestado";
 }
 
 function mapToA1Type(type: ClinicalDocumentActionType) {
   if (type === "prescricao") return "prescricao";
-  if (type === "exame") return "exame";
+  if (type === "exame" || type === "solicitacao_exames") return "exame";
+  if (type === "orcamento") return "orcamento";
   return "documento_clinico";
 }
 
 function mapToWhatsAppType(type: ClinicalDocumentActionType) {
   if (type === "prescricao") return "prescricao" as const;
-  if (type === "exame") return "exame" as const;
+  if (type === "exame" || type === "solicitacao_exames") return "exame" as const;
+  if (type === "orcamento") return "orcamento" as const;
   return "atestado" as const;
 }
 
@@ -159,18 +163,21 @@ export function ClinicalDocumentSignatureActions({
     return false;
   };
 
-  const handleA1Sign = async (sendToWhatsApp: boolean) => {
+  const handleA1Sign = async (sendToWhatsApp: boolean, openAfterSign = false) => {
     if (!ensureSavedDocument()) return;
     if (!a1Status?.configured) {
       toast.error("Certificado A1 PF não configurado. Faça o upload em Perfil > Certificado Digital.");
       return;
     }
-    await signA1Mutation.mutateAsync({
+    const result = await signA1Mutation.mutateAsync({
       documentType: mapToA1Type(documentType),
       documentId: Number(documentId),
       sendToWhatsApp,
       phone: patientPhone || undefined,
     });
+    if (openAfterSign && result?.signedPdfBase64) {
+      openPdfBase64(result.signedPdfBase64, result.filename || printFileName);
+    }
   };
 
   const handleD4Sign = async (sendAfterSignature: boolean) => {
@@ -184,7 +191,7 @@ export function ClinicalDocumentSignatureActions({
     }
   };
 
-  const handleCertillionSigned = async (sendToWhatsApp: boolean) => {
+  const handleCertillionSigned = async (sendToWhatsApp: boolean, openAfterSign = false) => {
     setLocallySigned(true);
     await onSigned?.();
     if (sendToWhatsApp && canUseSavedDocument) {
@@ -194,15 +201,8 @@ export function ClinicalDocumentSignatureActions({
         phone: patientPhone || undefined,
       });
     }
-  };
-
-  const handleSign = () => {
-    if (method === "a1_pf") {
-      void handleA1Sign(false);
-      return;
-    }
-    if (method === "d4sign") {
-      void handleD4Sign(false);
+    if (openAfterSign) {
+      await onPrint?.();
     }
   };
 
@@ -213,6 +213,16 @@ export function ClinicalDocumentSignatureActions({
     }
     if (method === "d4sign") {
       void handleD4Sign(true);
+    }
+  };
+
+  const handleSignAndDownload = () => {
+    if (method === "a1_pf") {
+      void handleA1Sign(false, true);
+      return;
+    }
+    if (method === "d4sign") {
+      void handleD4Sign(false);
     }
   };
 
@@ -258,10 +268,10 @@ export function ClinicalDocumentSignatureActions({
               documentAlias={`${documentTitle || "Documento"} - ${patientName || "Paciente"}`}
               documentContent={documentContent || documentTitle || "Documento clínico"}
               signerCpf={signerCpf}
-              buttonLabel="Assinar"
+              buttonLabel="Assinar e baixar"
               buttonClassName={certillionButtonClass}
               disabled={!canUseSavedDocument || sendWhatsAppMutation.isPending}
-              onSigned={() => void handleCertillionSigned(false)}
+              onSigned={() => void handleCertillionSigned(false, true)}
             />
             <SignatureCertillionButton
               documentType={mapToCertillionType(documentType)}
@@ -283,7 +293,7 @@ export function ClinicalDocumentSignatureActions({
             onClick={() => toast.error("Cadastre o CPF do certificado em Perfil > Assinatura Digital.")}
           >
             <ShieldCheck className="h-4 w-4" />
-            Assinar
+            Assinar e baixar
           </Button>
         )
       ) : (
@@ -292,16 +302,16 @@ export function ClinicalDocumentSignatureActions({
             type="button"
             variant="outline"
             className={sharedButtonClass}
-            onClick={handleSign}
+            onClick={handleSignAndDownload}
             disabled={!canUseSavedDocument || signA1Mutation.isPending || signD4Mutation.isPending}
-            title={`Assinar com ${SIGNATURE_METHOD_LABELS[method]}`}
+            title={`Assinar com ${SIGNATURE_METHOD_LABELS[method]} e abrir/baixar`}
           >
             {signA1Mutation.isPending || signD4Mutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <PenTool className="h-4 w-4" />
+              <Download className="h-4 w-4" />
             )}
-            Assinar
+            Assinar e baixar
           </Button>
           <Button
             type="button"

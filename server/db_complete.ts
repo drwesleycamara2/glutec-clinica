@@ -6194,6 +6194,28 @@ export async function applyDocumentSignature(data: {
         signatureSessionId = ${data.sessionId ?? null}
       where id = ${data.documentId}
     `);
+  } else if (data.documentType === "orcamento") {
+    const columns = await getTableColumns("budgets");
+    const alterations: string[] = [];
+    if (!columns.has("signatureProvider")) alterations.push("ADD COLUMN `signatureProvider` VARCHAR(64) NULL");
+    if (!columns.has("signedByName")) alterations.push("ADD COLUMN `signedByName` VARCHAR(255) NULL");
+    if (!columns.has("signatureCms")) alterations.push("ADD COLUMN `signatureCms` TEXT NULL");
+    if (!columns.has("signatureValidationCode")) alterations.push("ADD COLUMN `signatureValidationCode` VARCHAR(128) NULL");
+    if (!columns.has("signedAt")) alterations.push("ADD COLUMN `signedAt` TIMESTAMP NULL");
+    if (!columns.has("signatureSessionId")) alterations.push("ADD COLUMN `signatureSessionId` INT NULL");
+    for (const alteration of alterations) {
+      await db.execute(sql.raw(`ALTER TABLE budgets ${alteration}`));
+    }
+    await db.execute(sql`
+      update budgets set
+        signatureProvider = ${data.provider},
+        signedByName = ${data.signedByName},
+        signatureCms = ${data.signatureCms},
+        signatureValidationCode = ${data.validationCode},
+        signedAt = ${now},
+        signatureSessionId = ${data.sessionId ?? null}
+      where id = ${data.documentId}
+    `);
   }
 
   return { success: true };

@@ -187,17 +187,36 @@ function buildSimplePdfBuffer(title: string, lines: string[]) {
     const normalized = String(line ?? "").replace(/\r/g, "");
     if (!normalized) return [""];
     return normalized.split("\n");
-  });
+  }).slice(0, 44);
 
   const contentLines = [
     "BT",
-    "/F1 14 Tf",
-    "50 800 Td",
-    "18 TL",
+    "/F1 13 Tf",
+    "50 790 Td",
+    "16 TL",
     `(${escapePdfText(title)}) Tj`,
     "T*",
-    "/F1 11 Tf",
+    "/F1 9.5 Tf",
     ...sanitizedLines.map((line) => `(${escapePdfText(line)}) Tj\nT*`),
+    "ET",
+    "0.75 w",
+    "150 122 m",
+    "445 122 l",
+    "S",
+    "BT",
+    "/F1 9 Tf",
+    "230 108 Td",
+    "(Assinatura do profissional) Tj",
+    "ET",
+    "BT",
+    "/F1 8 Tf",
+    "50 72 Td",
+    "11 TL",
+    "(Clinica Glutee) Tj",
+    "T*",
+    "(Tel/WhatsApp: \\(19\\) 99963-3913 - E-mail: contato@clinicaglutee.com.br - Instagram: @clinicaglutee) Tj",
+    "T*",
+    "(Av. Marechal Castelo Branco, 282 - Morro do Ouro - Mogi Guacu - SP) Tj",
     "ET",
   ].join("\n");
 
@@ -2948,7 +2967,7 @@ export const appRouter = router({
 
     signClinicalDocument: protectedProcedure
       .input(z.object({
-        documentType: z.enum(["prescricao", "exame", "documento_clinico"]),
+        documentType: z.enum(["prescricao", "exame", "documento_clinico", "orcamento"]),
         documentId: z.number().int().positive(),
         sendToWhatsApp: z.boolean().optional(),
         phone: z.string().optional(),
@@ -2966,7 +2985,7 @@ export const appRouter = router({
         let filename = `documento_${input.documentId}.pdf`;
         let caption = "Documento clínico assinado — Clínica Glutée";
         let patientPhone = input.phone ?? "";
-        let applyDocumentType: "prescricao" | "exame" | "atestado" = "atestado";
+        let applyDocumentType: "prescricao" | "exame" | "atestado" | "orcamento" = "atestado";
         let targetPatientId: number | null = null;
         const lines: string[] = [];
 
@@ -3025,6 +3044,34 @@ export const appRouter = router({
           }
           if (exam.observations) {
             lines.push("", `Observações: ${stripHtmlForSignature(exam.observations)}`);
+          }
+        } else if (input.documentType === "orcamento") {
+          const budget = await dbComplete.getBudgetById(input.documentId);
+          if (!budget) throw new TRPCError({ code: "NOT_FOUND", message: "Orçamento não encontrado." });
+          const patient = await dbComplete.getPatientById(Number(budget.patientId));
+          targetPatientId = Number(budget.patientId ?? 0) || null;
+          const patientName = budget.patientName || patient?.fullName || patient?.name || `Paciente ${budget.patientId}`;
+          patientPhone = patientPhone || budget.patientPhone || patient?.phone || "";
+          const total = (Number(budget.totalInCents ?? 0) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+          const itemLines = (budget.items ?? []).map((item: any) =>
+            `- ${item.procedureName ?? item.areaName ?? "Item"}: ${((Number(item.unitPriceInCents ?? 0) / 100) * Number(item.quantity ?? 1)).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`,
+          );
+          title = "ORÇAMENTO";
+          filename = `orcamento_${input.documentId}_assinado.pdf`;
+          caption = "Orçamento assinado — Clínica Glutée";
+          applyDocumentType = "orcamento";
+          lines.push(
+            `Paciente: ${patientName}`,
+            `Data: ${new Date(budget.date ?? budget.createdAt ?? Date.now()).toLocaleDateString("pt-BR")}`,
+            `Profissional: ${ctx.user.name || ctx.user.email}`,
+            "",
+            "Procedimentos:",
+            ...itemLines,
+            "",
+            `Total: ${total}`,
+          );
+          if (budget.notes) {
+            lines.push("", `Observações: ${stripHtmlForSignature(budget.notes)}`);
           }
         } else {
           const document = await dbComplete.getPatientDocumentById(input.documentId);

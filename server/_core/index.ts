@@ -110,24 +110,23 @@ function renderClinicalDocumentHtml(document: any) {
     @page { size: A4 portrait; margin: 0; }
     * { box-sizing: border-box; }
     body { margin: 0; background: #f4efe4; font-family: Montserrat, Arial, sans-serif; color: #111827; }
-    .sheet { position: relative; width: 210mm; min-height: 297mm; margin: 0 auto; padding: 18mm 16mm 34mm 22mm; overflow: hidden; background: #fff; }
-    .stripe { position: absolute; left: 0; top: 0; width: 9mm; height: 100%; background: linear-gradient(180deg, #8a6526, #f8dfa1 28%, #c79b38 56%, #7a561d); }
+    .sheet { position: relative; width: 210mm; min-height: 297mm; margin: 0 auto; padding: 16mm 14mm 32mm 16mm; overflow: hidden; background: #fff; }
+    .stripe { position: absolute; left: 0; top: 0; width: 7mm; height: 100%; background: linear-gradient(180deg, #8a6526, #f8dfa1 28%, #c79b38 56%, #7a561d); }
     .curve { position: absolute; left: -45mm; top: -55mm; width: 235mm; height: 98mm; background: radial-gradient(circle at 48% 52%, rgba(255,255,255,0.98) 0 46%, rgba(255,255,255,0) 47%), linear-gradient(110deg, #a77920, #f7d875 42%, #b98222 65%, #fff0b6); opacity: .95; border-radius: 0 0 85% 0; }
     header { position: relative; z-index: 1; display: flex; justify-content: space-between; gap: 18mm; align-items: flex-start; }
     .logo { width: 46mm; height: auto; }
     .doctor { text-align: right; padding-top: 4mm; }
     .doctor .name { font-family: Georgia, 'Times New Roman', serif; font-size: 20pt; font-style: italic; }
     .doctor .crm { margin-top: 2mm; font-size: 10pt; font-weight: 700; letter-spacing: 2px; }
-    h1 { position: relative; z-index: 1; margin: 34mm 0 12mm; text-align: center; text-transform: uppercase; font-size: 22pt; }
-    .content { position: relative; z-index: 1; font-size: 14pt; line-height: 1.55; text-align: justify; }
-    .content p { margin: 0 0 4mm; }
-    .content ul, .content ol { margin: 2mm 0 4mm 7mm; }
+    h1 { position: relative; z-index: 1; margin: 24mm 0 9mm; text-align: center; text-transform: uppercase; font-size: 19pt; }
+    .content { position: relative; z-index: 1; font-size: 11.5pt; line-height: 1.36; text-align: justify; }
+    .content p { margin: 0 0 2.2mm; }
+    .content ul, .content ol { margin: 1.5mm 0 3mm 6mm; }
     .meta { font-size: 11pt; color: #374151; }
-    .signature { margin: 22mm auto 0; width: 92mm; text-align: center; font-size: 11pt; }
-    .stamp { width: 50mm; max-height: 28mm; object-fit: contain; display: block; margin: 0 auto -4mm; opacity: .92; mix-blend-mode: multiply; }
+    .signature { position: absolute; left: 52mm; right: 25mm; bottom: 31mm; text-align: center; font-size: 10pt; }
     .line { border-top: 1.4px solid #111; margin: 0 0 2mm; }
-    footer { position: absolute; left: 22mm; right: 14mm; bottom: 7mm; font-size: 10pt; line-height: 1.25; color: #1f2937; }
-    footer .script { font-family: Georgia, 'Times New Roman', serif; font-size: 17pt; font-style: italic; }
+    footer { position: absolute; left: 16mm; right: 14mm; bottom: 7mm; border-top: 1px solid #eadfca; padding-top: 2mm; font-size: 8.8pt; line-height: 1.25; color: #1f2937; }
+    footer .clinic { font-weight: 700; color: #111827; }
     .actions { position: fixed; right: 18px; top: 18px; display: flex; gap: 8px; }
     .actions button { border: 1px solid #c79b38; border-radius: 8px; background: #fff8e5; padding: 8px 12px; cursor: pointer; font-weight: 700; }
     @media print {
@@ -155,15 +154,12 @@ function renderClinicalDocumentHtml(document: any) {
       ${content}
     </section>
     <section class="signature">
-      <img class="stamp" src="/clinical-print/carimbo-wesley.png" alt="Carimbo médico" />
       <div class="line"></div>
-      <div>Assinatura e carimbo do médico</div>
+      <div>Assinatura do profissional</div>
     </section>
     <footer>
-      <div class="script">Dr. Wésley Câmara <span style="font-family: Montserrat, Arial, sans-serif; font-size: 10pt; font-style: normal;">- Médico - CRM-SP: 174868</span></div>
-      <div>Tel/WhatsApp: (19) 99963-3913</div>
-      <div>E-mail: contato@clinicaglutee.com.br</div>
-      <div>Instagram: @clinicaglutee</div>
+      <div class="clinic">Clínica Glutée</div>
+      <div>Tel/WhatsApp: (19) 99963-3913 · E-mail: contato@clinicaglutee.com.br · Instagram: @clinicaglutee</div>
       <div>Av. Marechal Castelo Branco, 282 - Morro do Ouro - Mogi Guaçu - SP</div>
     </footer>
   </main>

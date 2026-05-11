@@ -20,6 +20,9 @@ import {
 } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
 import { patientDisplayName } from "@/lib/patientDisplay";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { ClinicalDocumentSignatureActions } from "@/components/ClinicalDocumentSignatureActions";
+import { exportClinicalDocumentPdf } from "@/components/PdfExporter";
 import {
   Calculator,
   Check,
@@ -116,6 +119,7 @@ function buildPaymentLabel(method: string, details?: string | null) {
 }
 
 export default function Orcamentos() {
+  const { user } = useAuth();
   const { data: budgetsList, isLoading: loadingBudgets, refetch } =
     trpc.budgets.list.useQuery(undefined as any);
   const { data: procedures } = trpc.catalog.listProcedures.useQuery();
@@ -410,6 +414,32 @@ export default function Orcamentos() {
     );
 
     window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+  }
+
+  async function printBudget(budget: any) {
+    const itemRows = Array.isArray(budget.items)
+      ? budget.items.map((item: any) => {
+          const subtotal = Number(item.unitPriceInCents || 0) * Number(item.quantity || 1);
+          return `<li><strong>${item.procedureName || "Procedimento"}</strong>${item.areaName ? ` - ${item.areaName}` : ""}: ${formatCurrency(subtotal)}</li>`;
+        }).join("")
+      : "";
+    const selectedBudgetPatient = patients?.find((patient: any) => Number(patient.id) === Number(budget.patientId));
+
+    await exportClinicalDocumentPdf({
+      filename: `orcamento_${budget.id}.pdf`,
+      type: "laudo",
+      title: `Orçamento #${budget.id}`,
+      patient: selectedBudgetPatient ?? budget.patientName ?? "Paciente",
+      createdAt: budget.createdAt ?? budget.date,
+      content: `
+        <p><strong>Paciente:</strong> ${budget.patientName || ""}</p>
+        <p><strong>Data:</strong> ${budget.date ? new Date(`${budget.date}T12:00:00`).toLocaleDateString("pt-BR") : new Date(budget.createdAt ?? Date.now()).toLocaleDateString("pt-BR")}</p>
+        <p><strong>Procedimentos:</strong></p>
+        <ul>${itemRows}</ul>
+        <p><strong>Total:</strong> ${formatCurrency(Number(budget.totalInCents || 0))}</p>
+        ${budget.notes ? `<p><strong>Observações:</strong> ${budget.notes}</p>` : ""}
+      `,
+    });
   }
 
   return (
@@ -995,6 +1025,25 @@ export default function Orcamentos() {
                         documentId={budget.id}
                         defaultPhone={budget.patientPhone ?? ""}
                         label="Enviar Orçamento via WhatsApp"
+                      />
+
+                      <ClinicalDocumentSignatureActions
+                        documentType="orcamento"
+                        documentId={budget.id}
+                        documentTitle={`Orçamento #${budget.id}`}
+                        documentContent={JSON.stringify({ items: budget.items ?? [], total: budget.totalInCents, notes: budget.notes ?? "" })}
+                        patientName={budget.patientName ?? ""}
+                        patientPhone={budget.patientPhone ?? ""}
+                        signerName={(user as any)?.name ?? ""}
+                        signerCpf={(user as any)?.cloudSignatureCpf ?? ""}
+                        isSigned={Boolean(budget.signedAt || budget.signatureValidationCode)}
+                        signedAt={budget.signedAt}
+                        signatureProvider={budget.signatureProvider}
+                        signatureValidationCode={budget.signatureValidationCode}
+                        onPrint={() => printBudget(budget)}
+                        onSigned={async () => {
+                          await refetch();
+                        }}
                       />
 
                       {budget.status === "enviado" ? (

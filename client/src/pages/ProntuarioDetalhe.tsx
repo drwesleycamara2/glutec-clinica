@@ -2568,6 +2568,7 @@ function ExamesTab({ patientId }: { patientId: number }) {
 }
 
 function ExamesWorkspaceTab({ patientId, patient }: { patientId: number; patient?: any }) {
+  const { user } = useAuth();
   const utils = trpc.useUtils();
   const { data: exams, isLoading } = trpc.examRequests.getByPatient.useQuery({ patientId });
   const { data: templates } = trpc.examRequests.listTemplates.useQuery();
@@ -2576,16 +2577,19 @@ function ExamesWorkspaceTab({ patientId, patient }: { patientId: number; patient
   const [content, setContent] = useState("");
   const [templateSearch, setTemplateSearch] = useState("");
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+  const [savedDraftExam, setSavedDraftExam] = useState<any | null>(null);
 
   function appendContent(value?: string | null) {
     const next = String(value ?? "").trim();
     if (!next) return;
+    setSavedDraftExam(null);
     setContent((current) => current.trim() ? `${current}<p><br></p>${next}` : next);
   }
 
   const createExamMutation = trpc.examRequests.create.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (createdExam: any) => {
       toast.success("Pedido de exames salvo no prontuário.");
+      setSavedDraftExam(createdExam);
       setContent("");
       setClinicalIndication("");
       await utils.examRequests.getByPatient.invalidate({ patientId });
@@ -2756,14 +2760,17 @@ function ExamesWorkspaceTab({ patientId, patient }: { patientId: number; patient
                 </div>
                 <RichTextEditor
                   value={content}
-                  onChange={setContent}
+                  onChange={(value) => {
+                    setSavedDraftExam(null);
+                    setContent(value);
+                  }}
                   placeholder="Digite ou dite os exames solicitados, preparo e observações clínicas..."
                   minHeight="340px"
                 />
               </div>
 
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setContent("")}>
+                <Button type="button" variant="outline" onClick={() => { setContent(""); setSavedDraftExam(null); }}>
                   Limpar
                 </Button>
                 <Button type="button" onClick={saveExamRequest} disabled={createExamMutation.isPending}>
@@ -2771,6 +2778,33 @@ function ExamesWorkspaceTab({ patientId, patient }: { patientId: number; patient
                   Salvar pedido
                 </Button>
               </div>
+
+              <ClinicalDocumentSignatureActions
+                documentType="exame"
+                documentId={savedDraftExam?.id ?? null}
+                documentTitle={savedDraftExam?.id ? `Pedido de exames #${savedDraftExam.id}` : "Pedido de exames"}
+                documentContent={savedDraftExam?.content || content}
+                patientName={patient?.fullName || patient?.name || `Paciente #${patientId}`}
+                patientPhone={patient?.phone || ""}
+                signerName={(user as any)?.name ?? ""}
+                signerCpf={(user as any)?.cloudSignatureCpf ?? ""}
+                isSigned={Boolean(savedDraftExam?.signedAt || savedDraftExam?.signatureValidationCode)}
+                signedAt={savedDraftExam?.signedAt}
+                signatureProvider={savedDraftExam?.signatureProvider}
+                signatureValidationCode={savedDraftExam?.signatureValidationCode}
+                onPrint={() => savedDraftExam ? printSavedExam(savedDraftExam) : printDraft()}
+                onSigned={async () => {
+                  const updated = await utils.examRequests.getByPatient.fetch({ patientId });
+                  const current = (updated ?? []).find((item: any) => Number(item.id) === Number(savedDraftExam?.id));
+                  if (current) setSavedDraftExam(current);
+                  await utils.examRequests.getByPatient.invalidate({ patientId });
+                }}
+              />
+              {!savedDraftExam?.id ? (
+                <p className="text-xs text-muted-foreground">
+                  Salve o pedido para liberar "Assinar e enviar" e "Assinar e baixar".
+                </p>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -2829,12 +2863,32 @@ function ExamesWorkspaceTab({ patientId, patient }: { patientId: number; patient
                       <span className="text-xs text-muted-foreground">
                         {exam.createdAt ? new Date(exam.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "-"}
                       </span>
-                      <Button type="button" size="sm" variant="outline" onClick={() => void printSavedExam(exam)}>
-                        <Printer className="mr-1.5 h-3.5 w-3.5" />
-                        Imprimir
-                      </Button>
                     </div>
                   </div>
+                  <ClinicalDocumentSignatureActions
+                    documentType="exame"
+                    documentId={exam.id}
+                    documentTitle={`Pedido de exames #${exam.id}`}
+                    documentContent={exam.content || JSON.stringify(exam.exams ?? [])}
+                    patientName={patient?.fullName || patient?.name || `Paciente #${patientId}`}
+                    patientPhone={patient?.phone || exam.patientPhone || ""}
+                    signerName={(user as any)?.name ?? ""}
+                    signerCpf={(user as any)?.cloudSignatureCpf ?? ""}
+                    isSigned={Boolean(exam.signedAt || exam.signatureValidationCode)}
+                    signedAt={exam.signedAt}
+                    signatureProvider={exam.signatureProvider}
+                    signatureValidationCode={exam.signatureValidationCode}
+                    onPrint={() => printSavedExam(exam)}
+                    onSigned={async () => {
+                      if (Number(savedDraftExam?.id) === Number(exam.id)) {
+                        const updated = await utils.examRequests.getByPatient.fetch({ patientId });
+                        const current = (updated ?? []).find((item: any) => Number(item.id) === Number(exam.id));
+                        if (current) setSavedDraftExam(current);
+                      }
+                      await utils.examRequests.getByPatient.invalidate({ patientId });
+                    }}
+                    className="mb-3"
+                  />
                   {exam.content ? (
                     <div
                       className="rounded-lg border border-border/50 bg-muted/30 p-3 text-sm leading-relaxed"
