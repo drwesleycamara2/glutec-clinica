@@ -81,6 +81,7 @@ let ensureCloudSignatureUserColumnsPromise: Promise<void> | null = null;
 let ensureOptionalModuleTablesPromise: Promise<void> | null = null;
 let ensureAppointmentFlowSchemaPromise: Promise<void> | null = null;
 let ensureEmployeeRecordsSchemaPromise: Promise<void> | null = null;
+let ensureInventorySchemaPromise: Promise<void> | null = null;
 
 function clearTableColumnCache(tableName: string) {
   tableColumnCache.delete(tableName);
@@ -178,6 +179,114 @@ async function ensurePrescriptionSchema(db: any) {
     await ensurePrescriptionSchemaPromise;
   } catch (error) {
     ensurePrescriptionSchemaPromise = null;
+    throw error;
+  }
+}
+
+async function ensureInventorySchema(db: any) {
+  if (!ensureInventorySchemaPromise) {
+    ensureInventorySchemaPromise = (async () => {
+      await ensureOptionalModuleTables(db);
+
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS inventory_categories (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(128) NOT NULL, description TEXT NULL, active TINYINT(1) NOT NULL DEFAULT 1, createdBy INT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uniq_inventory_categories_name (name), KEY idx_inventory_categories_active (active)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS inventory_suppliers (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(256) NOT NULL, documentNumber VARCHAR(32) NULL, contactName VARCHAR(128) NULL, phone VARCHAR(64) NULL, email VARCHAR(160) NULL, address TEXT NULL, notes TEXT NULL, active TINYINT(1) NOT NULL DEFAULT 1, createdBy INT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, KEY idx_inventory_suppliers_name (name), KEY idx_inventory_suppliers_active (active)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS inventory_locations (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(160) NOT NULL, type VARCHAR(64) NOT NULL DEFAULT 'estoque', description TEXT NULL, active TINYINT(1) NOT NULL DEFAULT 1, allowsStock TINYINT(1) NOT NULL DEFAULT 1, requiresTemperatureControl TINYINT(1) NOT NULL DEFAULT 0, temperatureMin DECIMAL(6,2) NULL, temperatureMax DECIMAL(6,2) NULL, responsibleUserId INT NULL, parentLocationId INT NULL, createdBy INT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uniq_inventory_locations_name (name), KEY idx_inventory_locations_active (active)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS inventory_lots (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, productId INT NOT NULL, lotNumber VARCHAR(128) NOT NULL, expirationDate DATE NULL, manufactureDate DATE NULL, supplierId INT NULL, invoiceNumber VARCHAR(96) NULL, receivedAt DATE NULL, quantityReceived DECIMAL(12,3) NOT NULL DEFAULT 0, unitCostInCents INT NULL, status ENUM('disponivel','quarentena','bloqueado','vencido','descartado','esgotado') NOT NULL DEFAULT 'disponivel', blockReason TEXT NULL, notes TEXT NULL, createdBy INT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uniq_inventory_lot_product_number (productId, lotNumber), KEY idx_inventory_lots_product (productId), KEY idx_inventory_lots_status (status), KEY idx_inventory_lots_expiration (expirationDate)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS inventory_balances (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, productId INT NOT NULL, lotId INT NULL, locationId INT NOT NULL, quantityAvailable DECIMAL(12,3) NOT NULL DEFAULT 0, quantityReserved DECIMAL(12,3) NOT NULL DEFAULT 0, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uniq_inventory_balance (productId, lotId, locationId), KEY idx_inventory_balances_product (productId), KEY idx_inventory_balances_location (locationId)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS inventory_audit_logs (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, actorUserId INT NULL, action VARCHAR(96) NOT NULL, entityType VARCHAR(96) NOT NULL, entityId INT NULL, beforeJson JSON NULL, afterJson JSON NULL, reason TEXT NULL, ipAddress VARCHAR(96) NULL, userAgent TEXT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, KEY idx_inventory_audit_actor (actorUserId), KEY idx_inventory_audit_entity (entityType, entityId), KEY idx_inventory_audit_created (createdAt)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS inventory_purchase_orders (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, supplierId INT NULL, status ENUM('rascunho','enviado','recebido','cancelado') NOT NULL DEFAULT 'rascunho', expectedAt DATE NULL, notes TEXT NULL, createdBy INT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, KEY idx_inventory_po_supplier (supplierId), KEY idx_inventory_po_status (status)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS inventory_purchase_order_items (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, purchaseOrderId INT NOT NULL, productId INT NOT NULL, quantity DECIMAL(12,3) NOT NULL, unitCostInCents INT NULL, notes TEXT NULL, KEY idx_inventory_po_items_order (purchaseOrderId), KEY idx_inventory_po_items_product (productId)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+
+      const productColumns = await getTableColumns("inventory_products");
+      const productAlterations: string[] = [];
+      const addProductColumn = (name: string, ddl: string) => {
+        if (!productColumns.has(name)) productAlterations.push(`ADD COLUMN ${ddl}`);
+      };
+      addProductColumn("technicalName", "`technicalName` VARCHAR(256) NULL");
+      addProductColumn("brand", "`brand` VARCHAR(128) NULL");
+      addProductColumn("manufacturer", "`manufacturer` VARCHAR(160) NULL");
+      addProductColumn("size", "`size` VARCHAR(96) NULL");
+      addProductColumn("barcode", "`barcode` VARCHAR(96) NULL");
+      addProductColumn("presentation", "`presentation` VARCHAR(160) NULL");
+      addProductColumn("unitPurchase", "`unitPurchase` VARCHAR(48) NULL");
+      addProductColumn("conversionFactor", "`conversionFactor` DECIMAL(12,3) NOT NULL DEFAULT 1");
+      addProductColumn("supplierId", "`supplierId` INT NULL");
+      addProductColumn("allowsProcedureUse", "`allowsProcedureUse` TINYINT(1) NOT NULL DEFAULT 1");
+      addProductColumn("controlsLot", "`controlsLot` TINYINT(1) NOT NULL DEFAULT 0");
+      addProductColumn("controlsExpiration", "`controlsExpiration` TINYINT(1) NOT NULL DEFAULT 0");
+      addProductColumn("requiresTemperatureControl", "`requiresTemperatureControl` TINYINT(1) NOT NULL DEFAULT 0");
+      addProductColumn("temperatureMin", "`temperatureMin` DECIMAL(6,2) NULL");
+      addProductColumn("temperatureMax", "`temperatureMax` DECIMAL(6,2) NULL");
+      addProductColumn("controlledMedication", "`controlledMedication` TINYINT(1) NOT NULL DEFAULT 0");
+      addProductColumn("highCost", "`highCost` TINYINT(1) NOT NULL DEFAULT 0");
+      addProductColumn("criticalCare", "`criticalCare` TINYINT(1) NOT NULL DEFAULT 0");
+      addProductColumn("anvisaRegistry", "`anvisaRegistry` VARCHAR(96) NULL");
+      addProductColumn("reorderPoint", "`reorderPoint` INT NULL");
+      addProductColumn("maximumStock", "`maximumStock` INT NULL");
+      addProductColumn("defaultLocationId", "`defaultLocationId` INT NULL");
+      addProductColumn("expirationDate", "`expirationDate` DATE NULL");
+      addProductColumn("notes", "`notes` TEXT NULL");
+      addProductColumn("updatedBy", "`updatedBy` INT NULL");
+      if (productAlterations.length > 0) {
+        await db.execute(sql.raw(`ALTER TABLE inventory_products ${productAlterations.join(", ")}`));
+        clearTableColumnCache("inventory_products");
+      }
+
+      const movementColumns = await getTableColumns("inventory_movements");
+      const movementAlterations: string[] = [];
+      if (!String(movementColumns.get("type") || "").includes("transferencia")) {
+        movementAlterations.push("MODIFY COLUMN `type` ENUM('entrada','saida','ajuste','transferencia','estorno','entrada_compra','descarte','reserva_procedimento','saida_procedimento') NOT NULL");
+      }
+      const addMovementColumn = (name: string, ddl: string) => {
+        if (!movementColumns.has(name)) movementAlterations.push(`ADD COLUMN ${ddl}`);
+      };
+      addMovementColumn("lotId", "`lotId` INT NULL");
+      addMovementColumn("locationFromId", "`locationFromId` INT NULL");
+      addMovementColumn("locationToId", "`locationToId` INT NULL");
+      addMovementColumn("unitCostInCents", "`unitCostInCents` INT NULL");
+      addMovementColumn("previousStock", "`previousStock` DECIMAL(12,3) NULL");
+      addMovementColumn("newStock", "`newStock` DECIMAL(12,3) NULL");
+      addMovementColumn("sourceModule", "`sourceModule` VARCHAR(64) NOT NULL DEFAULT 'ESTOQUE'");
+      addMovementColumn("justification", "`justification` TEXT NULL");
+      addMovementColumn("reversedMovementId", "`reversedMovementId` INT NULL");
+      addMovementColumn("metadataJson", "`metadataJson` JSON NULL");
+      if (movementAlterations.length > 0) {
+        await db.execute(sql.raw(`ALTER TABLE inventory_movements ${movementAlterations.join(", ")}`));
+        clearTableColumnCache("inventory_movements");
+      }
+
+      const seedCategories = [
+        "Materiais descartáveis", "Medicamentos", "Medicamentos controlados", "Materiais estéreis",
+        "Produtos para procedimento", "Fios/suturas", "Curativos", "Injetáveis", "EPIs",
+        "Saneantes e limpeza", "Materiais administrativos", "Equipamentos pequenos", "Produtos consignados",
+        "Quarentena/descarte", "Outros",
+      ];
+      for (const name of seedCategories) {
+        await db.execute(sql`insert into inventory_categories (name, active) values (${name}, 1) on duplicate key update active = active`);
+      }
+
+      const seedLocations = [
+        ["Almoxarifado central", "estoque"],
+        ["Sala de procedimento 1", "procedimento"],
+        ["Sala de procedimento 2", "procedimento"],
+        ["Enfermagem", "assistencial"],
+        ["Farmácia/medicamentos", "medicamentos"],
+        ["Geladeira principal", "refrigerado"],
+        ["Quarentena", "quarentena"],
+        ["Expurgo/descarte", "descarte"],
+        ["Materiais esterilizados", "esterilizados"],
+        ["Consignado", "consignado"],
+      ];
+      for (const [name, type] of seedLocations) {
+        await db.execute(sql`insert into inventory_locations (name, type, active, allowsStock) values (${name}, ${type}, 1, 1) on duplicate key update active = active`);
+      }
+    })();
+  }
+
+  try {
+    await ensureInventorySchemaPromise;
+  } catch (error) {
+    ensureInventorySchemaPromise = null;
     throw error;
   }
 }
@@ -2160,17 +2269,131 @@ export async function upsertProcedurePrice(data: any) {
 }
 
 // --- INVENTORY ---------------------------------------------------------------
-export async function listInventoryProducts() {
+function normalizeInventoryQuantity(value: unknown) {
+  const quantity = Number(value ?? 0);
+  return Number.isFinite(quantity) ? quantity : 0;
+}
+
+async function getDefaultInventoryLocationId(db: any) {
+  await ensureInventorySchema(db);
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select id from inventory_locations
+    where active = 1 and allowsStock = 1
+    order by case when name = 'Almoxarifado central' then 0 else 1 end, id asc
+    limit 1
+  `));
+  return Number(rows[0]?.id ?? 1);
+}
+
+async function getInventoryProductById(productId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  await ensureInventorySchema(db);
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from inventory_products
+    where id = ${productId}
+    limit 1
+  `));
+  return rows[0] ?? null;
+}
+
+async function createInventoryAuditLog(db: any, data: any) {
+  await db.execute(sql`
+    insert into inventory_audit_logs
+      (actorUserId, action, entityType, entityId, beforeJson, afterJson, reason)
+    values
+      (${data.actorUserId ?? null}, ${data.action}, ${data.entityType}, ${data.entityId ?? null},
+       ${data.beforeJson ? JSON.stringify(data.beforeJson) : null},
+       ${data.afterJson ? JSON.stringify(data.afterJson) : null},
+       ${data.reason ?? null})
+  `);
+}
+
+async function adjustInventoryBalance(db: any, data: { productId: number; lotId?: number | null; locationId: number; delta: number }) {
+  const productId = Number(data.productId);
+  const lotId = data.lotId ? Number(data.lotId) : null;
+  const locationId = Number(data.locationId);
+  const current = unwrapRows<any>(await db.execute(sql`
+    select *
+    from inventory_balances
+    where productId = ${productId}
+      and ${lotId === null ? sql`lotId is null` : sql`lotId = ${lotId}`}
+      and locationId = ${locationId}
+    limit 1
+  `))[0];
+  const previous = normalizeInventoryQuantity(current?.quantityAvailable);
+  const next = previous + normalizeInventoryQuantity(data.delta);
+  if (next < -0.0001) {
+    throw new Error("Movimentação bloqueada: saldo insuficiente neste local/lote.");
+  }
+  if (current) {
+    await db.execute(sql`
+      update inventory_balances
+      set quantityAvailable = ${next}, updatedAt = now()
+      where id = ${Number(current.id)}
+    `);
+  } else {
+    await db.execute(sql`
+      insert into inventory_balances (productId, lotId, locationId, quantityAvailable, quantityReserved)
+      values (${productId}, ${lotId}, ${locationId}, ${next}, 0)
+    `);
+  }
+  return { previous, next };
+}
+
+export async function listInventoryProducts(filters: any = {}) {
   const db = await getDb();
   if (!db) return [];
 
-  await ensureOptionalModuleTables(db);
+  await ensureInventorySchema(db);
+
+  const whereParts = [sql`p.active = 1`];
+  const search = String(filters.search ?? "").trim();
+  if (search) {
+    const q = `%${search}%`;
+    whereParts.push(sql`(p.name like ${q} or coalesce(p.sku, '') like ${q} or coalesce(p.barcode, '') like ${q} or coalesce(p.brand, '') like ${q} or coalesce(p.supplierName, '') like ${q})`);
+  }
+  if (filters.category && filters.category !== "all") {
+    whereParts.push(sql`p.category = ${filters.category}`);
+  }
+  if (filters.status === "low") {
+    whereParts.push(sql`coalesce(b.quantityAvailable, p.currentStock, 0) <= coalesce(p.minimumStock, 0)`);
+  } else if (filters.status === "expired") {
+    whereParts.push(sql`exists (select 1 from inventory_lots l where l.productId = p.id and l.expirationDate is not null and l.expirationDate < curdate() and l.status <> 'descartado')`);
+  } else if (filters.status === "expiring") {
+    whereParts.push(sql`exists (select 1 from inventory_lots l where l.productId = p.id and l.expirationDate between curdate() and date_add(curdate(), interval 90 day) and l.status = 'disponivel')`);
+  }
 
   return unwrapRows<any>(await db.execute(sql`
-    select *
-    from inventory_products
-    where active = 1
-    order by name asc
+    select
+      p.*,
+      coalesce(b.quantityAvailable, p.currentStock, 0) as availableStock,
+      coalesce(b.quantityReserved, 0) as reservedStock,
+      coalesce(b.lotCount, 0) as lotCount,
+      s.name as supplierDisplayName,
+      l.name as defaultLocationName,
+      case
+        when coalesce(b.quantityAvailable, p.currentStock, 0) <= 0 then 'zerado'
+        when coalesce(b.quantityAvailable, p.currentStock, 0) <= coalesce(p.minimumStock, 0) then 'critico'
+        when p.reorderPoint is not null and coalesce(b.quantityAvailable, p.currentStock, 0) <= p.reorderPoint then 'reposicao'
+        else 'adequado'
+      end as stockStatus,
+      (
+        select min(il.expirationDate)
+        from inventory_lots il
+        where il.productId = p.id and il.status = 'disponivel' and il.expirationDate is not null
+      ) as nearestExpirationDate
+    from inventory_products p
+    left join (
+      select productId, sum(quantityAvailable) as quantityAvailable, sum(quantityReserved) as quantityReserved, count(distinct lotId) as lotCount
+      from inventory_balances
+      group by productId
+    ) b on b.productId = p.id
+    left join inventory_suppliers s on s.id = p.supplierId
+    left join inventory_locations l on l.id = p.defaultLocationId
+    where ${sql.join(whereParts, sql` and `)}
+    order by p.name asc
   `));
 }
 
@@ -2178,34 +2401,129 @@ export async function createInventoryProduct(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
-  await ensureOptionalModuleTables(db);
+  await ensureInventorySchema(db);
+
+  const initialStock = normalizeInventoryQuantity(data.currentStock ?? data.initialStock ?? 0);
+  const defaultLocationId = Number(data.defaultLocationId || await getDefaultInventoryLocationId(db));
 
   const result = await db.execute(sql`
     insert into inventory_products
-      (name, sku, category, description, unit, currentStock, minimumStock, costPriceInCents, supplierName, supplierContact, active, createdBy)
+      (name, technicalName, sku, barcode, category, brand, manufacturer, size, presentation,
+       description, unit, unitPurchase, conversionFactor, currentStock, minimumStock, reorderPoint, maximumStock,
+       costPriceInCents, supplierId, supplierName, supplierContact, defaultLocationId,
+       allowsProcedureUse, controlsLot, controlsExpiration, requiresTemperatureControl,
+       controlledMedication, highCost, criticalCare, anvisaRegistry, expirationDate, notes, active, createdBy, updatedBy)
     values
-      (${data.name}, ${data.sku ?? null}, ${data.category ?? null}, ${data.description ?? null}, ${data.unit ?? 'un'}, ${Number(data.currentStock ?? 0)}, ${Number(data.minimumStock ?? 5)}, ${data.costPriceInCents ?? null}, ${data.supplierName ?? null}, ${data.supplierContact ?? null}, 1, ${userId})
+      (${data.name}, ${data.technicalName ?? null}, ${data.sku ?? null}, ${data.barcode ?? null}, ${data.category ?? null},
+       ${data.brand ?? null}, ${data.manufacturer ?? null}, ${data.size ?? null}, ${data.presentation ?? null},
+       ${data.description ?? null}, ${data.unit ?? 'un'}, ${data.unitPurchase ?? null}, ${Number(data.conversionFactor || 1)},
+       0, ${Number(data.minimumStock ?? 5)}, ${data.reorderPoint ?? null}, ${data.maximumStock ?? null},
+       ${data.costPriceInCents ?? null}, ${data.supplierId ?? null}, ${data.supplierName ?? null}, ${data.supplierContact ?? null}, ${defaultLocationId},
+       ${data.allowsProcedureUse === false ? 0 : 1}, ${data.controlsLot ? 1 : 0}, ${data.controlsExpiration ? 1 : 0}, ${data.requiresTemperatureControl ? 1 : 0},
+       ${data.controlledMedication ? 1 : 0}, ${data.highCost ? 1 : 0}, ${data.criticalCare ? 1 : 0}, ${data.anvisaRegistry ?? null}, ${data.expirationDate || null}, ${data.notes ?? null}, 1, ${userId}, ${userId})
   `);
 
   const insertedId = unwrapInsertId(result);
-  const rows = insertedId
-    ? unwrapRows<any>(await db.execute(sql`select * from inventory_products where id = ${insertedId} limit 1`))
-    : [];
-  return rows[0] ?? { id: insertedId, ...data, createdBy: userId, active: true };
+  if (insertedId && initialStock > 0) {
+    await createInventoryMovement({
+      productId: insertedId,
+      type: "entrada",
+      quantity: initialStock,
+      reason: "Implantação inicial",
+      justification: "Saldo inicial informado no cadastro do produto.",
+      locationToId: defaultLocationId,
+      lotNumber: data.lotNumber ?? null,
+      expirationDate: data.expirationDate || null,
+      unitCostInCents: data.costPriceInCents ?? null,
+      sourceModule: "ESTOQUE",
+    }, userId);
+  }
+  await createInventoryAuditLog(db, {
+    actorUserId: userId,
+    action: "inventory.product.create",
+    entityType: "inventory_products",
+    entityId: insertedId,
+    afterJson: { ...data, currentStock: initialStock },
+  });
+  return insertedId ? (await listInventoryProducts({ search: data.name })).find((item: any) => Number(item.id) === insertedId) : { id: insertedId, ...data };
+}
+
+export async function updateInventoryProduct(productId: number, data: any, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureInventorySchema(db);
+
+  const before = await getInventoryProductById(productId);
+  if (!before || !before.active) throw new Error("Produto não encontrado.");
+
+  await db.execute(sql`
+    update inventory_products
+    set
+      name = ${data.name ?? before.name},
+      technicalName = ${data.technicalName ?? null},
+      sku = ${data.sku ?? null},
+      barcode = ${data.barcode ?? null},
+      category = ${data.category ?? null},
+      brand = ${data.brand ?? null},
+      manufacturer = ${data.manufacturer ?? null},
+      size = ${data.size ?? null},
+      presentation = ${data.presentation ?? null},
+      description = ${data.description ?? null},
+      unit = ${data.unit ?? before.unit ?? "un"},
+      unitPurchase = ${data.unitPurchase ?? null},
+      conversionFactor = ${Number(data.conversionFactor || 1)},
+      minimumStock = ${Number(data.minimumStock ?? before.minimumStock ?? 0)},
+      reorderPoint = ${data.reorderPoint ?? null},
+      maximumStock = ${data.maximumStock ?? null},
+      costPriceInCents = ${data.costPriceInCents ?? null},
+      supplierId = ${data.supplierId ?? null},
+      supplierName = ${data.supplierName ?? null},
+      supplierContact = ${data.supplierContact ?? null},
+      defaultLocationId = ${data.defaultLocationId ?? before.defaultLocationId ?? null},
+      allowsProcedureUse = ${data.allowsProcedureUse === false ? 0 : 1},
+      controlsLot = ${data.controlsLot ? 1 : 0},
+      controlsExpiration = ${data.controlsExpiration ? 1 : 0},
+      requiresTemperatureControl = ${data.requiresTemperatureControl ? 1 : 0},
+      controlledMedication = ${data.controlledMedication ? 1 : 0},
+      highCost = ${data.highCost ? 1 : 0},
+      criticalCare = ${data.criticalCare ? 1 : 0},
+      anvisaRegistry = ${data.anvisaRegistry ?? null},
+      expirationDate = ${data.expirationDate || null},
+      notes = ${data.notes ?? null},
+      updatedBy = ${userId},
+      updatedAt = now()
+    where id = ${productId}
+  `);
+  await createInventoryAuditLog(db, {
+    actorUserId: userId,
+    action: "inventory.product.update",
+    entityType: "inventory_products",
+    entityId: productId,
+    beforeJson: before,
+    afterJson: data,
+  });
+  return getInventoryProductById(productId);
 }
 
 export async function getLowStockItems() {
   const db = await getDb();
   if (!db) return [];
 
-  await ensureOptionalModuleTables(db);
+  await ensureInventorySchema(db);
 
   return unwrapRows<any>(await db.execute(sql`
-    select *
-    from inventory_products
-    where currentStock <= coalesce(minimumStock, 0)
-      and active = 1
-    order by currentStock asc, name asc
+    select
+      p.*,
+      coalesce(b.quantityAvailable, p.currentStock, 0) as availableStock
+    from inventory_products p
+    left join (
+      select productId, sum(quantityAvailable) as quantityAvailable
+      from inventory_balances
+      group by productId
+    ) b on b.productId = p.id
+    where p.active = 1
+      and coalesce(b.quantityAvailable, p.currentStock, 0) <= coalesce(p.minimumStock, 0)
+    order by availableStock asc, p.name asc
   `));
 }
 
@@ -2213,37 +2531,305 @@ export async function createInventoryMovement(data: any, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
-  await ensureOptionalModuleTables(db);
+  await ensureInventorySchema(db);
+
+  const productId = Number(data.productId);
+  const quantity = normalizeInventoryQuantity(data.quantity);
+  const type = String(data.type ?? "");
+  const reason = String(data.reason ?? data.justification ?? "").trim();
+  if (!productId || quantity <= 0) throw new Error("Informe produto e quantidade válidos.");
+  if (!reason || reason.length < 5) throw new Error("Movimentações de estoque exigem justificativa clara.");
+
+  const product = await getInventoryProductById(productId);
+  if (!product || !product.active) throw new Error("Produto não encontrado ou inativo.");
+
+  const previousStock = normalizeInventoryQuantity(product.currentStock);
+  let newStock = previousStock;
+  let lotId = data.lotId ? Number(data.lotId) : null;
+  const locationToId = Number(data.locationToId || data.locationId || product.defaultLocationId || await getDefaultInventoryLocationId(db));
+  const locationFromId = Number(data.locationFromId || data.locationId || product.defaultLocationId || locationToId);
+
+  if ((product.controlsLot || data.lotNumber) && !lotId) {
+    const lotNumber = String(data.lotNumber ?? "").trim();
+    if (!lotNumber) throw new Error("Este produto exige lote para movimentação.");
+    if (product.controlsExpiration && !data.expirationDate) throw new Error("Este produto exige validade do lote.");
+    const lot = await createInventoryLot({
+      productId,
+      lotNumber,
+      expirationDate: data.expirationDate || null,
+      supplierId: data.supplierId ?? product.supplierId ?? null,
+      invoiceNumber: data.invoiceNumber ?? null,
+      quantityReceived: type === "entrada" || type === "entrada_compra" ? quantity : 0,
+      unitCostInCents: data.unitCostInCents ?? product.costPriceInCents ?? null,
+      status: "disponivel",
+    }, userId);
+    lotId = Number(lot.id);
+  }
+
+  if (type === "entrada" || type === "entrada_compra") {
+    newStock = previousStock + quantity;
+    await adjustInventoryBalance(db, { productId, lotId, locationId: locationToId, delta: quantity });
+  } else if (type === "saida" || type === "descarte" || type === "saida_procedimento") {
+    if (previousStock - quantity < 0) throw new Error("Movimentação bloqueada: saldo insuficiente.");
+    newStock = previousStock - quantity;
+    await adjustInventoryBalance(db, { productId, lotId, locationId: locationFromId, delta: -quantity });
+  } else if (type === "ajuste") {
+    newStock = quantity;
+    const delta = newStock - previousStock;
+    await adjustInventoryBalance(db, { productId, lotId, locationId: locationToId || locationFromId, delta });
+  } else if (type === "transferencia") {
+    const destinationId = Number(data.locationToId);
+    if (!destinationId || !locationFromId || destinationId === locationFromId) throw new Error("Informe origem e destino diferentes para transferir.");
+    await adjustInventoryBalance(db, { productId, lotId, locationId: locationFromId, delta: -quantity });
+    await adjustInventoryBalance(db, { productId, lotId, locationId: destinationId, delta: quantity });
+    newStock = previousStock;
+  } else {
+    throw new Error("Tipo de movimentação inválido.");
+  }
 
   const result = await db.execute(sql`
     insert into inventory_movements
-      (productId, type, quantity, reason, patientId, appointmentId, createdBy)
+      (productId, type, quantity, reason, justification, patientId, appointmentId, lotId, locationFromId, locationToId,
+       unitCostInCents, previousStock, newStock, sourceModule, metadataJson, createdBy)
     values
-      (${Number(data.productId)}, ${data.type}, ${Number(data.quantity || 0)}, ${data.reason ?? null}, ${data.patientId ?? null}, ${data.appointmentId ?? null}, ${userId})
+      (${productId}, ${type}, ${quantity}, ${reason}, ${data.justification ?? reason}, ${data.patientId ?? null}, ${data.appointmentId ?? null},
+       ${lotId}, ${type === "entrada" || type === "entrada_compra" ? null : locationFromId}, ${type === "saida" || type === "descarte" || type === "saida_procedimento" ? null : (data.locationToId ?? locationToId)},
+       ${data.unitCostInCents ?? product.costPriceInCents ?? null}, ${previousStock}, ${newStock}, ${data.sourceModule ?? "ESTOQUE"},
+       ${data.metadataJson ? JSON.stringify(data.metadataJson) : null}, ${userId})
   `);
 
-  const products = unwrapRows<any>(await db.execute(sql`
-    select currentStock
-    from inventory_products
-    where id = ${Number(data.productId)}
-    limit 1
-  `));
-
-  const product = products[0];
-  if (product) {
-    let newStock = Number(product.currentStock || 0);
-    if (data.type === "entrada") newStock += Number(data.quantity || 0);
-    else if (data.type === "saida") newStock -= Number(data.quantity || 0);
-    else if (data.type === "ajuste") newStock = Number(data.quantity || 0);
-
+  if (type !== "transferencia") {
     await db.execute(sql`
       update inventory_products
-      set currentStock = ${newStock}, updatedAt = now()
-      where id = ${Number(data.productId)}
+      set currentStock = ${newStock}, updatedAt = now(), updatedBy = ${userId}
+      where id = ${productId}
     `);
   }
 
-  return { id: unwrapInsertId(result), ...data, createdBy: userId };
+  const movementId = unwrapInsertId(result);
+  await createInventoryAuditLog(db, {
+    actorUserId: userId,
+    action: "inventory.movement.create",
+    entityType: "inventory_movements",
+    entityId: movementId,
+    beforeJson: { productId, previousStock },
+    afterJson: { productId, newStock, type, quantity, lotId, locationFromId, locationToId },
+    reason,
+  });
+  return { id: movementId, ...data, lotId, previousStock, newStock, createdBy: userId };
+}
+
+export async function createInventoryLot(data: any, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureInventorySchema(db);
+
+  const productId = Number(data.productId);
+  const lotNumber = String(data.lotNumber ?? "").trim();
+  if (!productId || !lotNumber) throw new Error("Informe produto e número do lote.");
+  const product = await getInventoryProductById(productId);
+  if (!product) throw new Error("Produto não encontrado.");
+  if (product.controlsExpiration && !data.expirationDate) throw new Error("Este produto exige validade.");
+
+  await db.execute(sql`
+    insert into inventory_lots
+      (productId, lotNumber, expirationDate, manufactureDate, supplierId, invoiceNumber, receivedAt, quantityReceived, unitCostInCents, status, blockReason, notes, createdBy)
+    values
+      (${productId}, ${lotNumber}, ${data.expirationDate || null}, ${data.manufactureDate || null}, ${data.supplierId ?? null},
+       ${data.invoiceNumber ?? null}, ${data.receivedAt || formatSqlDate()}, ${normalizeInventoryQuantity(data.quantityReceived)},
+       ${data.unitCostInCents ?? null}, ${data.status ?? "disponivel"}, ${data.blockReason ?? null}, ${data.notes ?? null}, ${userId})
+    on duplicate key update
+      expirationDate = coalesce(values(expirationDate), expirationDate),
+      supplierId = coalesce(values(supplierId), supplierId),
+      invoiceNumber = coalesce(values(invoiceNumber), invoiceNumber),
+      unitCostInCents = coalesce(values(unitCostInCents), unitCostInCents),
+      updatedAt = now()
+  `);
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select * from inventory_lots where productId = ${productId} and lotNumber = ${lotNumber} limit 1
+  `));
+  return rows[0];
+}
+
+export async function listInventoryLots(filters: any = {}) {
+  const db = await getDb();
+  if (!db) return [];
+  await ensureInventorySchema(db);
+  const whereParts = [sql`1 = 1`];
+  if (filters.productId) whereParts.push(sql`l.productId = ${Number(filters.productId)}`);
+  if (filters.status && filters.status !== "all") whereParts.push(sql`l.status = ${filters.status}`);
+  return unwrapRows<any>(await db.execute(sql`
+    select l.*, p.name as productName, p.unit, s.name as supplierName,
+           coalesce(b.quantityAvailable, 0) as availableStock
+    from inventory_lots l
+    inner join inventory_products p on p.id = l.productId
+    left join inventory_suppliers s on s.id = l.supplierId
+    left join (
+      select lotId, sum(quantityAvailable) as quantityAvailable
+      from inventory_balances
+      group by lotId
+    ) b on b.lotId = l.id
+    where ${sql.join(whereParts, sql` and `)}
+    order by case l.status when 'disponivel' then 0 when 'quarentena' then 1 else 2 end, l.expirationDate asc, p.name asc
+  `));
+}
+
+export async function listInventoryMovements(filters: any = {}) {
+  const db = await getDb();
+  if (!db) return [];
+  await ensureInventorySchema(db);
+  const whereParts = [sql`1 = 1`];
+  if (filters.productId) whereParts.push(sql`m.productId = ${Number(filters.productId)}`);
+  if (filters.type && filters.type !== "all") whereParts.push(sql`m.type = ${filters.type}`);
+  return unwrapRows<any>(await db.execute(sql`
+    select
+      m.*,
+      p.name as productName,
+      p.unit,
+      lot.lotNumber,
+      lot.expirationDate,
+      lf.name as locationFromName,
+      lt.name as locationToName,
+      u.name as createdByName
+    from inventory_movements m
+    inner join inventory_products p on p.id = m.productId
+    left join inventory_lots lot on lot.id = m.lotId
+    left join inventory_locations lf on lf.id = m.locationFromId
+    left join inventory_locations lt on lt.id = m.locationToId
+    left join users u on u.id = m.createdBy
+    where ${sql.join(whereParts, sql` and `)}
+    order by m.createdAt desc
+    limit ${Math.min(Math.max(Number(filters.limit ?? 200), 20), 1000)}
+  `));
+}
+
+export async function listInventoryCategories() {
+  const db = await getDb();
+  if (!db) return [];
+  await ensureInventorySchema(db);
+  return unwrapRows<any>(await db.execute(sql`select * from inventory_categories where active = 1 order by name asc`));
+}
+
+export async function createInventoryCategory(data: any, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureInventorySchema(db);
+  await db.execute(sql`
+    insert into inventory_categories (name, description, active, createdBy)
+    values (${data.name}, ${data.description ?? null}, 1, ${userId})
+    on duplicate key update description = values(description), active = 1, updatedAt = now()
+  `);
+  return listInventoryCategories();
+}
+
+export async function listInventoryLocations() {
+  const db = await getDb();
+  if (!db) return [];
+  await ensureInventorySchema(db);
+  return unwrapRows<any>(await db.execute(sql`select * from inventory_locations where active = 1 order by name asc`));
+}
+
+export async function createInventoryLocation(data: any, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureInventorySchema(db);
+  await db.execute(sql`
+    insert into inventory_locations
+      (name, type, description, active, allowsStock, requiresTemperatureControl, temperatureMin, temperatureMax, responsibleUserId, parentLocationId, createdBy)
+    values
+      (${data.name}, ${data.type ?? "estoque"}, ${data.description ?? null}, 1, ${data.allowsStock === false ? 0 : 1},
+       ${data.requiresTemperatureControl ? 1 : 0}, ${data.temperatureMin ?? null}, ${data.temperatureMax ?? null},
+       ${data.responsibleUserId ?? null}, ${data.parentLocationId ?? null}, ${userId})
+    on duplicate key update
+      type = values(type), description = values(description), active = 1, allowsStock = values(allowsStock), updatedAt = now()
+  `);
+  return listInventoryLocations();
+}
+
+export async function listInventorySuppliers() {
+  const db = await getDb();
+  if (!db) return [];
+  await ensureInventorySchema(db);
+  return unwrapRows<any>(await db.execute(sql`select * from inventory_suppliers where active = 1 order by name asc`));
+}
+
+export async function createInventorySupplier(data: any, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureInventorySchema(db);
+  const result = await db.execute(sql`
+    insert into inventory_suppliers
+      (name, documentNumber, contactName, phone, email, address, notes, active, createdBy)
+    values
+      (${data.name}, ${data.documentNumber ?? null}, ${data.contactName ?? null}, ${data.phone ?? null},
+       ${data.email ?? null}, ${data.address ?? null}, ${data.notes ?? null}, 1, ${userId})
+  `);
+  return { id: unwrapInsertId(result), ...data, active: true };
+}
+
+export async function getInventoryDashboard() {
+  const db = await getDb();
+  if (!db) return { summary: {}, alerts: [], purchaseSuggestions: [] };
+  await ensureInventorySchema(db);
+  const products = await listInventoryProducts();
+  const lots = await listInventoryLots();
+  const today = new Date();
+  const expiringSoon = lots.filter((lot: any) => {
+    if (!lot.expirationDate) return false;
+    const days = Math.ceil((new Date(lot.expirationDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    return days >= 0 && days <= 90;
+  });
+  const expired = lots.filter((lot: any) => lot.expirationDate && new Date(lot.expirationDate).getTime() < today.getTime());
+  const critical = products.filter((product: any) => normalizeInventoryQuantity(product.availableStock ?? product.currentStock) <= Number(product.minimumStock ?? 0));
+  const purchaseSuggestions = critical.map((product: any) => {
+    const available = normalizeInventoryQuantity(product.availableStock ?? product.currentStock);
+    const target = Number(product.maximumStock ?? product.reorderPoint ?? product.minimumStock ?? 0);
+    return {
+      ...product,
+      suggestedQuantity: Math.max(0, Math.ceil(target - available)),
+    };
+  });
+
+  return {
+    summary: {
+      productCount: products.length,
+      criticalCount: critical.length,
+      expiringCount: expiringSoon.length,
+      expiredCount: expired.length,
+      lotCount: lots.length,
+      totalValueInCents: products.reduce((sum: number, product: any) => sum + Math.round(normalizeInventoryQuantity(product.availableStock ?? product.currentStock) * Number(product.costPriceInCents ?? 0)), 0),
+    },
+    alerts: [
+      ...critical.map((product: any) => ({ type: "critico", title: "Estoque crítico", message: `${product.name} está em ${product.availableStock ?? product.currentStock} ${product.unit || "un"}.`, productId: product.id })),
+      ...expiringSoon.map((lot: any) => ({ type: "validade", title: "Lote próximo do vencimento", message: `${lot.productName} lote ${lot.lotNumber} vence em ${new Date(lot.expirationDate).toLocaleDateString("pt-BR")}.`, productId: lot.productId, lotId: lot.id })),
+      ...expired.map((lot: any) => ({ type: "vencido", title: "Lote vencido", message: `${lot.productName} lote ${lot.lotNumber} está vencido.`, productId: lot.productId, lotId: lot.id })),
+    ],
+    purchaseSuggestions,
+  };
+}
+
+export async function reverseInventoryMovement(movementId: number, reason: string, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await ensureInventorySchema(db);
+  const movement = unwrapRows<any>(await db.execute(sql`select * from inventory_movements where id = ${movementId} limit 1`))[0];
+  if (!movement) throw new Error("Movimentação não encontrada.");
+  if (movement.reversedMovementId) throw new Error("Esta movimentação já foi estornada.");
+  const type = movement.type === "entrada" || movement.type === "entrada_compra" ? "saida" : "entrada";
+  const reversal = await createInventoryMovement({
+    productId: movement.productId,
+    lotId: movement.lotId,
+    locationFromId: movement.locationToId || movement.locationFromId,
+    locationToId: movement.locationFromId || movement.locationToId,
+    type,
+    quantity: Number(movement.quantity),
+    reason,
+    justification: `Estorno da movimentação #${movementId}: ${reason}`,
+    sourceModule: "ESTORNO",
+    metadataJson: { reversedMovementId: movementId },
+  }, userId);
+  await db.execute(sql`update inventory_movements set reversedMovementId = ${Number((reversal as any).id)} where id = ${movementId}`);
+  return reversal;
 }
 
 // --- PHOTOS ------------------------------------------------------------------

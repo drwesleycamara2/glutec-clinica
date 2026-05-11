@@ -26,7 +26,7 @@ const JOB_TITLE_LABELS: Record<string, string> = {
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
-    { label: "Mínimo de 8 caracteres", ok: password.length >= 8 },
+    { label: "Mínimo de 12 caracteres", ok: password.length >= 12 },
     { label: "Letra maiúscula", ok: /[A-Z]/.test(password) },
     { label: "Número", ok: /[0-9]/.test(password) },
     { label: "Caractere especial", ok: /[^A-Za-z0-9]/.test(password) },
@@ -113,7 +113,7 @@ export default function AceitarConviteSafe() {
     e.preventDefault();
     setError("");
 
-    if (password.length < 8) return setError("A senha deve ter pelo menos 8 caracteres.");
+    if (password.length < 12) return setError("A senha deve ter pelo menos 12 caracteres.");
     if (!/[A-Z]/.test(password)) return setError("A senha deve conter pelo menos uma letra maiúscula.");
     if (!/[0-9]/.test(password)) return setError("A senha deve conter pelo menos um número.");
     if (!/[^A-Za-z0-9]/.test(password)) return setError("A senha deve conter pelo menos um caractere especial.");

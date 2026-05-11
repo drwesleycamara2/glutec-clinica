@@ -15,6 +15,7 @@ const documentosIdProcedure = requireModule("documentos_identificacao", "prontua
 const contratosProcedure = requireModule("contratos_termos", "prontuarios");
 const agendaProcedure = requireModule("agenda");
 const orcamentosProcedure = requireModule("orcamentos");
+const estoqueProcedure = requireModule("estoque");
 import { z } from "zod";
 import * as db from "./db";
 import * as dbComplete from "./db_complete";
@@ -1303,44 +1304,153 @@ export const appRouter = router({
 
   // INVENTORY
   inventory: router({
-    listProducts: protectedProcedure.query(async ({ ctx }) => {
-      return dbComplete.listInventoryProducts();
-    }),
+    dashboard: estoqueProcedure.query(async () => dbComplete.getInventoryDashboard()),
 
-    createProduct: protectedProcedure
+    listProducts: estoqueProcedure
       .input(z.object({
-        name: z.string(),
+        search: z.string().optional(),
+        category: z.string().optional(),
+        status: z.string().optional(),
+      }).optional())
+      .query(async ({ input }) => dbComplete.listInventoryProducts(input ?? {})),
+
+    listCategories: estoqueProcedure.query(async () => dbComplete.listInventoryCategories()),
+    listLocations: estoqueProcedure.query(async () => dbComplete.listInventoryLocations()),
+    listSuppliers: estoqueProcedure.query(async () => dbComplete.listInventorySuppliers()),
+    listLots: estoqueProcedure
+      .input(z.object({
+        productId: z.number().optional(),
+        status: z.string().optional(),
+      }).optional())
+      .query(async ({ input }) => dbComplete.listInventoryLots(input ?? {})),
+    listMovements: estoqueProcedure
+      .input(z.object({
+        productId: z.number().optional(),
+        type: z.string().optional(),
+        limit: z.number().optional(),
+      }).optional())
+      .query(async ({ input }) => dbComplete.listInventoryMovements(input ?? {})),
+
+    createProduct: estoqueProcedure
+      .input(z.object({
+        name: z.string().min(2),
+        technicalName: z.string().optional(),
         sku: z.string().optional(),
+        barcode: z.string().optional(),
         brand: z.string().optional(),
+        manufacturer: z.string().optional(),
         size: z.string().optional(),
-        category: z.string(),
+        presentation: z.string().optional(),
+        category: z.string().optional(),
         description: z.string().optional(),
-        unit: z.string(),
-        currentStock: z.number(),
-        minimumStock: z.number(),
+        unit: z.string().default("unidade"),
+        unitPurchase: z.string().optional(),
+        conversionFactor: z.number().optional(),
+        currentStock: z.number().optional(),
+        initialStock: z.number().optional(),
+        minimumStock: z.number().optional(),
+        reorderPoint: z.number().optional().nullable(),
+        maximumStock: z.number().optional().nullable(),
         costPriceInCents: z.number().optional(),
+        supplierId: z.number().optional().nullable(),
         supplierName: z.string().optional(),
         supplierContact: z.string().optional(),
+        defaultLocationId: z.number().optional().nullable(),
+        lotNumber: z.string().optional(),
         expirationDate: z.string().optional(),
+        controlsLot: z.boolean().optional(),
+        controlsExpiration: z.boolean().optional(),
+        allowsProcedureUse: z.boolean().optional(),
+        requiresTemperatureControl: z.boolean().optional(),
+        controlledMedication: z.boolean().optional(),
+        highCost: z.boolean().optional(),
+        criticalCare: z.boolean().optional(),
+        anvisaRegistry: z.string().optional(),
+        notes: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         return dbComplete.createInventoryProduct(input, ctx.user.id);
       }),
 
+    updateProduct: estoqueProcedure
+      .input(z.object({
+        id: z.number(),
+        data: z.record(z.string(), z.any()),
+      }))
+      .mutation(async ({ ctx, input }) => dbComplete.updateInventoryProduct(input.id, input.data, ctx.user.id)),
+
     getLowStock: protectedProcedure.query(async ({ ctx }) => {
       return dbComplete.getLowStockItems();
     }),
 
-    createMovement: protectedProcedure
+    createMovement: estoqueProcedure
       .input(z.object({
         productId: z.number(),
-        type: z.enum(['entrada', 'saida', 'ajuste']),
+        type: z.enum(['entrada', 'saida', 'ajuste', 'transferencia', 'entrada_compra', 'descarte']),
         quantity: z.number(),
-        reason: z.string().optional(),
+        reason: z.string().min(5),
+        justification: z.string().optional(),
+        lotId: z.number().optional().nullable(),
+        lotNumber: z.string().optional(),
+        expirationDate: z.string().optional(),
+        locationId: z.number().optional().nullable(),
+        locationFromId: z.number().optional().nullable(),
+        locationToId: z.number().optional().nullable(),
+        unitCostInCents: z.number().optional().nullable(),
+        invoiceNumber: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         return dbComplete.createInventoryMovement(input, ctx.user.id);
       }),
+
+    createLot: estoqueProcedure
+      .input(z.object({
+        productId: z.number(),
+        lotNumber: z.string().min(1),
+        expirationDate: z.string().optional().nullable(),
+        manufactureDate: z.string().optional().nullable(),
+        supplierId: z.number().optional().nullable(),
+        invoiceNumber: z.string().optional().nullable(),
+        quantityReceived: z.number().optional(),
+        unitCostInCents: z.number().optional().nullable(),
+        status: z.string().optional(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => dbComplete.createInventoryLot(input, ctx.user.id)),
+
+    createCategory: estoqueProcedure
+      .input(z.object({ name: z.string().min(2), description: z.string().optional() }))
+      .mutation(async ({ ctx, input }) => dbComplete.createInventoryCategory(input, ctx.user.id)),
+
+    createLocation: estoqueProcedure
+      .input(z.object({
+        name: z.string().min(2),
+        type: z.string().optional(),
+        description: z.string().optional(),
+        allowsStock: z.boolean().optional(),
+        requiresTemperatureControl: z.boolean().optional(),
+        temperatureMin: z.number().optional().nullable(),
+        temperatureMax: z.number().optional().nullable(),
+        responsibleUserId: z.number().optional().nullable(),
+        parentLocationId: z.number().optional().nullable(),
+      }))
+      .mutation(async ({ ctx, input }) => dbComplete.createInventoryLocation(input, ctx.user.id)),
+
+    createSupplier: estoqueProcedure
+      .input(z.object({
+        name: z.string().min(2),
+        documentNumber: z.string().optional(),
+        contactName: z.string().optional(),
+        phone: z.string().optional(),
+        email: z.string().optional(),
+        address: z.string().optional(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => dbComplete.createInventorySupplier(input, ctx.user.id)),
+
+    reverseMovement: estoqueProcedure
+      .input(z.object({ movementId: z.number(), reason: z.string().min(8) }))
+      .mutation(async ({ ctx, input }) => dbComplete.reverseInventoryMovement(input.movementId, input.reason, ctx.user.id)),
   }),
 
   // PHOTOS

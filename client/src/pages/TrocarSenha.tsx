@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 
 function isStrongPassword(password: string) {
   return (
-    password.length >= 8 &&
+    password.length >= 12 &&
     /[A-Z]/.test(password) &&
     /[0-9]/.test(password) &&
     /[^A-Za-z0-9]/.test(password)
@@ -30,7 +30,7 @@ export default function TrocarSenha() {
     }
 
     if (!isStrongPassword(newPassword)) {
-      setError("Use no minimo 8 caracteres com letra maiuscula, numero e caractere especial.");
+      setError("Use no mínimo 12 caracteres com letra maiúscula, número e caractere especial.");
       return;
     }
 

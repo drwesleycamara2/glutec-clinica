@@ -79,7 +79,7 @@ function requestSameOrigin(req: import("express").Request): boolean {
 
 function isStrongPassword(password: string) {
   return (
-    password.length >= 8 &&
+    password.length >= 12 &&
     /[A-Z]/.test(password) &&
     /[0-9]/.test(password) &&
     /[^A-Za-z0-9]/.test(password)
@@ -283,7 +283,7 @@ export function registerAuthRoutes(app: Express) {
 
     if (!isStrongPassword(password)) {
       return res.status(400).json({
-        error: "A senha deve ter pelo menos 8 caracteres, letra maiúscula, número e caractere especial.",
+        error: "A senha deve ter pelo menos 12 caracteres, letra maiúscula, número e caractere especial.",
       });
     }
 
@@ -345,7 +345,7 @@ export function registerAuthRoutes(app: Express) {
 
     if (!isStrongPassword(newPassword)) {
       return res.status(400).json({
-        error: "A senha deve ter pelo menos 8 caracteres, letra maiúscula, número e caractere especial.",
+        error: "A senha deve ter pelo menos 12 caracteres, letra maiúscula, número e caractere especial.",
       });
     }
 
