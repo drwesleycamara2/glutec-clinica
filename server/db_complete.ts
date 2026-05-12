@@ -54,7 +54,7 @@ async function ensureOptionalModuleTables(db: any) {
       await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS budget_procedure_pricing (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, procedureId INT NOT NULL, areaId INT NOT NULL, complexity ENUM('P','M','G') NOT NULL, priceInCents INT NOT NULL, active TINYINT(1) NOT NULL DEFAULT 1, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uniq_budget_procedure_price (procedureId, areaId, complexity), KEY idx_budget_procedure_pricing_active (active)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
       await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS budget_payment_plans (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(128) NOT NULL, type ENUM('a_vista','parcelado_sem_juros','parcelado_com_juros','financiamento','pagamento_programado') NOT NULL, discountPercent DECIMAL(5,2) DEFAULT 0, maxInstallments INT DEFAULT 1, interestRatePercent DECIMAL(5,2) DEFAULT 0, description TEXT NULL, active TINYINT(1) NOT NULL DEFAULT 1, sortOrder INT DEFAULT 0, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, KEY idx_budget_payment_plans_active (active)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
       await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS financial_transactions (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, type ENUM('receita','despesa') NOT NULL, category VARCHAR(128) NOT NULL, description VARCHAR(512) NOT NULL, amountInCents INT NOT NULL, paymentMethod ENUM('pix','dinheiro','cartao_credito','cartao_debito','transferencia','boleto','outro') NULL, patientId INT NULL, budgetId INT NULL, appointmentId INT NULL, dueDate DATE NULL, paidAt TIMESTAMP NULL, status ENUM('pendente','pago','atrasado','cancelado') NOT NULL DEFAULT 'pendente', createdBy INT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, KEY idx_financial_transactions_createdAt (createdAt), KEY idx_financial_transactions_type (type), KEY idx_financial_transactions_status (status)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
-      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS inventory_products (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(256) NOT NULL, sku VARCHAR(64) NULL, category VARCHAR(128) NULL, description TEXT NULL, unit VARCHAR(32) DEFAULT 'un', currentStock INT NOT NULL DEFAULT 0, minimumStock INT DEFAULT 5, costPriceInCents INT NULL, supplierName VARCHAR(256) NULL, supplierContact VARCHAR(128) NULL, active TINYINT(1) NOT NULL DEFAULT 1, createdBy INT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uniq_inventory_products_sku (sku), KEY idx_inventory_products_active (active), KEY idx_inventory_products_stock (currentStock, minimumStock)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
+      await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS inventory_products (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(256) NOT NULL, sku VARCHAR(64) NULL, category VARCHAR(128) NULL, description TEXT NULL, unit VARCHAR(32) DEFAULT 'un', currentStock INT NOT NULL DEFAULT 0, minimumStock INT NULL DEFAULT NULL, costPriceInCents INT NULL, supplierName VARCHAR(256) NULL, supplierContact VARCHAR(128) NULL, active TINYINT(1) NOT NULL DEFAULT 1, createdBy INT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uniq_inventory_products_sku (sku), KEY idx_inventory_products_active (active), KEY idx_inventory_products_stock (currentStock, minimumStock)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
       await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS inventory_movements (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, productId INT NOT NULL, type ENUM('entrada','saida','ajuste') NOT NULL, quantity INT NOT NULL, reason VARCHAR(256) NULL, patientId INT NULL, appointmentId INT NULL, createdBy INT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, KEY idx_inventory_movements_product (productId), KEY idx_inventory_movements_createdAt (createdAt)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
       await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS crm_indications (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, patientId INT NOT NULL, procedureName VARCHAR(256) NOT NULL, notes TEXT NULL, status ENUM('indicado','agendado','realizado','cancelado') NOT NULL DEFAULT 'indicado', indicatedBy INT NULL, convertedAt TIMESTAMP NULL, appointmentId INT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, KEY idx_crm_indications_patient (patientId), KEY idx_crm_indications_status (status), KEY idx_crm_indications_createdAt (createdAt)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
       await db.execute(sql.raw("CREATE TABLE IF NOT EXISTS chat_messages (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, channelId VARCHAR(64) NOT NULL DEFAULT 'geral', senderId INT NULL, content TEXT NOT NULL, messageType ENUM('text','file','system') NOT NULL DEFAULT 'text', fileUrl TEXT NULL, fileKey VARCHAR(256) NULL, mentions JSON NULL, readBy JSON NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, KEY idx_chat_messages_channel (channelId), KEY idx_chat_messages_createdAt (createdAt)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"));
@@ -2408,6 +2408,12 @@ function normalizeInventoryQuantity(value: unknown) {
   return Number.isFinite(quantity) ? quantity : 0;
 }
 
+function normalizeNullableInventoryQuantity(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const quantity = Number(value);
+  return Number.isFinite(quantity) ? quantity : null;
+}
+
 async function getDefaultInventoryLocationId(db: any) {
   await ensureInventorySchema(db);
   const rows = unwrapRows<any>(await db.execute(sql`
@@ -2492,7 +2498,7 @@ export async function listInventoryProducts(filters: any = {}) {
     whereParts.push(sql`p.category = ${filters.category}`);
   }
   if (filters.status === "low") {
-    whereParts.push(sql`coalesce(b.quantityAvailable, p.currentStock, 0) <= coalesce(p.minimumStock, 0)`);
+    whereParts.push(sql`p.minimumStock is not null and coalesce(b.quantityAvailable, p.currentStock, 0) <= p.minimumStock`);
   } else if (filters.status === "expired") {
     whereParts.push(sql`exists (select 1 from inventory_lots l where l.productId = p.id and l.expirationDate is not null and l.expirationDate < curdate() and l.status <> 'descartado')`);
   } else if (filters.status === "expiring") {
@@ -2508,8 +2514,8 @@ export async function listInventoryProducts(filters: any = {}) {
       s.name as supplierDisplayName,
       l.name as defaultLocationName,
       case
-        when coalesce(b.quantityAvailable, p.currentStock, 0) <= 0 then 'zerado'
-        when coalesce(b.quantityAvailable, p.currentStock, 0) <= coalesce(p.minimumStock, 0) then 'critico'
+        when p.minimumStock is not null and coalesce(b.quantityAvailable, p.currentStock, 0) <= 0 then 'zerado'
+        when p.minimumStock is not null and coalesce(b.quantityAvailable, p.currentStock, 0) <= p.minimumStock then 'critico'
         when p.reorderPoint is not null and coalesce(b.quantityAvailable, p.currentStock, 0) <= p.reorderPoint then 'reposicao'
         else 'adequado'
       end as stockStatus,
@@ -2538,6 +2544,7 @@ export async function createInventoryProduct(data: any, userId: number) {
   await ensureInventorySchema(db);
 
   const initialStock = normalizeInventoryQuantity(data.currentStock ?? data.initialStock ?? 0);
+  const minimumStock = normalizeNullableInventoryQuantity(data.minimumStock);
   const defaultLocationId = Number(data.defaultLocationId || await getDefaultInventoryLocationId(db));
 
   const result = await db.execute(sql`
@@ -2554,7 +2561,7 @@ export async function createInventoryProduct(data: any, userId: number) {
        ${data.subcategory ?? null}, ${data.itemType ?? "consumivel"},
        ${data.brand ?? null}, ${data.manufacturer ?? null}, ${data.size ?? null}, ${data.presentation ?? null},
        ${data.description ?? null}, ${data.unit ?? 'un'}, ${data.unitPurchase ?? null}, ${Number(data.conversionFactor || 1)},
-       0, ${Number(data.minimumStock ?? 5)}, ${data.reorderPoint ?? null}, ${data.maximumStock ?? null},
+       0, ${minimumStock}, ${data.reorderPoint ?? null}, ${data.maximumStock ?? null},
        ${data.costPriceInCents ?? null}, ${data.supplierId ?? null}, ${data.supplierName ?? null}, ${data.supplierContact ?? null}, ${defaultLocationId},
        ${data.allowsProcedureUse === false ? 0 : 1}, ${data.controlsLot ? 1 : 0}, ${data.controlsExpiration ? 1 : 0}, ${data.requiresTemperatureControl ? 1 : 0},
        ${data.controlledMedication ? 1 : 0}, ${data.highCost ? 1 : 0}, ${data.criticalCare ? 1 : 0},
@@ -2596,6 +2603,9 @@ export async function updateInventoryProduct(productId: number, data: any, userI
 
   const before = await getInventoryProductById(productId);
   if (!before || !before.active) throw new Error("Produto não encontrado.");
+  const minimumStock = Object.prototype.hasOwnProperty.call(data, "minimumStock")
+    ? normalizeNullableInventoryQuantity(data.minimumStock)
+    : normalizeNullableInventoryQuantity(before.minimumStock);
 
   await db.execute(sql`
     update inventory_products
@@ -2615,7 +2625,7 @@ export async function updateInventoryProduct(productId: number, data: any, userI
       unit = ${data.unit ?? before.unit ?? "un"},
       unitPurchase = ${data.unitPurchase ?? null},
       conversionFactor = ${Number(data.conversionFactor || 1)},
-      minimumStock = ${Number(data.minimumStock ?? before.minimumStock ?? 0)},
+      minimumStock = ${minimumStock},
       reorderPoint = ${data.reorderPoint ?? null},
       maximumStock = ${data.maximumStock ?? null},
       costPriceInCents = ${data.costPriceInCents ?? null},
@@ -2673,7 +2683,8 @@ export async function getLowStockItems() {
       group by productId
     ) b on b.productId = p.id
     where p.active = 1
-      and coalesce(b.quantityAvailable, p.currentStock, 0) <= coalesce(p.minimumStock, 0)
+      and p.minimumStock is not null
+      and coalesce(b.quantityAvailable, p.currentStock, 0) <= p.minimumStock
     order by availableStock asc, p.name asc
   `));
 }
@@ -3085,11 +3096,16 @@ export async function getInventoryDashboard() {
     return days >= 0 && days <= 90;
   });
   const expired = lots.filter((lot: any) => lot.expirationDate && new Date(lot.expirationDate).getTime() < today.getTime());
-  const critical = products.filter((product: any) => normalizeInventoryQuantity(product.availableStock ?? product.currentStock) <= Number(product.minimumStock ?? 0));
+  const critical = products.filter((product: any) => {
+    const minimum = normalizeNullableInventoryQuantity(product.minimumStock);
+    if (minimum === null) return false;
+    return normalizeInventoryQuantity(product.availableStock ?? product.currentStock) <= minimum;
+  });
   const emergencyItems = products.filter((product: any) => Boolean(product.emergencyCartItem) || product.itemType === "emergencia");
   const emergencyCritical = emergencyItems.filter((product: any) => {
     const available = normalizeInventoryQuantity(product.availableStock ?? product.currentStock);
-    const minimum = Number(product.emergencyCartMinimumStock ?? product.minimumStock ?? 0);
+    const minimum = normalizeNullableInventoryQuantity(product.emergencyCartMinimumStock ?? product.minimumStock);
+    if (minimum === null) return false;
     return available <= minimum;
   });
   const gasItems = products.filter((product: any) => product.itemType === "gas_medicinal");

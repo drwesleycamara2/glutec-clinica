@@ -12,6 +12,7 @@ import {
   MapPin,
   Package,
   Plus,
+  Printer,
   RefreshCw,
   RotateCcw,
   Save,
@@ -114,7 +115,7 @@ const emptyProductForm: ProductForm = {
   unitPurchase: "",
   conversionFactor: "1",
   initialStock: "0",
-  minimumStock: "5",
+  minimumStock: "",
   reorderPoint: "",
   maximumStock: "",
   costPrice: "",
@@ -188,6 +189,15 @@ function money(cents?: number | null) {
   });
 }
 
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function dateText(value?: string | null) {
   if (!value) return "Sem data";
   const parsed = new Date(value);
@@ -220,16 +230,18 @@ function nullableNumber(value: string) {
 
 function statusFor(product: any) {
   const available = Number(product.availableStock ?? product.currentStock ?? 0);
-  const minimum = Number(product.minimumStock ?? 0);
+  const hasMinimum = product.minimumStock !== null && product.minimumStock !== undefined && product.minimumStock !== "";
+  const minimum = hasMinimum ? Number(product.minimumStock) : null;
   const nearestExpiration = product.nearestExpirationDate ? new Date(product.nearestExpirationDate) : null;
   const daysToExpire = nearestExpiration
     ? Math.ceil((nearestExpiration.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
     : 9999;
 
-  if (available <= 0) return { label: "Sem estoque", className: "bg-red-100 text-red-800 border-red-200" };
   if (daysToExpire <= 0) return { label: "Vencido", className: "bg-red-100 text-red-800 border-red-200" };
-  if (available <= minimum) return { label: "Repor", className: "bg-amber-100 text-amber-900 border-amber-200" };
+  if (hasMinimum && available <= 0) return { label: "Sem estoque", className: "bg-red-100 text-red-800 border-red-200" };
+  if (hasMinimum && minimum !== null && available <= minimum) return { label: "Repor", className: "bg-amber-100 text-amber-900 border-amber-200" };
   if (daysToExpire <= 90) return { label: "Vencendo", className: "bg-yellow-100 text-yellow-900 border-yellow-200" };
+  if (!hasMinimum) return { label: "Sem alerta", className: "bg-slate-100 text-slate-700 border-slate-200" };
   return { label: "OK", className: "bg-emerald-100 text-emerald-800 border-emerald-200" };
 }
 
@@ -426,6 +438,81 @@ export default function Estoque() {
   const totalValue = Number(dashboard?.summary?.totalValueInCents ?? 0);
   const purchaseSuggestions = dashboard?.purchaseSuggestions ?? [];
 
+  const printLowStockReport = () => {
+    if (purchaseSuggestions.length === 0) {
+      toast.info("Nenhum item atingiu o estoque mínimo configurado.");
+      return;
+    }
+
+    const printedAt = new Date().toLocaleString("pt-BR");
+    const rows = purchaseSuggestions.map((item: any) => {
+      const available = Number(item.availableStock ?? item.currentStock ?? 0);
+      const suggested = Number(item.suggestedQuantity ?? 0);
+      const supplier = item.supplierDisplayName || item.supplierName || "-";
+      return `
+        <tr>
+          <td>${escapeHtml(item.name)}</td>
+          <td>${escapeHtml(item.category || "-")}</td>
+          <td class="number">${available.toLocaleString("pt-BR")} ${escapeHtml(item.unit || "un")}</td>
+          <td class="number">${escapeHtml(item.minimumStock ?? "")}</td>
+          <td class="number">${suggested.toLocaleString("pt-BR")}</td>
+          <td>${escapeHtml(supplier)}</td>
+        </tr>
+      `;
+    }).join("");
+
+    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=1100,height=800");
+    if (!printWindow) {
+      toast.error("Não foi possível abrir a janela de impressão.");
+      return;
+    }
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8" />
+          <title>Relatório de estoque mínimo - Clínica Glutée</title>
+          <style>
+            * { box-sizing: border-box; }
+            body { font-family: Montserrat, Arial, sans-serif; color: #111827; margin: 32px; }
+            header { border-bottom: 3px solid #C9A55B; padding-bottom: 16px; margin-bottom: 24px; }
+            h1 { font-size: 24px; margin: 0 0 8px; }
+            p { margin: 0; color: #4b5563; font-size: 13px; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th { text-align: left; background: #f8f3e6; color: #5f4315; }
+            th, td { border: 1px solid #e5e7eb; padding: 9px 10px; vertical-align: top; }
+            .number { text-align: right; white-space: nowrap; }
+            footer { margin-top: 20px; color: #6b7280; font-size: 11px; }
+            @media print { body { margin: 18mm; } button { display: none; } }
+          </style>
+        </head>
+        <body>
+          <header>
+            <h1>Relatório de itens em estoque mínimo</h1>
+            <p>Clínica Glutée · Gerado em ${escapeHtml(printedAt)}</p>
+          </header>
+          <table>
+            <thead>
+              <tr>
+                <th>Produto</th>
+                <th>Categoria</th>
+                <th class="number">Disponível</th>
+                <th class="number">Mínimo</th>
+                <th class="number">Sugestão</th>
+                <th>Fornecedor</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <footer>Itens sem estoque mínimo configurado não entram neste relatório.</footer>
+          <script>window.addEventListener("load", () => window.print());</script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   const openNewProduct = () => {
     setEditingProduct(null);
     setProductForm(emptyProductForm);
@@ -451,7 +538,7 @@ export default function Estoque() {
       unit: product.unit ?? "unidade",
       unitPurchase: product.unitPurchase ?? "",
       conversionFactor: String(product.conversionFactor ?? 1),
-      minimumStock: String(product.minimumStock ?? 5),
+      minimumStock: product.minimumStock == null ? "" : String(product.minimumStock),
       reorderPoint: product.reorderPoint == null ? "" : String(product.reorderPoint),
       maximumStock: product.maximumStock == null ? "" : String(product.maximumStock),
       costPrice: product.costPriceInCents ? String(Number(product.costPriceInCents) / 100) : "",
@@ -515,7 +602,7 @@ export default function Estoque() {
       unitPurchase: productForm.unitPurchase.trim() || undefined,
       conversionFactor: numberValue(productForm.conversionFactor, 1),
       initialStock: editingProduct ? undefined : numberValue(productForm.initialStock, 0),
-      minimumStock: numberValue(productForm.minimumStock, 0),
+      minimumStock: productForm.minimumStock.trim() ? numberValue(productForm.minimumStock, 0) : null,
       reorderPoint: productForm.reorderPoint ? numberValue(productForm.reorderPoint, 0) : null,
       maximumStock: productForm.maximumStock ? numberValue(productForm.maximumStock, 0) : null,
       costPriceInCents: centsValue(productForm.costPrice),
@@ -809,7 +896,7 @@ export default function Estoque() {
                             </td>
                             <td className="px-4 py-3 text-muted-foreground">{product.defaultLocationName || "Almoxarifado central"}</td>
                             <td className="px-4 py-3 text-right font-semibold">{available.toLocaleString("pt-BR")} {product.unit || "un"}</td>
-                            <td className="px-4 py-3 text-right text-muted-foreground">{product.minimumStock ?? 0} / {product.maximumStock ?? "-"}</td>
+                            <td className="px-4 py-3 text-right text-muted-foreground">{product.minimumStock == null ? "Sem alerta" : product.minimumStock} / {product.maximumStock ?? "-"}</td>
                             <td className="px-4 py-3 text-right">{money(product.costPriceInCents)}</td>
                             <td className="px-4 py-3 text-muted-foreground">{dateText(product.nearestExpirationDate || product.expirationDate)}</td>
                             <td className="px-4 py-3 text-center">
@@ -882,8 +969,8 @@ export default function Estoque() {
                 <tbody>
                   {emergencyProducts.map((product: any) => {
                     const available = Number(product.availableStock ?? product.currentStock ?? 0);
-                    const minimum = Number(product.emergencyCartMinimumStock ?? product.minimumStock ?? 0);
-                    const critical = available <= minimum;
+                    const configuredMinimum = product.emergencyCartMinimumStock ?? product.minimumStock;
+                    const critical = configuredMinimum != null && available <= Number(configuredMinimum);
                     return (
                       <tr key={product.id} className="border-b last:border-0">
                         <td className="px-4 py-3 font-medium">{product.name}</td>
@@ -1065,8 +1152,12 @@ export default function Estoque() {
 
         <TabsContent value="purchase" className="space-y-4">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-lg">Sugestão de compra</CardTitle>
+              <Button variant="outline" onClick={printLowStockReport}>
+                <Printer className="mr-2 h-4 w-4" />
+                Imprimir itens no mínimo
+              </Button>
             </CardHeader>
             <CardContent className="overflow-x-auto p-0">
               <table className="w-full min-w-[760px] text-sm">
@@ -1085,7 +1176,7 @@ export default function Estoque() {
                     <tr key={item.id} className="border-b last:border-0">
                       <td className="px-4 py-3 font-medium">{item.name}</td>
                       <td className="px-4 py-3 text-right">{Number(item.availableStock ?? item.currentStock ?? 0).toLocaleString("pt-BR")}</td>
-                      <td className="px-4 py-3 text-right">{item.minimumStock ?? 0}</td>
+                      <td className="px-4 py-3 text-right">{item.minimumStock ?? "-"}</td>
                       <td className="px-4 py-3 text-right font-semibold">{item.suggestedQuantity}</td>
                       <td className="px-4 py-3 text-muted-foreground">{item.supplierDisplayName || item.supplierName || "-"}</td>
                       <td className="px-4 py-3 text-right">{money(Number(item.suggestedQuantity ?? 0) * Number(item.costPriceInCents ?? 0))}</td>
@@ -1210,7 +1301,17 @@ export default function Estoque() {
             <Field label="Fator de conversão" type="number" value={productForm.conversionFactor} onChange={(value) => setProductForm({ ...productForm, conversionFactor: value })} />
             <Field label="Custo unitário (R$)" type="number" value={productForm.costPrice} onChange={(value) => setProductForm({ ...productForm, costPrice: value })} />
             {!editingProduct && <Field label="Saldo inicial" type="number" value={productForm.initialStock} onChange={(value) => setProductForm({ ...productForm, initialStock: value })} />}
-            <Field label="Estoque mínimo" type="number" value={productForm.minimumStock} onChange={(value) => setProductForm({ ...productForm, minimumStock: value })} />
+            <div>
+              <Label>Estoque mínimo</Label>
+              <Input
+                className="mt-1"
+                type="number"
+                value={productForm.minimumStock}
+                placeholder="Sem alerta"
+                onChange={(event) => setProductForm({ ...productForm, minimumStock: event.target.value })}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">Deixe em branco para não gerar alerta de reposição.</p>
+            </div>
             <Field label="Ponto de reposição" type="number" value={productForm.reorderPoint} onChange={(value) => setProductForm({ ...productForm, reorderPoint: value })} />
             <Field label="Estoque máximo" type="number" value={productForm.maximumStock} onChange={(value) => setProductForm({ ...productForm, maximumStock: value })} />
             {(productForm.itemType === "emergencia" || productForm.emergencyCartItem) && (

@@ -1376,7 +1376,7 @@ export const appRouter = router({
         conversionFactor: z.number().optional(),
         currentStock: z.number().optional(),
         initialStock: z.number().optional(),
-        minimumStock: z.number().optional(),
+        minimumStock: z.number().optional().nullable(),
         reorderPoint: z.number().optional().nullable(),
         maximumStock: z.number().optional().nullable(),
         costPriceInCents: z.number().optional(),

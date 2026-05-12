@@ -357,7 +357,7 @@ async function ensureInventoryTables(connection) {
       description TEXT NULL,
       unit VARCHAR(32) DEFAULT 'un',
       currentStock INT NOT NULL DEFAULT 0,
-      minimumStock INT DEFAULT 5,
+      minimumStock INT NULL DEFAULT NULL,
       costPriceInCents INT NULL,
       supplierName VARCHAR(256) NULL,
       supplierContact VARCHAR(128) NULL,
@@ -446,7 +446,7 @@ async function upsertProduct(connection, item) {
     item.itemType,
     item.unit,
     0,
-    0,
+    null,
     item.controlsLot ? 1 : 0,
     item.controlsExpiration ? 1 : 0,
     item.controlledMedication ? 1 : 0,
@@ -529,6 +529,14 @@ async function main() {
       if (result === "inserted") inserted += 1;
       else updated += 1;
     }
+    await connection.execute(
+      `UPDATE inventory_products
+       SET minimumStock = NULL
+       WHERE currentStock = 0
+         AND minimumStock = 0
+         AND notes LIKE ?`,
+      ["%Lista_Estoque_Clinica_Glutee.docx%"],
+    );
   } finally {
     await connection.end();
   }
