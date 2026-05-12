@@ -971,12 +971,13 @@ export default function Estoque() {
                     const available = Number(product.availableStock ?? product.currentStock ?? 0);
                     const configuredMinimum = product.emergencyCartMinimumStock ?? product.minimumStock;
                     const critical = configuredMinimum != null && available <= Number(configuredMinimum);
+                    const minimumLabel = configuredMinimum == null ? "Sem alerta" : Number(configuredMinimum).toLocaleString("pt-BR");
                     return (
                       <tr key={product.id} className="border-b last:border-0">
                         <td className="px-4 py-3 font-medium">{product.name}</td>
                         <td className="px-4 py-3 text-muted-foreground">{product.subcategory || product.category || "-"}</td>
                         <td className="px-4 py-3 text-right font-semibold">{available.toLocaleString("pt-BR")} {product.unit || "un"}</td>
-                        <td className="px-4 py-3 text-right">{minimum.toLocaleString("pt-BR")}</td>
+                        <td className="px-4 py-3 text-right">{minimumLabel}</td>
                         <td className="px-4 py-3">{dateText(product.nearestExpirationDate || product.expirationDate)}</td>
                         <td className="px-4 py-3 text-center">
                           <Badge variant="outline" className={critical ? "bg-red-100 text-red-800 border-red-200" : "bg-emerald-100 text-emerald-800 border-emerald-200"}>
