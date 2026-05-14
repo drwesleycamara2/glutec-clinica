@@ -214,6 +214,10 @@ function hashJson(value) {
   return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
+function legacyTokenHash(source, id) {
+  return crypto.createHash("sha256").update(`${source}:${id}`).digest("hex");
+}
+
 function questionText(id) {
   return LEGACY_QUESTION_TEXT[id] || `Pergunta importada #${id}`;
 }
@@ -437,6 +441,7 @@ async function importOnDoctorAnamneses(conn) {
       questionIds.map((id) => [`legacy-${id}`, uniqueAnswers.get(id) ?? ""]),
     );
     const submittedAt = dateTime(formClient.data_hora_inclusao, formClient.data);
+    const importedAt = new Date().toISOString();
     const evidence = {
       method: "importacao_legado_ondoctor",
       sourceSystem: "onedoctor",
@@ -445,10 +450,21 @@ async function importOnDoctorAnamneses(conn) {
       sourcePatientId: String(formClient.id_cliente ?? ""),
       originalFile: formClient.arquivo || null,
       signedByPatient: isTrue(formClient.assinado_paciente),
-      importedAt: new Date().toISOString(),
+      importedAt,
       answerKeys: Object.keys(submittedAnswers).sort(),
     };
-    const signatureHash = hashJson({ evidence, submittedAnswers });
+    const stableEvidence = { ...evidence, importedAt: null };
+    const signatureHash = hashJson({ evidence: stableEvidence, submittedAnswers });
+    const tokenHash = legacyTokenHash("legacy_onedoctor", formClientId);
+
+    const [existingByToken] = await conn.query(
+      "select id from anamnesis_share_links where patientId = ? and tokenHash = ? limit 1",
+      [patientId, tokenHash],
+    );
+    if (existingByToken.length > 0) {
+      summary.skippedExisting += 1;
+      continue;
+    }
 
     if (linkColumns.has("signatureHash")) {
       const [existingRows] = await conn.query(
@@ -462,7 +478,7 @@ async function importOnDoctorAnamneses(conn) {
     } else {
       const [existingRows] = await conn.query(
         "select id from anamnesis_share_links where patientId = ? and tokenHash = ? limit 1",
-        [patientId, crypto.createHash("sha256").update(`legacy_onedoctor:${formClientId}`).digest("hex")],
+        [patientId, tokenHash],
       );
       if (existingRows.length > 0) {
         summary.skippedExisting += 1;
@@ -472,7 +488,7 @@ async function importOnDoctorAnamneses(conn) {
 
     const payload = {
       patientId,
-      tokenHash: crypto.createHash("sha256").update(`legacy_onedoctor:${formClientId}`).digest("hex"),
+      tokenHash,
       title: description || "Anamnese importada do OnDoctor",
       templateName: form?.nome || "OnDoctor",
       anamnesisDate: dateOnly(formClient.data) || submittedAt,

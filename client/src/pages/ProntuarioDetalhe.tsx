@@ -732,7 +732,7 @@ function AnamneseTab({ patientId }: { patientId: number }) {
   const [anamnesisTitle, setAnamnesisTitle] = useState(defaultTemplate?.name || "Anamnese inicial");
   const [anamnesisDate, setAnamnesisDate] = useState(new Date().toISOString().slice(0, 10));
   const [questions, setQuestions] = useState<AnamnesisQuestion[]>(cloneAnamnesisQuestions(defaultTemplate?.questions || SYSTEM_ANAMNESIS_TEMPLATES[0].questions));
-  const [expandedRecordId, setExpandedRecordId] = useState<number | null>(null);
+  const [expandedRecordId, setExpandedRecordId] = useState<number | string | null>(null);
 
   useEffect(() => {
     const selectedTemplate = availableTemplates.find((template) => template.id === selectedTemplateId) || defaultTemplate;
@@ -952,7 +952,7 @@ function AnamneseTab({ patientId }: { patientId: number }) {
                       <p className="text-sm font-semibold">{repairMojibake(record.title) || "Anamnese sem nome"}</p>
                       <p className="text-xs text-muted-foreground mt-1">{dateLabel}{record.templateName ? ` · Modelo: ${repairMojibake(record.templateName)}` : ""}</p>
                     </div>
-                    <Badge variant="outline">{record.source === "share" ? "Paciente" : "Clínica"}</Badge>
+                    <Badge variant="outline">{record.sourceLabel || (record.source === "share" ? "Paciente" : "Clínica")}</Badge>
                   </div>
                 </button>
                 {isOpen ? (
@@ -2152,6 +2152,8 @@ function ImagensTab({ patientId }: { patientId: number }) {
   const { data: photos, isLoading } = trpc.photos.getByPatient.useQuery({ patientId });
   const { data: folders = [] } = trpc.photoGallery.getFolders.useQuery({ patientId });
   const { data: uploadLinks = [] } = trpc.photoGallery.listUploadLinks.useQuery({ patientId });
+  const [viewMode, setViewMode] = useState<"lista" | "galeria">("lista");
+  const media = photos ?? [];
 
   if (isLoading) {
     return (
@@ -2172,9 +2174,13 @@ function ImagensTab({ patientId }: { patientId: number }) {
               <Upload className="mr-1.5 h-3.5 w-3.5" />
               Anexar fotos e vídeos
             </Button>
-            <Button size="sm" variant="outline" onClick={() => navigate(`/fotos?patientId=${patientId}`)}>
+            <Button size="sm" variant="outline" onClick={() => setViewMode((current) => current === "lista" ? "galeria" : "lista")}>
               <Layers3 className="mr-1.5 h-3.5 w-3.5" />
-              Organizar por datas e tipo
+              {viewMode === "lista" ? "Exibir como galeria" : "Exibir como lista"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => navigate(`/fotos?patientId=${patientId}`)}>
+              <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+              Comparar mídias
             </Button>
           </>
         }
@@ -2184,7 +2190,7 @@ function ImagensTab({ patientId }: { patientId: number }) {
         <Card className="border-border/50">
           <CardContent className="p-4">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Mídias registradas</p>
-            <p className="mt-2 text-2xl font-semibold text-foreground">{photos?.length ?? 0}</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{media.length}</p>
           </CardContent>
         </Card>
         <Card className="border-border/50">
@@ -2201,16 +2207,16 @@ function ImagensTab({ patientId }: { patientId: number }) {
         </Card>
       </div>
 
-      {!photos || photos.length === 0 ? (
+      {media.length === 0 ? (
         <Card className="border-border/50">
           <CardContent className="py-12 text-center">
             <ImageIcon className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
             <p className="text-sm text-muted-foreground">Nenhuma imagem registrada para este paciente.</p>
           </CardContent>
         </Card>
-      ) : (
+      ) : viewMode === "galeria" ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-          {photos.slice(0, 8).map((photo: any) => (
+          {media.map((photo: any) => (
             <Card key={photo.id} className="border-border/50 overflow-hidden">
               <div className="aspect-square bg-muted/30 flex items-center justify-center">
                 {(photo.photoUrl || photo.url) ? (
@@ -2234,6 +2240,71 @@ function ImagensTab({ patientId }: { patientId: number }) {
               </CardContent>
             </Card>
           ))}
+        </div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+          <Card className="border-border/50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Pastas</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {folders.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhuma pasta criada para este paciente.</p>
+              ) : folders.map((folder: any) => (
+                <button
+                  key={folder.id || folder.name}
+                  type="button"
+                  onClick={() => navigate(`/fotos?patientId=${patientId}`)}
+                  className="flex w-full items-center justify-between rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-left transition hover:border-[#C9A55B]/45 hover:bg-[#C9A55B]/10"
+                >
+                  <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                    <FolderOpen className="h-4 w-4 shrink-0 text-[#C9A55B]" />
+                    <span className="truncate">{repairMojibake(folder.name || folder.title || "Pasta sem nome")}</span>
+                  </span>
+                  <Badge variant="outline" className="text-[10px]">{folder.mediaCount ?? folder.photoCount ?? 0}</Badge>
+                </button>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Mídias recentes</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {media.map((photo: any) => (
+                <div key={photo.id} className="flex items-center gap-3 rounded-xl border border-border/50 bg-muted/15 p-2">
+                  <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-muted/40">
+                    {(photo.photoUrl || photo.url) ? (
+                      photo.mediaType === "video" ? (
+                        <video src={photo.photoUrl || photo.url} className="h-full w-full object-cover" muted playsInline />
+                      ) : (
+                        <img src={photo.photoUrl || photo.url} alt={photo.description || "Imagem"} className="h-full w-full object-cover" />
+                      )
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <ImageIcon className="h-6 w-6 text-muted-foreground/30" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline" className="text-[10px]">
+                        {photo.mediaType === "video" ? <Video className="mr-1 h-3 w-3" /> : null}
+                        {repairMojibake(photo.category || "mídia")}
+                      </Badge>
+                      {photo.folderName ? <Badge variant="secondary" className="text-[10px]">{repairMojibake(photo.folderName)}</Badge> : null}
+                    </div>
+                    <p className="mt-1 truncate text-sm font-medium text-foreground">{repairMojibake(photo.description || photo.originalFileName || "Mídia sem descrição")}</p>
+                    <p className="text-xs text-muted-foreground">{photo.createdAt ? new Date(photo.createdAt).toLocaleString("pt-BR") : "Data não informada"}</p>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => navigate(`/fotos?patientId=${patientId}`)}>
+                    Abrir
+                  </Button>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
         </div>
       )}
     </div>
@@ -3126,17 +3197,16 @@ export default function ProntuarioDetalhe() {
               "historico",
               "anamnese",
               "evolucao",
-              "secretaria",
-              "atestados",
-              "contratos",
-              "prescricoes",
-              "orcamentos",
-              "imagens",
-              "galeria",
-              "anexos",
               "exames",
+              "prescricoes",
+              "atestados",
               "procedimentos",
+              "orcamentos",
+              "contratos",
+              "anexos",
+              "imagens",
               "agendamentos",
+              "secretaria",
             ],
     [isReceptionist, isNotesOnly],
   );
@@ -3258,9 +3328,11 @@ export default function ProntuarioDetalhe() {
               <TabsTrigger value="historico" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
                 <History className="h-3.5 w-3.5" />Histórico
               </TabsTrigger>
-              <TabsTrigger value="evolucao" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-                <Activity className="h-3.5 w-3.5" />Evolução
-              </TabsTrigger>
+              {isReceptionist ? (
+                <TabsTrigger value="evolucao" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                  <Activity className="h-3.5 w-3.5" />Evolução
+                </TabsTrigger>
+              ) : null}
             </>
           )}
           {isNotesOnly && (
@@ -3271,40 +3343,41 @@ export default function ProntuarioDetalhe() {
           {!isReceptionist && !isNotesOnly && (
             <>
               <TabsTrigger value="anamnese" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-                <ClipboardList className="h-3.5 w-3.5" />Anamnese
+                <ClipboardList className="h-3.5 w-3.5" />Anamneses
               </TabsTrigger>
-              <TabsTrigger value="secretaria" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-                <UserCheck className="h-3.5 w-3.5" />Secret&aacute;ria
-              </TabsTrigger>
-              <TabsTrigger value="atestados" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-                <FileText className="h-3.5 w-3.5" />Atestados / Docs
-              </TabsTrigger>
-              <TabsTrigger value="contratos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-                <ScrollText className="h-3.5 w-3.5" />Contratos / Termos
-              </TabsTrigger>
-              <TabsTrigger value="prescricoes" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-                <Stethoscope className="h-3.5 w-3.5" />Prescrições
-              </TabsTrigger>
-              <TabsTrigger value="orcamentos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-                <FileText className="h-3.5 w-3.5" />Orçamento
-              </TabsTrigger>
-              <TabsTrigger value="imagens" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-                <ImageIcon className="h-3.5 w-3.5" />Imagens
-              </TabsTrigger>
-              <TabsTrigger value="galeria" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-                <Layers3 className="h-3.5 w-3.5" />Galeria
-              </TabsTrigger>
-              <TabsTrigger value="anexos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-                <Paperclip className="h-3.5 w-3.5" />Anexos
+              <TabsTrigger value="evolucao" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <Activity className="h-3.5 w-3.5" />Evolução
               </TabsTrigger>
               <TabsTrigger value="exames" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
                 <FlaskConical className="h-3.5 w-3.5" />Exames
               </TabsTrigger>
+              <TabsTrigger value="prescricoes" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <Stethoscope className="h-3.5 w-3.5" />Prescrições
+              </TabsTrigger>
+              <TabsTrigger value="atestados" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <FileText className="h-3.5 w-3.5" />Atestados
+              </TabsTrigger>
               <TabsTrigger value="procedimentos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
                 <Package className="h-3.5 w-3.5" />Procedimentos
               </TabsTrigger>
+              <TabsTrigger value="orcamentos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <FileText className="h-3.5 w-3.5" />Orçamentos
+              </TabsTrigger>
+              <TabsTrigger value="contratos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <ScrollText className="h-3.5 w-3.5" />Contratos/Termos
+              </TabsTrigger>
+              <TabsTrigger value="anexos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <Paperclip className="h-3.5 w-3.5" />Anexos
+              </TabsTrigger>
+              <TabsTrigger value="imagens" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <ImageIcon className="h-3.5 w-3.5" />Imagens
+              </TabsTrigger>
               <TabsTrigger value="agendamentos" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
                 <Calendar className="h-3.5 w-3.5" />Agendamentos
+              </TabsTrigger>
+              <TabsTrigger value="secretaria" className="relative text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <UserCheck className="h-3.5 w-3.5" />Secretária
+                {secretaryRecords.length > 0 ? <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-background" /> : null}
               </TabsTrigger>
             </>
           )}
@@ -3328,7 +3401,6 @@ export default function ProntuarioDetalhe() {
             <TabsContent value="prescricoes" className="mt-4"><PrescricoesWorkspaceTab patientId={patientId} patientName={patient.fullName} patient={patient} /></TabsContent>
             <TabsContent value="orcamentos" className="mt-4"><OrcamentoTab patientId={patientId} patientName={patient.fullName} /></TabsContent>
             <TabsContent value="imagens" className="mt-4"><ImagensTab patientId={patientId} /></TabsContent>
-            <TabsContent value="galeria" className="mt-4"><GaleriaTab patientId={patientId} /></TabsContent>
             <TabsContent value="anexos" className="mt-4"><AnexosTab patientId={patientId} /></TabsContent>
             <TabsContent value="exames" className="mt-4"><ExamesWorkspaceTab patientId={patientId} patient={patient} /></TabsContent>
             <TabsContent value="procedimentos" className="mt-4"><ProcedimentosTab patientId={patientId} /></TabsContent>

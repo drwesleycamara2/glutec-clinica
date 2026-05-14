@@ -3623,15 +3623,6 @@ export async function getAnamnesisShareLinkByToken(token: string) {
   };
 }
 
-/**
- * Retorna APENAS anamneses reais (question?rios preenchidos pelo paciente ou
- * pela clínica) a partir de `anamnesis_share_links`.
- *
- * Fichas de atendimento importadas do Prontu?rio Verde / OneDoctor que
- * possuem o campo `anamnesis` preenchido SÃO evoluções, não anamneses, e
- * aparecem em `getClinicalEvolutionsByPatient` (que mescla legacy). Portanto
- * não são mais retornadas aqui (antes eram, o que misturava as duas coisas).
- */
 function normalizeAnamnesisForDedupe(value: unknown) {
   return String(value ?? "")
     .replace(/<[^>]+>/g, " ")
@@ -3674,6 +3665,72 @@ function dedupeAnamnesisRows<T extends Record<string, any>>(rows: T[]) {
 
   return Array.from(bySignature.values());
 }
+
+function sourceLabelFromLegacyAnamnesis(source?: string | null) {
+  const normalized = String(source ?? "").toLowerCase();
+  if (normalized.includes("verde")) return "Importada do Prontuário Verde";
+  if (normalized.includes("doctor")) return "Importada do OnDoctor";
+  return "Importada de sistema legado";
+}
+
+function mapAnamnesisLinkRow(row: Record<string, any>, allowAnswers: boolean) {
+  let questions: Array<Record<string, any>> = [];
+  let answers: Record<string, string> | null = null;
+  try {
+    questions = JSON.parse(String(row.questionsJson ?? "[]"));
+  } catch {
+    questions = [];
+  }
+  try {
+    answers = row.submittedAnswers ? JSON.parse(String(row.submittedAnswers)) : null;
+  } catch {
+    answers = null;
+  }
+
+  return {
+    ...row,
+    questions: allowAnswers ? questions : [],
+    answers: allowAnswers ? answers : null,
+    visibilityRestricted: !allowAnswers,
+    sourceLabel:
+      row.source === "share"
+        ? "Paciente"
+        : row.source === "legacy_onedoctor"
+          ? "Importada do OnDoctor"
+          : row.source === "legacy_prontuario_verde"
+            ? "Importada do Prontuário Verde"
+            : "Clínica",
+  };
+}
+
+function mapLegacyMedicalAnamnesisRow(row: Record<string, any>, allowAnswers: boolean) {
+  const text = stripHtmlToPlainText(row.anamnesis);
+  const questionText = "Anamnese / história clínica importada";
+  const date = row.anamnesisDate || row.createdAt;
+
+  return {
+    id: -Math.abs(Number(row.medicalRecordId || row.id || 0)),
+    patientId: row.patientId,
+    title: `Anamnese legada - ${sourceLabelFromLegacyAnamnesis(row.sourceSystem).replace("Importada do ", "")}`,
+    templateName: sourceLabelFromLegacyAnamnesis(row.sourceSystem),
+    anamnesisDate: date,
+    submittedAt: date,
+    createdAt: row.createdAt || date,
+    source: "legacy_medical_record",
+    sourceLabel: sourceLabelFromLegacyAnamnesis(row.sourceSystem),
+    visibilityRestricted: !allowAnswers,
+    questions: allowAnswers
+      ? [{
+          id: "legacy-medical-anamnesis",
+          text: questionText,
+          type: "text",
+          options: [],
+          required: false,
+        }]
+      : [],
+    answers: allowAnswers ? { [questionText]: text } : null,
+  };
+}
 export async function listPatientAnamneses(patientId: number, viewerRole?: string | null) {
   const db = await getDb();
   if (!db) return [];
@@ -3690,44 +3747,50 @@ export async function listPatientAnamneses(patientId: number, viewerRole?: strin
     order by coalesce(l.anamnesisDate, l.submittedAt, l.createdAt) desc, l.id desc
   `));
 
-  return dedupeAnamnesisRows(rows).map((row) => {
-    let questions: Array<Record<string, any>> = [];
-    let answers: Record<string, string> | null = null;
-    try {
-      questions = JSON.parse(String(row.questionsJson ?? "[]"));
-    } catch {
-      questions = [];
-    }
-    try {
-      answers = row.submittedAnswers ? JSON.parse(String(row.submittedAnswers)) : null;
-    } catch {
-      answers = null;
-    }
+  const submittedLinkRows = dedupeAnamnesisRows(rows).map((row) => mapAnamnesisLinkRow(row, allowAnswers));
+  if (submittedLinkRows.length > 0) return submittedLinkRows;
 
-    return {
-      ...row,
-      questions: allowAnswers ? questions : [],
-      answers: allowAnswers ? answers : null,
-      visibilityRestricted: !allowAnswers,
-      sourceLabel:
-        row.source === "share"
-          ? "Paciente"
-          : row.source === "legacy_onedoctor"
-            ? "Importada do OnDoctor"
-            : row.source === "legacy_prontuario_verde"
-              ? "Importada do Prontuário Verde"
-              : "Clínica",
-    };
-  });
+  // Alguns backups antigos não trazem o formulário preenchido em
+  // FORMULARIO_CLIENTE, mas a história/anamnese aparece no campo `anamnesis`
+  // da ficha importada. Usamos esse conteúdo como fallback só quando não há
+  // questionário formal salvo para evitar duplicar a aba Histórico.
+  const legacyRows = unwrapRows<any>(await db.execute(sql`
+    select
+      m.id as medicalRecordId,
+      m.patientId,
+      m.date as anamnesisDate,
+      m.anamnesis,
+      m.sourceSystem,
+      m.sourceId,
+      m.createdAt
+    from medical_records m
+    where m.patientId = ${patientId}
+      and coalesce(m.anamnesis, '') <> ''
+      and coalesce(m.sourceSystem, '') <> ''
+    order by coalesce(m.date, m.createdAt) desc, m.id desc
+  `));
+
+  const legacyBySignature = new Map<string, Record<string, any>>();
+  for (const row of legacyRows) {
+    const text = stripHtmlToPlainText(row.anamnesis);
+    if (!text) continue;
+    const signature = [
+      row.patientId,
+      anamnesisDateKey(row),
+      normalizeAnamnesisForDedupe(text),
+    ].join("|");
+    if (!legacyBySignature.has(signature)) {
+      legacyBySignature.set(signature, mapLegacyMedicalAnamnesisRow(row, allowAnswers));
+    }
+  }
+
+  return Array.from(legacyBySignature.values());
 }
 
 export async function patientHasAnyAnamnesis(patientId: number) {
   const db = await getDb();
   if (!db) return false;
 
-  // Apenas question?rios reais (anamnesis_share_links). Os registros antigos
-  // de `medical_records.anamnesis` eram, em sua maior parte, evolu??es
-  // importadas e agora são expostos como evolução clínica legada.
   const submittedRows = unwrapRows<any>(await db.execute(sql`
     select count(*) as count
     from anamnesis_share_links
@@ -3735,7 +3798,17 @@ export async function patientHasAnyAnamnesis(patientId: number) {
       and coalesce(submittedAnswers, '') <> ''
   `));
 
-  return Number(submittedRows[0]?.count ?? 0) > 0;
+  if (Number(submittedRows[0]?.count ?? 0) > 0) return true;
+
+  const legacyRows = unwrapRows<any>(await db.execute(sql`
+    select count(*) as count
+    from medical_records
+    where patientId = ${patientId}
+      and coalesce(anamnesis, '') <> ''
+      and coalesce(sourceSystem, '') <> ''
+  `));
+
+  return Number(legacyRows[0]?.count ?? 0) > 0;
 }
 
 export async function sendPatientAnamnesisRequestViaWhatsApp(
