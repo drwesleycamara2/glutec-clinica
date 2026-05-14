@@ -61,9 +61,40 @@ function digits(value) {
   return String(value ?? "").replace(/\D+/g, "");
 }
 
+function cpfKey(value) {
+  const d = digits(value);
+  return d.length === 11 ? d : "";
+}
+
 function phoneKey(value) {
   const d = digits(value);
   return d.length >= 8 ? d.slice(-8) : d;
+}
+
+function dateOnly(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (match) return match[1];
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+}
+
+function sourcePatientCompatible(patient, detail, client) {
+  const sourceName = cleanText(client?.nome || detail.clienteNome || detail.titulo?.split(" - ")[0]);
+  const sourceCpf = cpfKey(client?.cpf);
+  const patientCpf = cpfKey(patient?.cpf);
+  if (sourceCpf && patientCpf) return sourceCpf === patientCpf;
+
+  const sourceBirth = dateOnly(client?.nascimento);
+  const patientBirth = dateOnly(patient?.birthDate);
+  if (sourceName && sourceBirth && patientBirth) {
+    return normName(sourceName) === normName(patient?.fullName) && sourceBirth === patientBirth;
+  }
+
+  const sourcePhone = phoneKey(client?.celular || detail.clienteCelular || detail.clienteTelefone);
+  const patientPhone = phoneKey(patient?.phone || patient?.phone2);
+  return Boolean(sourceName && normName(sourceName) === normName(patient?.fullName) && (!sourcePhone || !patientPhone || sourcePhone === patientPhone));
 }
 
 function sqlDateTime(date, time) {
@@ -194,7 +225,7 @@ async function nextRecordNumber(conn) {
 
 async function loadPatients(conn) {
   const [rows] = await conn.query(
-    "select id, fullName, phone, phone2, email, sourceSystem, sourceId from patients where coalesce(active,1)=1",
+    "select id, fullName, cpf, birthDate, phone, phone2, email, sourceSystem, sourceId from patients where coalesce(active,1)=1",
   );
   const source = new Map();
   const namePhone = new Map();
@@ -214,8 +245,14 @@ async function loadPatients(conn) {
 async function ensurePatient(conn, patientIndex, patientCols, detail, client) {
   const sourceId = String(detail.idCliente || client?.id || "");
   if (sourceId && patientIndex.source.has(sourceId)) {
+    const existing = patientIndex.source.get(sourceId);
+    if (client && !sourcePatientCompatible(existing, detail, client)) {
+      const message = `Paciente OnDoctor ${sourceId} diverge do cadastro Glutec #${existing.id} (${existing.fullName}). Sincronizacao bloqueada para este agendamento.`;
+      stats.errors.push(message);
+      throw new Error(message);
+    }
     stats.patientsMatched += 1;
-    return patientIndex.source.get(sourceId).id;
+    return existing.id;
   }
 
   const name = cleanText(client?.nome || detail.clienteNome || detail.titulo?.split(" - ")[0]);
@@ -446,4 +483,3 @@ run().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-

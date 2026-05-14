@@ -184,6 +184,21 @@ function normalizeCpf(value) {
   return digits.length === 11 ? digits : "";
 }
 
+function identityMatchesLegacyPerson(patient, person) {
+  if (!patient || !person) return false;
+  const legacyCpf = normalizeCpf(person.cnpj_cpf);
+  const patientCpf = normalizeCpf(patient.cpf);
+  if (legacyCpf && patientCpf) return legacyCpf === patientCpf;
+
+  const legacyBirth = dateOnly(person.nascimento);
+  const patientBirth = dateOnly(patient.birthDate);
+  if (person.nome && patient.fullName && legacyBirth && patientBirth) {
+    return normalizeName(person.nome) === normalizeName(patient.fullName) && legacyBirth === patientBirth;
+  }
+
+  return Boolean(person.nome && patient.fullName && normalizeName(person.nome) === normalizeName(patient.fullName));
+}
+
 function dateOnly(value) {
   const raw = String(value ?? "").trim();
   if (!raw) return null;
@@ -265,6 +280,7 @@ async function buildPatientIndex(conn, peopleRows) {
     byCpf: new Map(),
     byNameBirth: new Map(),
     peopleById: new Map(),
+    patientsById: new Map(),
   };
 
   for (const person of peopleRows) {
@@ -274,6 +290,7 @@ async function buildPatientIndex(conn, peopleRows) {
   const [patients] = await conn.query("select id, fullName, cpf, birthDate, sourceSystem, sourceId from patients");
   for (const patient of patients) {
     const patientId = Number(patient.id);
+    index.patientsById.set(patientId, patient);
     const sourceKey = `${String(patient.sourceSystem ?? "").toLowerCase()}:patient:${patient.sourceId ?? ""}`;
     if (patient.sourceSystem && patient.sourceId) index.byLegacyId.set(sourceKey, patientId);
     const cpf = normalizeCpf(patient.cpf);
@@ -302,6 +319,7 @@ async function buildPatientIndex(conn, peopleRows) {
 function resolvePatientId(index, legacyClientId) {
   const clientId = String(legacyClientId ?? "").trim();
   if (!clientId) return null;
+  const person = index.peopleById.get(clientId);
 
   for (const key of [
     `onedoctor:patient:${clientId}`,
@@ -311,10 +329,9 @@ function resolvePatientId(index, legacyClientId) {
     `onedoctor:pessoa.csv:${clientId}`,
   ]) {
     const mapped = index.byLegacyId.get(key);
-    if (mapped) return mapped;
+    if (mapped && (!person || identityMatchesLegacyPerson(index.patientsById.get(mapped), person))) return mapped;
   }
 
-  const person = index.peopleById.get(clientId);
   if (!person) return null;
 
   const cpf = normalizeCpf(person.cnpj_cpf);
