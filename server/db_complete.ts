@@ -3709,7 +3709,14 @@ export async function listPatientAnamneses(patientId: number, viewerRole?: strin
       questions: allowAnswers ? questions : [],
       answers: allowAnswers ? answers : null,
       visibilityRestricted: !allowAnswers,
-      sourceLabel: row.source === "share" ? "Paciente" : "Clínica",
+      sourceLabel:
+        row.source === "share"
+          ? "Paciente"
+          : row.source === "legacy_onedoctor"
+            ? "Importada do OnDoctor"
+            : row.source === "legacy_prontuario_verde"
+              ? "Importada do Prontuário Verde"
+              : "Clínica",
     };
   });
 }

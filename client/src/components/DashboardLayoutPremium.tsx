@@ -1,4 +1,4 @@
-import { useAuth } from "@/_core/hooks/useAuth";
+import { ACCESS_PREVIEW_PROFILES, useAuth } from "@/_core/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   AlertDialog,
@@ -235,7 +235,15 @@ function DashboardLayoutPremiumContent({
   children: React.ReactNode;
   setSidebarWidth: (width: number) => void;
 }) {
-  const { user, logout } = useAuth();
+  const {
+    user,
+    actualUser,
+    logout,
+    accessPreview,
+    canUseAccessPreview,
+    setAccessPreview,
+    clearAccessPreview,
+  } = useAuth();
   const { setStorageScope } = useTheme();
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar, isMobile, setOpenMobile } = useSidebar();
@@ -254,9 +262,13 @@ function DashboardLayoutPremiumContent({
   );
   const activeDraftBasePath = activeClinicalDraft?.path.split("#")[0] ?? null;
   const isSeniorAdmin =
-    user?.role === "admin" &&
-    String(user?.email ?? "").trim().toLowerCase() === "contato@drwesleycamara.com.br";
-  const themeScope = user?.id ? `user-${user.id}` : user?.email ? String(user.email).trim().toLowerCase() : null;
+    actualUser?.role === "admin" &&
+    String(actualUser?.email ?? "").trim().toLowerCase() === "contato@drwesleycamara.com.br";
+  const themeScope = actualUser?.id
+    ? `user-${actualUser.id}`
+    : actualUser?.email
+      ? String(actualUser.email).trim().toLowerCase()
+      : null;
 
   useEffect(() => {
     setStorageScope?.(themeScope);
@@ -458,6 +470,35 @@ function DashboardLayoutPremiumContent({
           </SidebarContent>
 
           <SidebarFooter className="space-y-3 p-3">
+            {canUseAccessPreview && !isCollapsed ? (
+              <div className="rounded-2xl border border-gold/25 bg-background/65 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+                <label className="block text-[10px] font-semibold uppercase tracking-[0.22em] text-text-tertiary">
+                  Visualizar como
+                </label>
+                <select
+                  value={accessPreview?.id ?? ""}
+                  onChange={(event) => setAccessPreview(event.target.value)}
+                  className="mt-2 h-9 w-full rounded-xl border border-gold/20 bg-surface px-2 text-xs font-medium text-text-primary outline-none transition focus:border-gold/50 focus:ring-2 focus:ring-gold/20"
+                  aria-label="Visualizar sistema com perfil de colaborador"
+                >
+                  <option value="">Administrador master</option>
+                  {ACCESS_PREVIEW_PROFILES.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.label}
+                    </option>
+                  ))}
+                </select>
+                {accessPreview ? (
+                  <button
+                    type="button"
+                    onClick={clearAccessPreview}
+                    className="mt-2 w-full rounded-xl border border-gold/20 px-2 py-1.5 text-[11px] font-semibold text-text-secondary transition hover:border-gold/40 hover:text-text-primary"
+                  >
+                    Sair da visualização
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             {!isCollapsed ? (
               <div className="rounded-2xl border border-gold/15 bg-background/50 px-3 py-2 text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
                 Versão 1.0
@@ -485,7 +526,7 @@ function DashboardLayoutPremiumContent({
                       {user?.name || "Equipe Glutec System"}
                     </p>
                     <p className="mt-1 truncate text-[11px] uppercase tracking-[0.2em] text-text-tertiary">
-                      {user?.role === "admin" ? "Administrador" : "Equipe clínica"}
+                      {accessPreview?.label ?? (user?.role === "admin" ? "Administrador" : "Equipe clínica")}
                     </p>
                   </div>
                 </button>
@@ -651,6 +692,19 @@ function DashboardLayoutPremiumContent({
         )}
 
         <main className="app-main-content min-w-0 flex-1 px-4 pb-6 pt-4 lg:px-6 lg:pb-8 lg:pt-6">
+          {accessPreview ? (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#C9A55B]/35 bg-[#C9A55B]/10 px-4 py-3 text-sm">
+              <div>
+                <p className="font-semibold text-text-primary">Visualização de permissões ativa</p>
+                <p className="text-xs text-text-secondary">
+                  Você está vendo o sistema como {accessPreview.label}. As credenciais reais continuam sendo do administrador master.
+                </p>
+              </div>
+              <Button variant="outline" className="rounded-xl" onClick={clearAccessPreview}>
+                Voltar ao administrador master
+              </Button>
+            </div>
+          ) : null}
           {activeClinicalDraft ? (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#C9A55B]/25 bg-[linear-gradient(135deg,rgba(201,165,91,0.12),rgba(255,255,255,0.04))] px-4 py-3 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
               <div>
