@@ -700,7 +700,7 @@ async function startServer() {
     const baseUrl = getRequestBaseUrl(req);
     const pageUrl = `${baseUrl}/formulario-seguro/${token}`;
     const redirectUrl = `${baseUrl}/formulario-seguro/preencher/${token}`;
-    const imageUrl = `${baseUrl}/anamnesis-preview.png`;
+    const imageUrl = `${baseUrl}/logo-glutee.png?v=20260515`;
     const title = "Formulário seguro | Clínica Glutée";
     const description = "Preencha suas informações de saúde com segurança antes do atendimento na Clínica Glutée.";
 

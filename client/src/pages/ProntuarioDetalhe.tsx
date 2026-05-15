@@ -637,11 +637,32 @@ function HistoricoTab({ patientId }: { patientId: number }) {
 }
 
 function SecretariaTab({ patientId }: { patientId: number }) {
-  const { data: evolutions, isLoading } = trpc.clinicalEvolution.getByPatient.useQuery({ patientId });
+  const { data: evolutions, isLoading, refetch } = trpc.clinicalEvolution.getByPatient.useQuery({ patientId });
+  const [noteText, setNoteText] = useState("");
+  const saveNoteMutation = trpc.clinicalEvolution.updateSecretaryNotes.useMutation({
+    onSuccess: () => {
+      toast.success("Anotação da equipe salva com auditoria.");
+      setNoteText("");
+      void refetch();
+    },
+    onError: (error: any) => toast.error(error?.message || "Não foi possível salvar a anotação."),
+  });
   const records = useMemo(
     () => (evolutions ?? []).filter((record: any) => isSecretaryOnlyEvolutionRecord(record)),
     [evolutions],
   );
+
+  const handleSaveNote = () => {
+    const text = noteText.trim();
+    if (text.length < 3) {
+      toast.error("Escreva a anotação antes de salvar.");
+      return;
+    }
+    saveNoteMutation.mutate({
+      patientId,
+      secretaryNotes: text,
+    });
+  };
 
   if (isLoading) {
     return (
@@ -651,44 +672,73 @@ function SecretariaTab({ patientId }: { patientId: number }) {
     );
   }
 
-  if (records.length === 0) {
-    return (
-      <Card className="border-border/50">
-        <CardContent className="py-12 text-center">
-          <UserCheck className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
-          <p className="text-sm text-muted-foreground">Nenhum registro administrativo da secretaria foi encontrado para este paciente.</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <div className="space-y-3">
-      {records.map((record: any) => {
-        const baseDate = record.startedAt || record.createdAt;
-        const date = baseDate
-          ? new Date(baseDate).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
-          : "—";
+      <Card className="border-[#C9A55B]/25 bg-gradient-to-br from-[#C9A55B]/10 via-transparent to-transparent">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <UserCheck className="h-4 w-4 text-[#C9A55B]" />
+            Nova anotação da equipe
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Use esta área para observações administrativas internas. Ela fica separada do prontuário clínico.
+          </p>
+          <Textarea
+            value={noteText}
+            onChange={(event) => setNoteText(event.target.value)}
+            rows={4}
+            placeholder="Ex.: paciente comunicou insatisfação, orientação administrativa, observação de atendimento..."
+          />
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              onClick={handleSaveNote}
+              disabled={saveNoteMutation.isPending}
+              className="btn-gold-gradient font-semibold text-slate-950 hover:text-slate-950"
+            >
+              {saveNoteMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Salvar anotação
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
-        return (
-          <Card key={`secretaria-${record.id}`} className="border-border/50">
-            <CardContent className="p-4 space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <UserCheck className="h-4 w-4 text-[#C9A55B]" />
-                  <span className="text-sm font-semibold text-foreground">Registro da secret&aacute;ria</span>
-                  {record.status && <Badge variant="outline" className="text-[10px]">{record.status}</Badge>}
+      {records.length === 0 ? (
+        <Card className="border-border/50">
+          <CardContent className="py-12 text-center">
+            <UserCheck className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+            <p className="text-sm text-muted-foreground">Nenhuma anotação administrativa da equipe foi encontrada para este paciente.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        records.map((record: any) => {
+          const baseDate = record.startedAt || record.createdAt;
+          const date = baseDate
+            ? new Date(baseDate).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
+            : "—";
+
+          return (
+            <Card key={`secretaria-${record.id}`} className="border-border/50">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="h-4 w-4 text-[#C9A55B]" />
+                    <span className="text-sm font-semibold text-foreground">Anotação da equipe</span>
+                    {record.status && <Badge variant="outline" className="text-[10px]">{record.status}</Badge>}
+                  </div>
+                  <span className="text-xs text-muted-foreground">{date}</span>
                 </div>
-                <span className="text-xs text-muted-foreground">{date}</span>
-              </div>
 
-              <p className="text-sm whitespace-pre-wrap text-foreground">
-                {record.secretaryNotes?.trim() || "Sem conteúdo registrado."}
-              </p>
-            </CardContent>
-          </Card>
-        );
-      })}
+                <p className="text-sm whitespace-pre-wrap text-foreground">
+                  {record.secretaryNotes?.trim() || "Sem conteúdo registrado."}
+                </p>
+              </CardContent>
+            </Card>
+          );
+        })
+      )}
     </div>
   );
 }
@@ -3192,7 +3242,7 @@ export default function ProntuarioDetalhe() {
       isNotesOnly
         ? ["secretaria"]
         : isReceptionist
-          ? ["historico", "evolucao"]
+          ? ["historico", "evolucao", "secretaria"]
           : [
               "historico",
               "anamnese",
@@ -3285,7 +3335,7 @@ export default function ProntuarioDetalhe() {
       {!isReceptionist && !isNotesOnly && latestSecretaryRecord && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300/40 bg-amber-50/70 p-3">
           <div className="space-y-1">
-            <p className="text-sm font-semibold text-amber-900">Há registros da secretaria neste prontuário.</p>
+            <p className="text-sm font-semibold text-amber-900">Há anotações da equipe neste prontuário.</p>
             <p className="text-xs text-amber-800">
               Último registro em{" "}
               {new Date(latestSecretaryRecord.startedAt || latestSecretaryRecord.createdAt).toLocaleString("pt-BR", {
@@ -3306,7 +3356,7 @@ export default function ProntuarioDetalhe() {
               }
             }}
           >
-            Ver registros da secret&aacute;ria
+            Ver anotações
           </Button>
         </div>
       )}
@@ -3329,9 +3379,15 @@ export default function ProntuarioDetalhe() {
                 <History className="h-3.5 w-3.5" />Histórico
               </TabsTrigger>
               {isReceptionist ? (
-                <TabsTrigger value="evolucao" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-                  <Activity className="h-3.5 w-3.5" />Evolução
-                </TabsTrigger>
+                <>
+                  <TabsTrigger value="evolucao" className="text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                    <Activity className="h-3.5 w-3.5" />Evolução
+                  </TabsTrigger>
+                  <TabsTrigger value="secretaria" className="relative text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
+                    <UserCheck className="h-3.5 w-3.5" />Anotações
+                    {secretaryRecords.length > 0 ? <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-background" /> : null}
+                  </TabsTrigger>
+                </>
               ) : null}
             </>
           )}
@@ -3376,7 +3432,7 @@ export default function ProntuarioDetalhe() {
                 <Calendar className="h-3.5 w-3.5" />Agendamentos
               </TabsTrigger>
               <TabsTrigger value="secretaria" className="relative text-xs gap-1 data-[state=active]:bg-primary data-[state=active]:text-white">
-                <UserCheck className="h-3.5 w-3.5" />Secretária
+                <UserCheck className="h-3.5 w-3.5" />Anotações
                 {secretaryRecords.length > 0 ? <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-background" /> : null}
               </TabsTrigger>
             </>
@@ -3388,6 +3444,9 @@ export default function ProntuarioDetalhe() {
             <TabsContent value="historico" className="mt-4"><HistoricoTab patientId={patientId} /></TabsContent>
             <TabsContent value="evolucao" className="mt-4"><EvolucaoClinicaWorkspace patientId={patientId} patientName={patient.fullName} /></TabsContent>
           </>
+        )}
+        {!isNotesOnly && isReceptionist && (
+          <TabsContent value="secretaria" className="mt-4"><SecretariaTab patientId={patientId} /></TabsContent>
         )}
         {isNotesOnly && (
           <TabsContent value="secretaria" className="mt-4"><SecretariaTab patientId={patientId} /></TabsContent>

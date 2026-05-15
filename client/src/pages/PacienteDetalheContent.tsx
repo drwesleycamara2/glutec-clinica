@@ -43,6 +43,7 @@ export default function PacienteDetalheContent() {
     user?.role === "admin" ||
     user?.role === "medico" ||
     user?.role === "recepcionista" ||
+    user?.role === "secretaria" ||
     user?.role === "enfermeiro";
   const canViewAnswers = user?.role === "admin" || user?.role === "medico" || user?.role === "enfermeiro";
 
@@ -188,14 +189,17 @@ export default function PacienteDetalheContent() {
               <SendAnamnesisButton
                 patientId={patientId}
                 patientName={patient.fullName}
+                label={canViewAnswers ? "Enviar anamnese" : "Gerar link para o paciente"}
                 onLinkCreated={() => void refetchAnamneses()}
                 className="bg-gradient-to-r from-[#8A6526] via-[#C9A55B] to-[#B8863B] text-white hover:from-[#7A5A22] hover:via-[#B8943F] hover:to-[#A67A33]"
               />
             ) : null}
-            <Button variant="outline" onClick={() => setLocation(`/prontuarios/${patient.id}?tab=anamnese`)}>
-              <Link2 className="mr-2 h-4 w-4" />
-              Abrir aba de anamnese
-            </Button>
+            {canViewAnswers ? (
+              <Button variant="outline" onClick={() => setLocation(`/prontuarios/${patient.id}?tab=anamnese`)}>
+                <Link2 className="mr-2 h-4 w-4" />
+                Abrir aba de anamnese
+              </Button>
+            ) : null}
           </div>
 
           <p className="text-sm text-muted-foreground">

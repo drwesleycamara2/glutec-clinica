@@ -26,6 +26,8 @@ export type BackfillSummary = {
   dryRun: boolean;
   evolutionsScanned: number;
   evolutionsUpdated: number;
+  medicalRecordsScanned: number;
+  medicalRecordsUpdated: number;
   anamnesesScanned: number;
   anamnesesUpdated: number;
   unmappedIds: string[];
@@ -80,6 +82,8 @@ export async function runLegacyAnamneseBackfill(
     dryRun,
     evolutionsScanned: 0,
     evolutionsUpdated: 0,
+    medicalRecordsScanned: 0,
+    medicalRecordsUpdated: 0,
     anamnesesScanned: 0,
     anamnesesUpdated: 0,
     unmappedIds: [],
@@ -118,6 +122,44 @@ export async function runLegacyAnamneseBackfill(
       if (updates.length === 0) continue;
       const setExpr = sql.join(updates, sql`, `);
       await db.execute(sql`update clinical_evolution set ${setExpr} where id = ${row.id}`);
+    }
+  }
+
+  // ─── medical_records legados ───────────────────────────────────────────────
+  // Estes registros são exibidos como evoluções na aba Histórico/Evolução.
+  const medicalRows = unwrapRows<any>(
+    await db.execute(sql`
+      select id, chiefComplaint, anamnesis, physicalExam, diagnosis, plan, evolution, notes
+      from medical_records
+      where chiefComplaint regexp '#[0-9]{2,8}:'
+         or anamnesis regexp '#[0-9]{2,8}:'
+         or physicalExam regexp '#[0-9]{2,8}:'
+         or diagnosis regexp '#[0-9]{2,8}:'
+         or plan regexp '#[0-9]{2,8}:'
+         or evolution regexp '#[0-9]{2,8}:'
+         or notes regexp '#[0-9]{2,8}:'
+      limit 10000
+    `),
+  );
+  summary.medicalRecordsScanned = medicalRows.length;
+
+  for (const row of medicalRows) {
+    const fields = ["chiefComplaint", "anamnesis", "physicalExam", "diagnosis", "plan", "evolution", "notes"] as const;
+    const updates: any[] = [];
+    for (const field of fields) {
+      const nextValue = applyMappingToText(String(row[field] ?? ""), map, unmapped);
+      if (nextValue !== null) {
+        updates.push(sql`${sql.raw(field)} = ${nextValue}`);
+        if (!summary.sampleBefore) {
+          summary.sampleBefore = String(row[field] ?? "").slice(0, 240);
+          summary.sampleAfter = nextValue.slice(0, 240);
+        }
+      }
+    }
+    if (updates.length === 0) continue;
+    summary.medicalRecordsUpdated += 1;
+    if (!dryRun) {
+      await db.execute(sql`update medical_records set ${sql.join(updates, sql`, `)} where id = ${row.id}`);
     }
   }
 

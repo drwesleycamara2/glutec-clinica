@@ -283,14 +283,6 @@ export const clinicalEvolutionRouter = router({
     .mutation(async ({ ctx, input }) => {
       if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
 
-      const allowedRoles = new Set(["admin", "medico", "enfermeiro", "recepcionista", "secretaria"]);
-      if (!allowedRoles.has(String(ctx.user.role || ""))) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Você não tem permissão para alterar observações da secretaria.",
-        });
-      }
-
       const previous = input.id ? await db.getClinicalEvolutionById(input.id) : null;
       if (input.id && !previous) {
         throw new TRPCError({
@@ -306,7 +298,7 @@ export const clinicalEvolutionRouter = router({
       if (isFinalizedOrSigned && justification.length < 10) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Esta consulta já foi finalizada. Informe uma justificativa (mín. 10 caracteres) para editar a observação da secretaria.",
+          message: "Esta consulta já foi finalizada. Informe uma justificativa (mín. 10 caracteres) para editar a anotação da equipe.",
         });
       }
 
@@ -321,7 +313,7 @@ export const clinicalEvolutionRouter = router({
       if (!updated) {
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: "Não foi possível salvar as observações da secretaria.",
+          message: "Não foi possível salvar as anotações da equipe.",
         });
       }
 
@@ -336,7 +328,7 @@ export const clinicalEvolutionRouter = router({
           editedByUserRole: ctx.user.role ?? null,
           previousStatus,
           newStatus: String((updated as any)?.status ?? previousStatus),
-          justification: justification || "Atualização das observações da secretaria.",
+          justification: justification || "Atualização das anotações da equipe.",
           changedFields: changedFields.length ? changedFields : ["secretaryNotes"],
           previousSnapshot,
           newSnapshot,
