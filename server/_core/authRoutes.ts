@@ -11,6 +11,7 @@ import {
   createSessionToken,
   createTempTwoFactorToken,
   hashPassword,
+  refreshSessionCookie,
   verifyPassword,
   verifyTempTwoFactorToken,
 } from "./auth";
@@ -399,6 +400,7 @@ export function registerAuthRoutes(app: Express) {
   app.get("/api/auth/me", async (req, res) => {
     const user = await authenticateRequest(req);
     if (!user) return res.status(401).json({ user: null });
+    await refreshSessionCookie(req, res, user);
     return res.json({ user: sanitizeUser(user) });
   });
 

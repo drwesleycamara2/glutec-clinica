@@ -59,7 +59,7 @@ const publicPaths = [
 const sessionSetupPaths = ["/configurar-2fa", "/trocar-senha"];
 const INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000;
 const LAST_ACTIVITY_KEY = "glutec:last-activity-at";
-const ACTIVITY_EVENTS = ["pointerdown", "keydown", "scroll", "touchstart", "focus"] as const;
+const ACTIVITY_EVENTS = ["pointerdown", "mousemove", "keydown", "scroll", "touchstart", "focus"] as const;
 
 function AccessDenied() {
   return (

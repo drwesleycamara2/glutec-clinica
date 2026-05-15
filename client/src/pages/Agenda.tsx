@@ -112,6 +112,7 @@ const DAY_STATUS_LABELS: Record<keyof typeof DAY_STATUS_COLORS, string> = {
 const defaultAppointmentForm = {
   appointmentId: "",
   patientId: "",
+  patientName: "",
   doctorId: "",
   scheduledAt: "",
   durationMinutes: "30",
@@ -363,19 +364,38 @@ export default function Agenda() {
   const [blockForm, setBlockForm] = useState(defaultBlockForm);
   const [arrivalTime, setArrivalTime] = useState("");
 
-  const broadRangeStart = useMemo(() => new Date(calendarYear - 1, 0, 1, 0, 0, 0, 0), [calendarYear]);
-  const broadRangeEnd = useMemo(() => new Date(calendarYear + 1, 11, 31, 23, 59, 59, 999), [calendarYear]);
+  const calendarRangeStart = useMemo(() => new Date(calendarYear, calendarMonth, 1, 0, 0, 0, 0), [calendarYear, calendarMonth]);
+  const calendarRangeEnd = useMemo(() => new Date(calendarYear, calendarMonth + 1, 0, 23, 59, 59, 999), [calendarYear, calendarMonth]);
+  const selectedWeekRangeStart = useMemo(() => {
+    const start = new Date(selectedDate);
+    start.setDate(selectedDate.getDate() - selectedDate.getDay());
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }, [selectedDate]);
+  const selectedWeekRangeEnd = useMemo(() => {
+    const end = new Date(selectedWeekRangeStart);
+    end.setDate(selectedWeekRangeStart.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    return end;
+  }, [selectedWeekRangeStart]);
+  const agendaRangeStart = useMemo(
+    () => new Date(Math.min(calendarRangeStart.getTime(), selectedWeekRangeStart.getTime())),
+    [calendarRangeStart, selectedWeekRangeStart],
+  );
+  const agendaRangeEnd = useMemo(
+    () => new Date(Math.max(calendarRangeEnd.getTime(), selectedWeekRangeEnd.getTime())),
+    [calendarRangeEnd, selectedWeekRangeEnd],
+  );
 
   const { data: doctors } = trpc.admin.getDoctors.useQuery();
-  const { data: patients } = trpc.patients.list.useQuery({ limit: 5000 });
   const { data: clinicSettings } = trpc.clinic.get.useQuery();
   const { data: appointments, refetch: refetchAppointments } = trpc.appointments.getByDate.useQuery({
-    from: broadRangeStart.toISOString(),
-    to: broadRangeEnd.toISOString(),
+    from: agendaRangeStart.toISOString(),
+    to: agendaRangeEnd.toISOString(),
   });
   const { data: blocks, refetch: refetchBlocks } = trpc.appointmentBlocks.list.useQuery({
-    from: broadRangeStart.toISOString(),
-    to: broadRangeEnd.toISOString(),
+    from: agendaRangeStart.toISOString(),
+    to: agendaRangeEnd.toISOString(),
   });
 
   const createAppointmentMutation = trpc.appointments.create.useMutation({
@@ -482,8 +502,8 @@ export default function Agenda() {
     return values;
   }, [daysInMonth, firstDayOfMonth]);
 
-  const getPatientName = (patientId: number) =>
-    (() => { const patient = patients?.find((item) => item.id === patientId); return patient ? patientDisplayName(patient) : `Paciente #${patientId}`; })();
+  const getAppointmentPatientName = (appointment: any) =>
+    formatImportedText(appointment.patientName) || `Paciente #${appointment.patientId}`;
 
   const getDoctorName = (doctorId: number) =>
     doctors?.find((doctor) => doctor.id === doctorId)?.name ?? `Profissional #${doctorId}`;
@@ -499,12 +519,12 @@ export default function Agenda() {
 
       map[key].push({
         ...appointment,
-        patientName: getPatientName(appointment.patientId),
+        patientName: getAppointmentPatientName(appointment),
         doctorName: getDoctorName(appointment.doctorId),
       });
     });
     return map;
-  }, [selectedDayAppointments, patients, doctors]);
+  }, [selectedDayAppointments, doctors]);
 
   const visibleTimeSlots = useMemo(() => {
     const configuredSlots = generateStandardVisibleSlots(selectedDate, selectedSchedule);
@@ -651,6 +671,7 @@ export default function Agenda() {
     setAppointmentForm({
       appointmentId: String(appointment.id),
       patientId: String(appointment.patientId),
+      patientName: getAppointmentPatientName(appointment),
       doctorId: String(appointment.doctorId),
       scheduledAt: toDateTimeInputValue(new Date(appointment.scheduledAt)),
       durationMinutes: duration,
@@ -1026,7 +1047,7 @@ export default function Agenda() {
                                 {STATUS_LABELS[item.status] ?? item.status}
                               </Badge>
                             </div>
-                            <p className="mt-2 text-sm text-gray-900">{getPatientName(item.patientId)}</p>
+                            <p className="mt-2 text-sm text-gray-900">{getAppointmentPatientName(item)}</p>
                             <p className="text-xs text-gray-500">
                               {getDoctorName(item.doctorId)} · {item.room || "Sem sala"}
                             </p>
@@ -1200,9 +1221,9 @@ export default function Agenda() {
                 className="mt-1"
                 value={
                   appointmentForm.patientId
-                    ? (patients ?? []).find((item) => String(item.id) === appointmentForm.patientId) ?? {
+                    ? {
                         id: Number(appointmentForm.patientId),
-                        fullName: appointmentForm.patientId,
+                        fullName: appointmentForm.patientName || `Paciente #${appointmentForm.patientId}`,
                       }
                     : null
                 }
@@ -1210,6 +1231,7 @@ export default function Agenda() {
                   setAppointmentForm((current) => ({
                     ...current,
                     patientId: patient ? String(patient.id) : "",
+                    patientName: patient ? patientDisplayName(patient as any) : "",
                   }))
                 }
                 placeholder="Digite o nome, número de prontuário ou telefone…"
@@ -1439,7 +1461,7 @@ export default function Agenda() {
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Paciente</p>
                   <p className="mt-2 text-sm font-semibold text-gray-900">
-                    {selectedEvent.patientName ?? getPatientName(selectedEvent.patientId)}
+                    {getAppointmentPatientName(selectedEvent)}
                   </p>
                 </div>
                 <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">

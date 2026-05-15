@@ -8,10 +8,11 @@
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { randomBytes } from "crypto";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { parse as parseCookieHeader } from "cookie";
-import { COOKIE_NAME, SESSION_DURATION_MS } from "@shared/const";
+import { COOKIE_NAME, MUST_CHANGE_PASSWORD_SESSION_MS, SESSION_DURATION_MS } from "@shared/const";
 import { ENV } from "./env";
+import { getSessionCookieOptions } from "./cookies";
 import * as db from "../db";
 import type { User } from "../../drizzle/schema";
 
@@ -150,6 +151,32 @@ export async function authenticateRequest(req: Request): Promise<User | null> {
   if (user.email !== SUPER_ADMIN_EMAIL && user.status === "inactive") return null;
 
   return user;
+}
+
+/**
+ * Renova a sessão autenticada em cada interação com o servidor.
+ *
+ * O bloqueio por inatividade continua sendo controlado pelo frontend por 60
+ * minutos sem eventos do usuário. Aqui evitamos que o JWT expire por tempo
+ * absoluto enquanto o usuário ainda está trabalhando em cadastros, agenda ou
+ * prontuários.
+ */
+export async function refreshSessionCookie(req: Request, res: Response, user: User | null): Promise<void> {
+  if (!user) return;
+
+  const durationMs = (user as any).mustChangePassword ? MUST_CHANGE_PASSWORD_SESSION_MS : SESSION_DURATION_MS;
+  const sessionToken = await createSessionToken({
+    userId: user.id,
+    email: user.email,
+    role: user.role,
+    twoFactorVerified: Boolean(user.twoFactorEnabled),
+    sessionEpoch: epochOf(user),
+  }, durationMs);
+  const cookieOptions = getSessionCookieOptions(req);
+  res.cookie(COOKIE_NAME, sessionToken, {
+    ...cookieOptions,
+    maxAge: durationMs,
+  });
 }
 
 /**
