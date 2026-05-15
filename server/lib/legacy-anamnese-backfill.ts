@@ -12,8 +12,8 @@
  *  - É idempotente: a regex ".#NNN:" só casa enquanto sobrar o marcador
  *    legado, então rodar de novo sem mapear novos IDs é um no-op.
  *  - Aceita modo `dryRun` para o admin pré-visualizar.
- *  - Atualiza tanto `clinical_evolution.clinicalNotes` quanto, se houver,
- *    `clinical_evolution.anamnesis` e `anamnesis_share_links.questionsJson` /
+ *  - Atualiza `clinical_evolutions.clinicalNotes` e
+ *    `anamnesis_share_links.questionsJson` /
  *    `submittedAnswers`.
  */
 
@@ -95,12 +95,12 @@ export async function runLegacyAnamneseBackfill(
     return summary;
   }
 
-  // ─── clinical_evolution ────────────────────────────────────────────────────
+  // ─── clinical_evolutions ───────────────────────────────────────────────────
   const evolRows = unwrapRows<any>(
     await db.execute(sql`
-      select id, clinicalNotes, anamnesis
-      from clinical_evolution
-      where (clinicalNotes regexp '#[0-9]{2,8}:' or anamnesis regexp '#[0-9]{2,8}:')
+      select id, clinicalNotes
+      from clinical_evolutions
+      where clinicalNotes regexp '#[0-9]{2,8}:'
       limit 5000
     `),
   );
@@ -108,20 +108,14 @@ export async function runLegacyAnamneseBackfill(
 
   for (const row of evolRows) {
     const newClinical = applyMappingToText(String(row.clinicalNotes ?? ""), map, unmapped);
-    const newAnamnese = applyMappingToText(String(row.anamnesis ?? ""), map, unmapped);
-    if (newClinical === null && newAnamnese === null) continue;
-    if (!summary.sampleBefore && (row.clinicalNotes || row.anamnesis)) {
-      summary.sampleBefore = String(row.clinicalNotes ?? row.anamnesis ?? "").slice(0, 240);
-      summary.sampleAfter = String(newClinical ?? newAnamnese ?? "").slice(0, 240);
+    if (newClinical === null) continue;
+    if (!summary.sampleBefore && row.clinicalNotes) {
+      summary.sampleBefore = String(row.clinicalNotes ?? "").slice(0, 240);
+      summary.sampleAfter = String(newClinical ?? "").slice(0, 240);
     }
     summary.evolutionsUpdated += 1;
     if (!dryRun) {
-      const updates: any[] = [];
-      if (newClinical !== null) updates.push(sql`clinicalNotes = ${newClinical}`);
-      if (newAnamnese !== null) updates.push(sql`anamnesis = ${newAnamnese}`);
-      if (updates.length === 0) continue;
-      const setExpr = sql.join(updates, sql`, `);
-      await db.execute(sql`update clinical_evolution set ${setExpr} where id = ${row.id}`);
+      await db.execute(sql`update clinical_evolutions set clinicalNotes = ${newClinical} where id = ${row.id}`);
     }
   }
 

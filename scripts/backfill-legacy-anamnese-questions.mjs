@@ -117,7 +117,7 @@ const unmapped = new Set();
 
 try {
   const entries = await Promise.all([
-    updateTable(conn, "clinical_evolution", ["clinicalNotes", "anamnesis"], "clinicalEvolution", unmapped, 10000),
+    updateTable(conn, "clinical_evolutions", ["clinicalNotes"], "clinicalEvolutions", unmapped, 10000),
     updateTable(conn, "medical_records", ["chiefComplaint", "anamnesis", "physicalExam", "diagnosis", "plan", "evolution", "notes"], "medicalRecords", unmapped, 10000),
     updateTable(conn, "anamnesis_share_links", ["questionsJson", "submittedAnswers"], "anamnesisShareLinks", unmapped, 10000),
   ]);
