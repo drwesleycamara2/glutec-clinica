@@ -69,6 +69,7 @@ export interface ClinicalPdfPatient {
   phone?: string | null;
   address?: string | Record<string, unknown> | null;
   street?: string | null;
+  addressNumber?: string | number | null;
   number?: string | number | null;
   neighborhood?: string | null;
   city?: string | null;
@@ -101,6 +102,7 @@ const CLINIC_EMAIL = "contato@clinicaglutee.com.br";
 const CLINIC_INSTAGRAM = "@clinicaglutee";
 const DOCTOR_NAME = "Dr. Wésley de Sousa Câmara";
 const DOCTOR_CRM = "CRM-SP: 174868";
+const DOCTOR_STAMP_PATH = "/clinical-print/carimbo-wesley.png";
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -163,7 +165,7 @@ function normalizeClinicalPatient(patient?: ClinicalPdfPatient | string): Requir
 
   const address = parseAddress(patient?.address);
   const street = String(patient?.street ?? address.street ?? address.logradouro ?? "").trim();
-  const number = String(patient?.number ?? address.number ?? address.numero ?? "").trim();
+  const number = String(patient?.addressNumber ?? patient?.number ?? address.number ?? address.numero ?? "").trim();
   const neighborhood = String(patient?.neighborhood ?? address.neighborhood ?? address.bairro ?? "").trim();
   const city = String(patient?.city ?? address.city ?? address.localidade ?? "").trim();
   const state = String(patient?.state ?? address.state ?? address.uf ?? "").trim();
@@ -208,58 +210,58 @@ const clinicalPrintCss = `
     color: #111827;
     font-family: Montserrat, Arial, sans-serif;
   }
-  .page.portrait { width: 794px; min-height: 1123px; padding: 52px 52px 104px 58px; }
-  .page.landscape { width: 1123px; min-height: 794px; padding: 14px 18px; display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
+  .page.portrait { width: 794px; min-height: 1123px; padding: 30px 44px 138px 60px; }
+  .page.landscape { width: 1123px; min-height: 794px; padding: 12px 14px 14px 16px; display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
   .gold-stripe {
     position: absolute;
     left: 0;
     top: 0;
-    width: 26px;
+    width: 30px;
     height: 100%;
     background: linear-gradient(180deg, #8a6526 0%, #f8dfa1 28%, #c79b38 56%, #7a561d 100%);
   }
-  .gold-corner {
-    position: absolute;
-    left: -170px;
-    top: -215px;
-    width: 920px;
-    height: 390px;
-    border-radius: 0 0 85% 0;
-    border-bottom: 38px solid transparent;
-    background:
-      radial-gradient(circle at 48% 52%, rgba(255,255,255,0.98) 0 46%, rgba(255,255,255,0) 47%),
-      linear-gradient(110deg, #a77920, #f7d875 42%, #b98222 65%, #fff0b6);
-    opacity: 0.96;
-  }
-  .clinic-logo { width: 170px; height: auto; object-fit: contain; }
-  .clinic-logo.small { width: 132px; }
+  .clinic-logo { width: 126px; height: auto; object-fit: contain; }
+  .clinic-logo.small { width: 102px; }
   .letterhead-header { position: relative; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; }
   .doctor-block { text-align: right; letter-spacing: 0; }
-  .doctor-name { font-size: 25px; font-family: Georgia, 'Times New Roman', serif; font-style: italic; margin: 16px 0 8px; }
-  .doctor-crm { font-size: 14px; font-weight: 600; letter-spacing: 3px; }
-  .document-title { margin: 82px 0 26px; text-align: center; font-size: 26px; font-weight: 800; letter-spacing: 0; text-transform: uppercase; }
-  .document-body { position: relative; z-index: 1; padding-bottom: 86px; font-size: 16px; line-height: 1.42; text-align: justify; }
-  .document-body p { margin: 0 0 8px; }
-  .document-body ul, .document-body ol { margin: 6px 0 10px 20px; padding-left: 12px; }
+  .doctor-name { font-size: 18px; font-family: Georgia, 'Times New Roman', serif; font-style: italic; margin: 10px 0 5px; }
+  .doctor-crm { font-size: 11px; font-weight: 600; letter-spacing: 1.6px; }
+  .document-title { margin: 18px 0 10px; text-align: center; font-size: 20px; font-weight: 800; letter-spacing: 0; text-transform: uppercase; }
+  .patient-summary {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: 1fr 0.7fr;
+    gap: 4px 18px;
+    margin: 4px 0 12px;
+    padding: 7px 0 9px;
+    border-top: 1px solid #eadfca;
+    border-bottom: 1px solid #eadfca;
+    font-size: 11.5px;
+    line-height: 1.25;
+  }
+  .patient-summary .wide { grid-column: 1 / -1; }
+  .document-body { position: relative; z-index: 1; padding-bottom: 142px; font-size: 13.4px; line-height: 1.34; text-align: justify; }
+  .document-body p { margin: 0 0 6px; }
+  .document-body ul, .document-body ol { margin: 4px 0 8px 18px; padding-left: 10px; }
   .document-body li { margin: 0 0 3px; }
-  .page.exam-doc .document-title { margin-top: 58px; margin-bottom: 18px; font-size: 23px; }
-  .page.exam-doc .document-body { padding-bottom: 80px; font-size: 13.2px; line-height: 1.28; text-align: left; }
+  .page.exam-doc .document-title { margin-top: 14px; margin-bottom: 10px; font-size: 19px; }
+  .page.exam-doc .document-body { padding-bottom: 142px; font-size: 12.2px; line-height: 1.24; text-align: left; }
   .page.exam-doc .document-body p { margin-bottom: 5px; }
   .page.exam-doc .document-body ul, .page.exam-doc .document-body ol { margin: 4px 0 7px 17px; padding-left: 10px; }
-  .patient-line { margin: 34px 0 28px; display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: end; font-size: 22px; }
-  .line { min-height: 1.25em; border-bottom: 1.6px solid #111; padding: 0 8px 2px; }
-  .signature-area { position: absolute; left: 118px; right: 78px; bottom: 106px; text-align: center; font-size: 13px; }
-  .signature-line { width: 360px; margin: 0 auto 5px; border-top: 1.5px solid #111; }
+  .signature-area { position: absolute; left: 118px; right: 78px; bottom: 96px; text-align: center; font-size: 12px; }
+  .signature-stamp { display: block; width: 190px; max-height: 70px; object-fit: contain; margin: 0 auto -6px; opacity: 0.96; }
+  .signature-line { width: 330px; margin: 0 auto 5px; border-top: 1.4px solid #111; }
   .footer {
     position: absolute;
-    left: 58px;
-    right: 42px;
-    bottom: 22px;
+    left: 60px;
+    right: 38px;
+    bottom: 18px;
     display: grid;
     gap: 2px;
     border-top: 1px solid #eadfca;
     padding-top: 8px;
-    font-size: 12px;
+    font-size: 10.5px;
     color: #1f2937;
   }
   .footer .clinic { font-weight: 700; color: #111827; }
@@ -267,27 +269,28 @@ const clinicalPrintCss = `
     position: relative;
     overflow: hidden;
     min-height: 766px;
-    padding: 18px 22px 18px 38px;
+    padding: 14px 18px 82px 38px;
     border: 1px solid #e1c574;
     background: #fff;
   }
   .via-card .gold-stripe { width: 18px; }
   .via-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 10px; }
-  .via-title { font-size: 18px; font-weight: 800; text-transform: uppercase; word-spacing: 4px; letter-spacing: 0; margin: 0 0 4px; }
+  .via-title { font-size: 16px; font-weight: 800; text-transform: uppercase; word-spacing: 2px; letter-spacing: 0; margin: 0 0 4px; }
   .via-subtitle { font-size: 12px; color: #4b5563; }
   .via-field { margin: 4px 0; font-size: 11px; line-height: 1.25; }
   .via-field strong { display: inline-block; min-width: 62px; }
-  .rx-content { margin-top: 10px; font-size: 11.2px; line-height: 1.26; }
+  .rx-content { margin-top: 8px; font-size: 10.6px; line-height: 1.22; }
   .rx-content p { margin: 0 0 4px; }
   .rx-content ul, .rx-content ol { margin: 4px 0 6px 16px; padding-left: 8px; }
-  .via-signature { margin: 9px 0 0 auto; width: 210px; text-align: center; font-size: 10px; }
-  .buyer-boxes { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .via-signature { position: absolute; right: 20px; bottom: 42px; width: 210px; text-align: center; font-size: 10px; }
+  .buyer-boxes { margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .buyer-box { border: 1.5px solid #111; min-height: 92px; padding: 8px 10px; font-size: 10px; }
   .buyer-box h4 { margin: -10px -12px 10px; padding: 6px 8px; border-bottom: 1.5px solid #111; text-align: center; font-size: 13px; text-transform: uppercase; }
-  .via-footer { margin-top: 6px; border-top: 1px solid #e8dcc4; padding-top: 5px; font-size: 9px; line-height: 1.25; color: #374151; }
+  .via-footer { position: absolute; left: 38px; right: 18px; bottom: 12px; border-top: 1px solid #e8dcc4; padding-top: 5px; font-size: 8.5px; line-height: 1.22; color: #374151; }
   .single-rx { min-height: 1123px; }
-  .single-rx .rx-content { margin-top: 56px; font-size: 18px; line-height: 1.65; }
-  .single-rx .signature-area { position: absolute; right: 58px; bottom: 138px; left: auto; width: 300px; }
+  .single-rx .document-title { margin-top: 20px; margin-bottom: 10px; font-size: 20px; }
+  .single-rx .rx-content { margin-top: 10px; padding-bottom: 142px; font-size: 14px; line-height: 1.42; }
+  .single-rx .signature-area { position: absolute; right: 58px; bottom: 96px; left: auto; width: 300px; }
 `;
 
 async function generateDesignedPdf(options: DesignedPdfOptions): Promise<void> {
@@ -377,6 +380,18 @@ function renderFooter() {
   `;
 }
 
+function renderPatientSummary(patient: ReturnType<typeof normalizeClinicalPatient>, createdAt?: string | Date) {
+  return `
+    <div class="patient-summary">
+      <div><strong>Paciente:</strong> ${escapeHtml(patient.name || "")}</div>
+      <div><strong>CPF:</strong> ${escapeHtml(patient.cpf || "")}</div>
+      <div class="wide"><strong>Endereço:</strong> ${escapeHtml(patient.addressLine || "")}</div>
+      <div><strong>Data:</strong> ${formatClinicalDate(createdAt)}</div>
+      ${patient.rg ? `<div><strong>RG:</strong> ${escapeHtml(patient.rg)}</div>` : "<div></div>"}
+    </div>
+  `;
+}
+
 function renderDocumentPage(options: ClinicalDocumentPdfOptions) {
   const patient = normalizeClinicalPatient(options.patient);
   const date = formatClinicalDate(options.createdAt);
@@ -395,7 +410,6 @@ function renderDocumentPage(options: ClinicalDocumentPdfOptions) {
   return `
     <div class="${pageClass}">
       <div class="gold-stripe"></div>
-      <div class="gold-corner"></div>
       <div class="letterhead-header">
         <img class="clinic-logo" src="${CLINIC_LOGO_PATH}" />
         <div class="doctor-block">
@@ -404,8 +418,10 @@ function renderDocumentPage(options: ClinicalDocumentPdfOptions) {
         </div>
       </div>
       <div class="document-title">${escapeHtml(options.title || label)}</div>
+      ${renderPatientSummary(patient, options.createdAt)}
       <div class="document-body">${content}</div>
       <div class="signature-area">
+        <img class="signature-stamp" src="${DOCTOR_STAMP_PATH}" />
         <div class="signature-line"></div>
         <div>Assinatura do profissional</div>
       </div>
@@ -427,13 +443,12 @@ function renderSinglePrescriptionPage(patientInput: ClinicalPdfPatient | string,
           <div class="doctor-crm">MÉDICO - ${DOCTOR_CRM}</div>
         </div>
       </div>
-      <div class="patient-line">
-        <span>Nome:</span>
-        <span class="line">${escapeHtml(patient.name || "")}</span>
-      </div>
+      <div class="document-title">Prescrição médica</div>
+      ${renderPatientSummary(patient, prescription?.createdAt)}
       <div class="rx-content">${content}</div>
       ${prescription?.observations ? `<div style="margin-top: 24px; font-size: 13px;"><strong>Observações:</strong> ${escapeHtml(prescription.observations)}</div>` : ""}
       <div class="signature-area">
+        <img class="signature-stamp" src="${DOCTOR_STAMP_PATH}" />
         <div class="signature-line"></div>
         <div>Assinatura do profissional</div>
       </div>
@@ -471,6 +486,7 @@ function renderCompactPrescriptionVia(patientInput: ClinicalPdfPatient | string,
       <div class="via-field"><strong>Data:</strong> ${formatClinicalDate(prescription?.createdAt)}</div>
       <div class="rx-content">${content}</div>
       <div class="via-signature">
+        <img class="signature-stamp" src="${DOCTOR_STAMP_PATH}" />
         <div class="signature-line" style="width: 190px;"></div>
         <div>Assinatura do profissional</div>
       </div>

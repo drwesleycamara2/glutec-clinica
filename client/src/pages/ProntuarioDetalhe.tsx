@@ -1225,6 +1225,15 @@ function AtestadosTab({ patientId, patientName, patientPhone, patient }: { patie
     },
     onError: (error) => toast.error(error.message || "Não foi possível salvar o documento."),
   });
+  const updateTextDocumentMutation = trpc.medicalRecords.updateDocument.useMutation({
+    onSuccess: async (savedDocument: any) => {
+      await utils.medicalRecords.getDocuments.invalidate({ patientId });
+      if (savedDocument?.id) setActiveDocumentId(Number(savedDocument.id));
+      toast.success("Documento atualizado no prontuário.");
+      setShowEditor(true);
+    },
+    onError: (error) => toast.error(error.message || "Não foi possível atualizar o documento."),
+  });
 
   const relevantDocuments = useMemo(
     () => ((documents as any[]) || []).filter((doc) => ["atestado", "declaracao", "laudo", "solicitacao_exames"].includes(String(doc.type || "").toLowerCase())),
@@ -1234,6 +1243,7 @@ function AtestadosTab({ patientId, patientName, patientPhone, patient }: { patie
     () => activeDocumentId ? relevantDocuments.find((doc: any) => Number(doc.id) === Number(activeDocumentId)) : null,
     [activeDocumentId, relevantDocuments],
   );
+  const activeDocumentLocked = Boolean(activeDocument?.signedAt || activeDocument?.signatureValidationCode);
 
   const availableTemplates = useMemo(
     () => ((templates as any[]) || [])
@@ -1384,7 +1394,7 @@ function AtestadosTab({ patientId, patientName, patientPhone, patient }: { patie
     const fallbackTitle = `${CLINICAL_DOCUMENT_TYPE_LABELS[documentType]} - ${patientName}`;
     const title = documentTitle.trim() || fallbackTitle;
 
-    uploadTextDocumentMutation.mutate({
+    const payload = {
       patientId,
       type: documentType,
       folderLabel: documentType === "solicitacao_exames" ? "Resultados de exames" : "Documentos clínicos",
@@ -1393,7 +1403,14 @@ function AtestadosTab({ patientId, patientName, patientPhone, patient }: { patie
       base64: textToBase64(content),
       mimeType: "text/html;charset=utf-8",
       originalFileName: `${sanitizeFileName(title)}.html`,
-    });
+    };
+
+    if (activeDocumentId && !activeDocumentLocked) {
+      updateTextDocumentMutation.mutate({ id: activeDocumentId, ...payload });
+      return;
+    }
+
+    uploadTextDocumentMutation.mutate(payload);
   };
 
   return (
@@ -1500,10 +1517,10 @@ function AtestadosTab({ patientId, patientName, patientPhone, patient }: { patie
             </div>
 
             <div className="flex flex-wrap justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setShowEditor(false)} disabled={uploadTextDocumentMutation.isPending}>Fechar</Button>
-              <Button type="button" className="btn-glossy-gold" onClick={saveTextDocument} disabled={uploadTextDocumentMutation.isPending}>
-                {uploadTextDocumentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                {activeDocumentId ? "Salvar nova versão" : "Salvar no prontuário"}
+              <Button type="button" variant="outline" onClick={() => setShowEditor(false)} disabled={uploadTextDocumentMutation.isPending || updateTextDocumentMutation.isPending}>Fechar</Button>
+              <Button type="button" className="btn-glossy-gold" onClick={saveTextDocument} disabled={uploadTextDocumentMutation.isPending || updateTextDocumentMutation.isPending}>
+                {uploadTextDocumentMutation.isPending || updateTextDocumentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                {activeDocumentId && !activeDocumentLocked ? "Atualizar documento" : activeDocumentId ? "Salvar nova versão" : "Salvar no prontuário"}
               </Button>
             </div>
 
@@ -1739,6 +1756,7 @@ function PrescricoesWorkspaceTab({ patientId, patientName, patient }: { patientI
     () => activePrescriptionId ? (prescriptions ?? []).find((item: any) => Number(item.id) === activePrescriptionId) : null,
     [activePrescriptionId, prescriptions],
   );
+  const activePrescriptionLocked = Boolean(activePrescription?.signedAt || activePrescription?.signatureValidationCode);
 
   const filteredTemplates = useMemo(() => {
     const normalized = normalizeTemplateSearchText(templateSearch);
@@ -1757,6 +1775,14 @@ function PrescricoesWorkspaceTab({ patientId, patientName, patient }: { patientI
       await utils.prescriptions.getByPatient.invalidate({ patientId });
     },
     onError: (error: any) => toast.error(error?.message || "Não foi possível salvar a prescrição."),
+  });
+  const updateMutation = trpc.prescriptions.update.useMutation({
+    onSuccess: async (saved: any) => {
+      if (saved?.id) setActivePrescriptionId(Number(saved.id));
+      toast.success("Prescrição atualizada no prontuário.");
+      await utils.prescriptions.getByPatient.invalidate({ patientId });
+    },
+    onError: (error: any) => toast.error(error?.message || "Não foi possível atualizar a prescrição."),
   });
 
   const saveTemplateMutation = trpc.prescriptions.createTemplate.useMutation({
@@ -1814,12 +1840,15 @@ function PrescricoesWorkspaceTab({ patientId, patientName, patient }: { patientI
       return;
     }
     try {
-      const saved = await createMutation.mutateAsync({
+      const payload = {
         patientId,
         type,
         content,
         observations: observations.trim() || undefined,
-      });
+      };
+      const saved = activePrescriptionId && !activePrescriptionLocked
+        ? await updateMutation.mutateAsync({ id: activePrescriptionId, ...payload })
+        : await createMutation.mutateAsync(payload);
       if (saved?.id) setActivePrescriptionId(Number(saved.id));
       if (shouldPrint) {
         await exportPrescriptionPdf(patientName, { type, content, observations, patient });
@@ -1929,10 +1958,7 @@ function PrescricoesWorkspaceTab({ patientId, patientName, patient }: { patientI
               </div>
               <RichTextEditor
                 value={content}
-                onChange={(value) => {
-                  setContent(value);
-                  setActivePrescriptionId(null);
-                }}
+                onChange={setContent}
                 placeholder="Digite, cole ou use o áudio para montar a prescrição..."
                 minHeight="420px"
               />
@@ -1951,13 +1977,13 @@ function PrescricoesWorkspaceTab({ patientId, patientName, patient }: { patientI
 
             <div className="flex flex-wrap justify-end gap-2">
               <Button type="button" variant="outline" onClick={resetComposer}>Limpar</Button>
-              <Button type="button" variant="outline" onClick={() => void savePrescription(true)} disabled={createMutation.isPending}>
-                {createMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
+              <Button type="button" variant="outline" onClick={() => void savePrescription(true)} disabled={createMutation.isPending || updateMutation.isPending}>
+                {createMutation.isPending || updateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
                 Salvar e imprimir
               </Button>
-              <Button type="button" className="btn-glossy-gold" onClick={() => void savePrescription(false)} disabled={createMutation.isPending}>
-                {createMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                Salvar prescrição
+              <Button type="button" className="btn-glossy-gold" onClick={() => void savePrescription(false)} disabled={createMutation.isPending || updateMutation.isPending}>
+                {createMutation.isPending || updateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                {activePrescriptionId && !activePrescriptionLocked ? "Atualizar prescrição" : "Salvar prescrição"}
               </Button>
             </div>
 
@@ -2699,6 +2725,7 @@ function ExamesWorkspaceTab({ patientId, patient }: { patientId: number; patient
   const [templateSearch, setTemplateSearch] = useState("");
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   const [savedDraftExam, setSavedDraftExam] = useState<any | null>(null);
+  const savedDraftExamLocked = Boolean(savedDraftExam?.signedAt || savedDraftExam?.signatureValidationCode);
 
   function appendContent(value?: string | null) {
     const next = String(value ?? "").trim();
@@ -2711,11 +2738,17 @@ function ExamesWorkspaceTab({ patientId, patient }: { patientId: number; patient
     onSuccess: async (createdExam: any) => {
       toast.success("Pedido de exames salvo no prontuário.");
       setSavedDraftExam(createdExam);
-      setContent("");
-      setClinicalIndication("");
       await utils.examRequests.getByPatient.invalidate({ patientId });
     },
     onError: (error: any) => toast.error(error?.message || "Não foi possível salvar o pedido de exames."),
+  });
+  const updateExamMutation = trpc.examRequests.update.useMutation({
+    onSuccess: async (updatedExam: any) => {
+      toast.success("Pedido de exames atualizado.");
+      setSavedDraftExam(updatedExam);
+      await utils.examRequests.getByPatient.invalidate({ patientId });
+    },
+    onError: (error: any) => toast.error(error?.message || "Não foi possível atualizar o pedido de exames."),
   });
 
   const saveTemplateMutation = trpc.examRequests.createTemplate.useMutation({
@@ -2751,12 +2784,19 @@ function ExamesWorkspaceTab({ patientId, patient }: { patientId: number; patient
       return;
     }
 
-    createExamMutation.mutate({
+    const payload = {
       patientId,
       specialty: specialty.trim() || undefined,
       clinicalIndication: clinicalIndication.trim() || undefined,
       content,
-    });
+    };
+
+    if (savedDraftExam?.id && !savedDraftExamLocked) {
+      updateExamMutation.mutate({ id: Number(savedDraftExam.id), ...payload });
+      return;
+    }
+
+    createExamMutation.mutate(payload);
   }
 
   function saveCurrentAsTemplate() {
@@ -2802,6 +2842,18 @@ function ExamesWorkspaceTab({ patientId, patient }: { patientId: number; patient
       createdAt: exam?.createdAt,
       content: examContent,
     });
+  }
+
+  function openSavedExam(exam: any) {
+    if (exam?.signedAt || exam?.signatureValidationCode) {
+      toast.error("Pedido assinado não pode ser alterado. Crie uma nova solicitação.");
+      return;
+    }
+    setSavedDraftExam(exam);
+    setSpecialty(String(exam?.specialty ?? ""));
+    setClinicalIndication(String(exam?.clinicalIndication ?? ""));
+    setContent(String(exam?.content ?? ""));
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   if (isLoading) {
@@ -2882,7 +2934,7 @@ function ExamesWorkspaceTab({ patientId, patient }: { patientId: number; patient
                 <RichTextEditor
                   value={content}
                   onChange={(value) => {
-                    setSavedDraftExam(null);
+                    if (savedDraftExamLocked) setSavedDraftExam(null);
                     setContent(value);
                   }}
                   placeholder="Digite ou dite os exames solicitados, preparo e observações clínicas..."
@@ -2891,12 +2943,12 @@ function ExamesWorkspaceTab({ patientId, patient }: { patientId: number; patient
               </div>
 
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => { setContent(""); setSavedDraftExam(null); }}>
-                  Limpar
+                <Button type="button" variant="outline" onClick={() => { setContent(""); setClinicalIndication(""); setSpecialty(""); setSavedDraftExam(null); }}>
+                  Nova solicitação
                 </Button>
-                <Button type="button" onClick={saveExamRequest} disabled={createExamMutation.isPending}>
-                  {createExamMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                  Salvar pedido
+                <Button type="button" onClick={saveExamRequest} disabled={createExamMutation.isPending || updateExamMutation.isPending}>
+                  {createExamMutation.isPending || updateExamMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  {savedDraftExam?.id && !savedDraftExamLocked ? "Atualizar pedido" : "Salvar pedido"}
                 </Button>
               </div>
 
@@ -2986,6 +3038,12 @@ function ExamesWorkspaceTab({ patientId, patient }: { patientId: number; patient
                       </span>
                     </div>
                   </div>
+                  {!(exam.signedAt || exam.signatureValidationCode) ? (
+                    <Button size="sm" variant="outline" className="mb-3" onClick={() => openSavedExam(exam)}>
+                      <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                      Abrir no editor
+                    </Button>
+                  ) : null}
                   <ClinicalDocumentSignatureActions
                     documentType="exame"
                     documentId={exam.id}

@@ -15,6 +15,7 @@ type SendAnamnesisButtonProps = {
   patientId: number;
   patientName?: string | null;
   label?: string;
+  copyOnly?: boolean;
   disabled?: boolean;
   className?: string;
   variant?: ComponentProps<typeof Button>["variant"];
@@ -22,10 +23,30 @@ type SendAnamnesisButtonProps = {
   onLinkCreated?: () => void;
 };
 
+async function copyTextToClipboard(value: string) {
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  document.body.removeChild(textarea);
+  if (!copied) throw new Error("clipboard_unavailable");
+}
+
 export function SendAnamnesisButton({
   patientId,
   patientName,
   label = "Enviar anamnese",
+  copyOnly = false,
   disabled,
   className,
   variant,
@@ -57,13 +78,29 @@ export function SendAnamnesisButton({
         questions: serializeAnamnesisQuestions(template.questions),
       });
 
-      await navigator.clipboard.writeText(result.shareUrl);
+      await copyTextToClipboard(result.shareUrl);
       toast.success("Link da anamnese copiado para enviar manualmente.");
       onLinkCreated?.();
     } catch (error: any) {
       toast.error(error?.message || "Não foi possível gerar ou copiar o link da anamnese.");
     }
   };
+
+  if (copyOnly) {
+    return (
+      <Button
+        type="button"
+        variant={variant}
+        size={size}
+        disabled={disabled || isPending}
+        className={className}
+        onClick={() => void copyLink()}
+      >
+        {createLinkMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Copy className="mr-2 h-4 w-4" />}
+        {label}
+      </Button>
+    );
+  }
 
   return (
     <DropdownMenu>

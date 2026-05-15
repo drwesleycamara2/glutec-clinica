@@ -1999,6 +1999,47 @@ export async function createPrescription(data: any, userId: number) {
   return getPrescriptionById(Number(insertedId));
 }
 
+export async function updatePrescription(id: number, data: any, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const current = await getPrescriptionById(id);
+  if (!current) throw new Error("Prescrição não encontrada.");
+  if (current.signedAt || current.signatureValidationCode) {
+    throw new Error("Prescrição assinada não pode ser alterada. Crie uma nova prescrição.");
+  }
+
+  await ensurePrescriptionSchema(db);
+  const columns = await getTableColumns("prescriptions");
+  const normalizedContent = String(data.content ?? current.content ?? "").trim();
+  const normalizedObservations = data.observations ? String(data.observations).trim() : null;
+  const updates: any[] = [];
+
+  if (columns.has("type")) updates.push(sql`type = ${data.type ?? current.type ?? "simples"}`);
+  if (columns.has("content")) updates.push(sql`content = ${normalizedContent}`);
+  if (columns.has("observations")) updates.push(sql`observations = ${normalizedObservations}`);
+  if (columns.has("items")) {
+    updates.push(sql`items = ${JSON.stringify({
+      type: data.type ?? current.type ?? "simples",
+      html: normalizedContent,
+      text: stripHtmlToPlainText(normalizedContent),
+      observations: normalizedObservations,
+    })}`);
+  }
+  if (columns.has("updatedAt")) updates.push(sql`updatedAt = now()`);
+  if (columns.has("updatedBy")) updates.push(sql`updatedBy = ${Number(userId)}`);
+
+  if (updates.length === 0) return current;
+
+  await db.execute(sql`
+    update prescriptions
+    set ${sql.join(updates, sql`, `)}
+    where id = ${id}
+  `);
+
+  return getPrescriptionById(id);
+}
+
 export async function getPrescriptionsByPatient(patientId: number) {
   const db = await getDb();
   if (!db) return [];
@@ -2120,6 +2161,44 @@ export async function createExamRequest(data: any, userId: number) {
 
   const insertedId = unwrapInsertId(result);
   return insertedId ? await getExamRequestById(insertedId) : { id: insertedId, ...data, doctorId: userId, exams, content: normalizedContent };
+}
+
+export async function updateExamRequest(id: number, data: any, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const current = await getExamRequestById(id);
+  if (!current) throw new Error("Pedido de exames não encontrado.");
+  if (current.signedAt || current.signatureValidationCode) {
+    throw new Error("Pedido de exames assinado não pode ser alterado. Crie uma nova solicitação.");
+  }
+
+  const columns = await getTableColumns("exam_requests");
+  const normalizedContent = String(data.content ?? current.content ?? "").trim();
+  const exams = Array.isArray(data.exams)
+    ? data.exams
+    : Array.isArray(data.content)
+      ? data.content
+      : [normalizedContent].filter(Boolean);
+  const updates: any[] = [];
+
+  if (columns.has("specialty")) updates.push(sql`specialty = ${data.specialty ?? current.specialty ?? null}`);
+  if (columns.has("clinicalIndication")) updates.push(sql`clinicalIndication = ${data.clinicalIndication ?? current.clinicalIndication ?? null}`);
+  if (columns.has("content")) updates.push(sql`content = ${normalizedContent || exams.join("\n")}`);
+  if (columns.has("exams")) updates.push(sql`exams = ${JSON.stringify(exams)}`);
+  if (columns.has("observations")) updates.push(sql`observations = ${data.observations ?? current.observations ?? null}`);
+  if (columns.has("updatedAt")) updates.push(sql`updatedAt = now()`);
+  if (columns.has("updatedBy")) updates.push(sql`updatedBy = ${Number(userId)}`);
+
+  if (updates.length === 0) return current;
+
+  await db.execute(sql`
+    update exam_requests
+    set ${sql.join(updates, sql`, `)}
+    where id = ${id}
+  `);
+
+  return getExamRequestById(id);
 }
 
 export async function getExamRequestsByPatient(patientId: number) {
@@ -3301,6 +3380,73 @@ export async function uploadPatientDocument(data: {
   `));
 
   return rows[0] ? normalizeDocumentRow(rows[0]) : { success: true };
+}
+
+export async function updatePatientDocument(id: number, data: {
+  patientId: number;
+  type: string;
+  name?: string | null;
+  description?: string | null;
+  folderLabel?: string | null;
+  base64: string;
+  mimeType?: string | null;
+  originalFileName?: string | null;
+}, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const rows = unwrapRows<any>(await db.execute(sql`
+    select *
+    from patient_documents
+    where id = ${id}
+    limit 1
+  `));
+  const current = rows[0];
+  if (!current) throw new Error("Documento não encontrado.");
+  if (Number(current.patientId) !== Number(data.patientId)) {
+    throw new Error("Documento não pertence a este paciente.");
+  }
+
+  const metadata = parseClinicalDocumentMetadata(current.description) ?? {};
+  if (metadata.signedAt || metadata.signatureValidationCode || current.signedAt || current.signatureValidationCode) {
+    throw new Error("Documento assinado não pode ser alterado. Crie uma nova versão.");
+  }
+
+  const stored = savePatientMediaToPublicDir(
+    Number(data.patientId),
+    String(data.base64 ?? ""),
+    data.mimeType,
+    "manual",
+  );
+
+  const fileName =
+    String(data.name ?? "").trim() ||
+    String(data.originalFileName ?? "").trim() ||
+    String(current.name ?? "").trim() ||
+    `Documento ${id}`;
+
+  const columns = await getTableColumns("patient_documents");
+  const updates: any[] = [];
+  if (columns.has("type")) updates.push(sql`type = ${data.type || current.type || "outro"}`);
+  if (columns.has("name")) updates.push(sql`name = ${fileName}`);
+  if (columns.has("description")) updates.push(sql`description = ${data.description ?? current.description ?? null}`);
+  if (columns.has("folderLabel")) updates.push(sql`folderLabel = ${data.folderLabel ?? current.folderLabel ?? null}`);
+  if (columns.has("fileUrl")) updates.push(sql`fileUrl = ${stored.photoUrl}`);
+  if (columns.has("fileKey")) updates.push(sql`fileKey = ${stored.photoKey}`);
+  if (columns.has("fileSize")) updates.push(sql`fileSize = ${Math.round((String(data.base64 ?? "").length * 3) / 4)}`);
+  if (columns.has("mimeType")) updates.push(sql`mimeType = ${stored.mimeType ?? data.mimeType ?? current.mimeType ?? null}`);
+  if (columns.has("updatedAt")) updates.push(sql`updatedAt = now()`);
+  if (columns.has("updatedBy")) updates.push(sql`updatedBy = ${Number(userId)}`);
+
+  if (updates.length === 0) return normalizeDocumentRow(current);
+
+  await db.execute(sql`
+    update patient_documents
+    set ${sql.join(updates, sql`, `)}
+    where id = ${id}
+  `);
+
+  return getPatientDocumentById(id);
 }
 
 export async function createPhotoFolder(patientId: number, name: string, description: string | undefined, userId: number) {

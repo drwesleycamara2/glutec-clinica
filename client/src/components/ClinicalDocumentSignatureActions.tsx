@@ -227,10 +227,6 @@ export function ClinicalDocumentSignatureActions({
   };
 
   const handlePrint = async () => {
-    if (!signed) {
-      toast.error("Assine o documento antes de imprimir.");
-      return;
-    }
     if (lastSignedPdfBase64) {
       openPdfBase64(lastSignedPdfBase64, printFileName);
       return;
@@ -331,7 +327,7 @@ export function ClinicalDocumentSignatureActions({
         </>
       )}
 
-      {signed ? (
+      {onPrint ? (
         <Button type="button" variant="outline" className={sharedButtonClass} onClick={() => void handlePrint()}>
           {lastSignedPdfBase64 ? <Download className="h-4 w-4" /> : <Printer className="h-4 w-4" />}
           Imprimir

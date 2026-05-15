@@ -421,6 +421,8 @@ export function PatientEditDialog({ patientId, onClose, onSaved, onDeleted }: Pr
             <SendAnamnesisButton
               patientId={patientId}
               patientName={form.fullName}
+              label="Gerar link de anamnese"
+              copyOnly
               variant="outline"
               disabled={updateMutation.isPending || deleteMutation.isPending || isLoading}
             />

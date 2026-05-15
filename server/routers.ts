@@ -1105,6 +1105,20 @@ export const appRouter = router({
         return dbComplete.createPrescription(input, userId);
       }),
 
+    update: prescricoesProcedure
+      .input(z.object({
+        id: z.number().int().positive(),
+        patientId: z.number().optional(),
+        type: z.string(),
+        content: z.string(),
+        observations: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const userId = Number(ctx.user.id ?? (ctx.user as any).userId);
+        const { id, ...data } = input;
+        return dbComplete.updatePrescription(id, data, userId);
+      }),
+
     getByPatient: prescricoesProcedure
       .input(z.object({ patientId: z.number() }))
       .query(async ({ ctx, input }) => {
@@ -1147,6 +1161,20 @@ export const appRouter = router({
         return dbComplete.createExamRequest(input, ctx.user.id);
       }),
 
+    update: examesProcedure
+      .input(z.object({
+        id: z.number().int().positive(),
+        patientId: z.number().optional(),
+        specialty: z.string().optional(),
+        clinicalIndication: z.string().optional(),
+        content: z.string(),
+        observations: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...data } = input;
+        return dbComplete.updateExamRequest(id, data, ctx.user.id);
+      }),
+
     getByPatient: examesProcedure
       .input(z.object({ patientId: z.number() }))
       .query(async ({ ctx, input }) => {
@@ -1186,6 +1214,20 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         return dbComplete.createExamRequest(input, ctx.user.id);
+      }),
+
+    update: examesProcedure
+      .input(z.object({
+        id: z.number().int().positive(),
+        patientId: z.number().optional(),
+        specialty: z.string().optional(),
+        clinicalIndication: z.string().optional(),
+        content: z.string(),
+        observations: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...data } = input;
+        return dbComplete.updateExamRequest(id, data, ctx.user.id);
       }),
 
     getByPatient: examesProcedure
@@ -2494,6 +2536,26 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         return dbComplete.uploadPatientDocument(input, ctx.user.id);
+      }),
+    updateDocument: requireModule(
+      "documentos_identificacao",
+      "contratos_termos",
+      "prontuarios",
+    )
+      .input(z.object({
+        id: z.number().int().positive(),
+        patientId: z.number(),
+        type: z.string().min(1),
+        folderLabel: z.string().optional(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        base64: z.string().min(16),
+        mimeType: z.string().optional(),
+        originalFileName: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...data } = input;
+        return dbComplete.updatePatientDocument(id, data, ctx.user.id);
       }),
   }),
 
