@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { runLegacyAnamneseBackfill } from "../server/lib/legacy-anamnese-backfill";
+import { runLegacyAnamneseBackfill } from "../server/lib/legacy-anamnese-backfill.ts";
 
 const LEGACY_QUESTION_TEXT: Record<string, string> = {
   "73693": "Tem alergia a algum medicamento, alimento ou substância?",
