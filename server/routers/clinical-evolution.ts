@@ -70,6 +70,9 @@ export const clinicalEvolutionRouter = router({
         isRetroactive: z.boolean().optional(),
         retroactiveJustification: z.string().optional(),
         status: z.enum(["rascunho", "finalizado", "assinado", "cancelado"]).optional(),
+        weightKg: z.number().positive().max(500).optional().nullable(),
+        heightCm: z.number().int().positive().max(260).optional().nullable(),
+        asaRisk: z.enum(["asa_1", "asa_2", "asa_3_or_more"]).optional().nullable(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -108,6 +111,9 @@ export const clinicalEvolutionRouter = router({
           isRetroactive: input.isRetroactive ? 1 : 0,
           retroactiveJustification: input.retroactiveJustification,
           status: input.status ?? "rascunho",
+          weightKg: input.weightKg != null ? String(input.weightKg) : null,
+          heightCm: input.heightCm ?? null,
+          asaRisk: input.asaRisk ?? null,
           createdBy: ctx.user.id,
         });
 
@@ -165,6 +171,9 @@ export const clinicalEvolutionRouter = router({
         finalizedAt: z.string().optional(),
         isRetroactive: z.boolean().optional(),
         retroactiveJustification: z.string().optional(),
+        weightKg: z.number().positive().max(500).optional().nullable(),
+        heightCm: z.number().int().positive().max(260).optional().nullable(),
+        asaRisk: z.enum(["asa_1", "asa_2", "asa_3_or_more"]).optional().nullable(),
         // Justificativa obrigatória quando a evolução já está finalizada/assinada.
         // Registrada no clinical_evolution_edit_log junto com snapshot antes/depois.
         editJustification: z.string().optional(),
@@ -238,6 +247,9 @@ export const clinicalEvolutionRouter = router({
           finalizedAt: input.finalizedAt ? new Date(input.finalizedAt) : undefined,
           isRetroactive: input.isRetroactive === undefined ? undefined : (input.isRetroactive ? 1 : 0),
           retroactiveJustification: input.retroactiveJustification,
+          weightKg: input.weightKg === undefined ? undefined : (input.weightKg != null ? String(input.weightKg) : null),
+          heightCm: input.heightCm === undefined ? undefined : (input.heightCm ?? null),
+          asaRisk: input.asaRisk === undefined ? undefined : (input.asaRisk ?? null),
           updatedBy: ctx.user.id,
         });
 

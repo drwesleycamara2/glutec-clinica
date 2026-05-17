@@ -59,3 +59,31 @@ export function patientDisplayName(patient?: PatientLike | null) {
   const recordNumber = patientRecordNumber(patient);
   return recordNumber ? `${recordNumber} ${name}` : name;
 }
+
+export function calculatePatientAge(birthDate?: string | Date | null): { years: number; months: number } | null {
+  if (!birthDate) return null;
+  const birth = birthDate instanceof Date ? birthDate : new Date(String(birthDate));
+  if (Number.isNaN(birth.getTime())) return null;
+  const now = new Date();
+  if (birth > now) return null;
+  let years = now.getFullYear() - birth.getFullYear();
+  let months = now.getMonth() - birth.getMonth();
+  if (now.getDate() < birth.getDate()) months -= 1;
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+  if (years < 0) return null;
+  return { years, months };
+}
+
+export function formatPatientAge(birthDate?: string | Date | null): string | null {
+  const age = calculatePatientAge(birthDate);
+  if (!age) return null;
+  const { years, months } = age;
+  if (years === 0 && months === 0) return "recém-nascido";
+  if (years === 0) return `${months} ${months === 1 ? "mês" : "meses"}`;
+  const y = `${years} ${years === 1 ? "ano" : "anos"}`;
+  if (months === 0) return y;
+  return `${y} e ${months} ${months === 1 ? "mês" : "meses"}`;
+}

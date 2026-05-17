@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { useLocation, useParams } from "wouter";
 import { PatientEditDialog } from "@/components/PatientEditDialog";
 import { SendAnamnesisButton } from "@/components/SendAnamnesisButton";
-import { PatientAttentionMark, PatientRecordBadge } from "@/lib/patientDisplay";
+import { PatientAttentionMark, PatientRecordBadge, formatPatientAge } from "@/lib/patientDisplay";
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
@@ -102,7 +102,7 @@ export default function PacienteDetalheContent() {
             {[
               { label: "Nº prontuário", value: patient.recordNumber ? `#${patient.recordNumber}` : "—" },
               { label: "Nome", value: patient.fullName },
-              { label: "Nascimento", value: formatDate(patient.birthDate) },
+              { label: "Nascimento", value: patient.birthDate ? `${formatDate(patient.birthDate)}${formatPatientAge(patient.birthDate) ? ` (${formatPatientAge(patient.birthDate)})` : ""}` : "—" },
               { label: "Gênero", value: patient.gender ?? "—" },
               { label: "Sexo biológico", value: (patient as any).biologicalSex ?? "—" },
               { label: "CPF", value: patient.cpf ?? "—" },

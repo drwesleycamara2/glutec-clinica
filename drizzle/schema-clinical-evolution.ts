@@ -1,4 +1,4 @@
-import { int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { decimal, int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 // Clinical Evolutions / Evolucoes Clinicas
 
@@ -21,6 +21,13 @@ export const clinicalEvolutions = mysqlTable("clinical_evolutions", {
 
   // Attendance type
   attendanceType: mysqlEnum("attendanceType", ["presencial", "online"]),
+
+  // Physical exam: peso/altura/IMC (IMC is computed at render time)
+  weightKg: decimal("weightKg", { precision: 5, scale: 2 }),
+  heightCm: int("heightCm"),
+
+  // Surgical/anesthetic risk classification (ASA)
+  asaRisk: mysqlEnum("asaRisk", ["asa_1", "asa_2", "asa_3_or_more"]),
 
   // Status and Workflow
   status: mysqlEnum("status", ["rascunho", "finalizado", "assinado", "cancelado"]).default("rascunho").notNull(),

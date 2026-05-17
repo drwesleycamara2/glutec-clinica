@@ -649,6 +649,9 @@ export function buildEvolutionSnapshot(ev: any): Record<string, any> {
     finalizedAt: ev?.finalizedAt ? new Date(ev.finalizedAt).toISOString() : null,
     isRetroactive: ev?.isRetroactive ?? null,
     retroactiveJustification: ev?.retroactiveJustification ?? null,
+    weightKg: ev?.weightKg ?? null,
+    heightCm: ev?.heightCm ?? null,
+    asaRisk: ev?.asaRisk ?? null,
   };
 }
 

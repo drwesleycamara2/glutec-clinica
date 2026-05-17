@@ -710,7 +710,7 @@ export default function Agenda() {
   };
 
   return (
-    <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
       <div className="flex w-full min-w-0 flex-1 flex-col">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="mobile-stack-actions flex flex-wrap gap-2 sm:w-auto">
@@ -1066,7 +1066,7 @@ export default function Agenda() {
         )}
       </div>
 
-      <div className="flex w-full flex-col gap-4 xl:w-80 xl:shrink-0">
+      <div className="flex w-full flex-col gap-4 lg:w-80 lg:shrink-0">
         <div className="rounded-lg border border-gray-300 bg-white p-4">
           <Label className="mb-2 block text-sm font-semibold text-gray-700">Profissional selecionado</Label>
           <Select value={selectedDoctor} onValueChange={setSelectedDoctor}>

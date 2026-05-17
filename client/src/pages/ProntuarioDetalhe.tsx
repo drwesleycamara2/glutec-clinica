@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import type { ChangeEvent, ReactNode } from "react";
 import { trpc } from "@/lib/trpc";
-import { PatientAttentionMark, PatientRecordBadge } from "@/lib/patientDisplay";
+import { PatientAttentionMark, PatientRecordBadge, formatPatientAge } from "@/lib/patientDisplay";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -3364,6 +3364,7 @@ export default function ProntuarioDetalhe() {
           <p className="text-xs text-muted-foreground mt-0.5">
             {patient.cpf && `CPF: ${patient.cpf}`}
             {patient.birthDate && ` | Nasc: ${new Date(patient.birthDate).toLocaleDateString("pt-BR")}`}
+            {patient.birthDate && formatPatientAge(patient.birthDate) && ` (${formatPatientAge(patient.birthDate)})`}
             {patient.phone && ` | Tel: ${patient.phone}`}
           </p>
         </div>

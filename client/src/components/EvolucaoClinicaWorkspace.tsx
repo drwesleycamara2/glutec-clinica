@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AudioRecorder } from "@/components/AudioRecorder";
 import { Icd10Search } from "@/components/Icd10Search";
 import { RichTextEditor } from "@/components/RichTextEditor";
@@ -40,6 +40,8 @@ type Icd10Code = {
   description: string;
 };
 
+type AsaRisk = "asa_1" | "asa_2" | "asa_3_or_more";
+
 type EvolutionFormState = {
   id?: number;
   attendanceType: "presencial" | "online" | "";
@@ -53,7 +55,34 @@ type EvolutionFormState = {
   endedAt: string;
   isRetroactive: boolean;
   retroactiveJustification: string;
+  weightKg: string;
+  heightCm: string;
+  asaRisk: AsaRisk | "";
 };
+
+const ASA_LABELS: Record<AsaRisk, string> = {
+  asa_1: "ASA 1 — paciente saudável",
+  asa_2: "ASA 2 — doença sistêmica leve",
+  asa_3_or_more: "ASA 3 ou mais — doença sistêmica grave",
+};
+
+function computeImc(weightKg: string, heightCm: string): { value: number; label: string } | null {
+  const w = Number(String(weightKg).replace(",", "."));
+  const h = Number(String(heightCm).replace(",", "."));
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return null;
+  const meters = h / 100;
+  const imc = w / (meters * meters);
+  if (!Number.isFinite(imc) || imc <= 0) return null;
+  const value = Math.round(imc * 10) / 10;
+  let label = "Eutrófico";
+  if (imc < 18.5) label = "Baixo peso";
+  else if (imc < 25) label = "Eutrófico";
+  else if (imc < 30) label = "Sobrepeso";
+  else if (imc < 35) label = "Obesidade grau I";
+  else if (imc < 40) label = "Obesidade grau II";
+  else label = "Obesidade grau III";
+  return { value, label };
+}
 
 const SIGNATURE_METHODS = [
   { value: "icp_brasil_a3", label: "Certificado A3 pessoa física (e-CPF)" },
@@ -114,6 +143,9 @@ const emptyForm = (): EvolutionFormState => ({
   endedAt: "",
   isRetroactive: false,
   retroactiveJustification: "",
+  weightKg: "",
+  heightCm: "",
+  asaRisk: "",
 });
 
 function toDateTimeInputValue(date: Date) {
@@ -436,6 +468,8 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
   const [justificationDialogOpen, setJustificationDialogOpen] = useState(false);
   const [pendingSaveAction, setPendingSaveAction] = useState<null | "rascunho" | "finalizado">(null);
   const [finalizeConfirmOpen, setFinalizeConfirmOpen] = useState(false);
+  const [asaConfirmOpen, setAsaConfirmOpen] = useState(false);
+  const asaConfirmResolveRef = useRef<((value: boolean) => void) | null>(null);
   const [editJustificationText, setEditJustificationText] = useState("");
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [historyForEvolutionId, setHistoryForEvolutionId] = useState<number | null>(null);
@@ -657,6 +691,15 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
       ? form.endedAt || toDateTimeInputValue(new Date())
       : form.endedAt || "";
 
+    const weightNumber = form.weightKg.trim() ? Number(form.weightKg.replace(",", ".")) : null;
+    const heightNumber = form.heightCm.trim() ? Number(form.heightCm.replace(",", ".")) : null;
+    if (weightNumber != null && (!Number.isFinite(weightNumber) || weightNumber <= 0 || weightNumber > 500)) {
+      throw new Error("Peso inválido. Use valor entre 0,1 e 500 kg.");
+    }
+    if (heightNumber != null && (!Number.isFinite(heightNumber) || heightNumber <= 0 || heightNumber > 260)) {
+      throw new Error("Altura inválida. Use valor em cm entre 1 e 260.");
+    }
+
     return {
       attendanceType: form.attendanceType as "presencial" | "online",
       icdCode: form.icd10?.code ?? "",
@@ -671,6 +714,9 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
       isRetroactive: form.isRetroactive,
       retroactiveJustification: form.retroactiveJustification || undefined,
       status,
+      weightKg: weightNumber,
+      heightCm: heightNumber != null ? Math.round(heightNumber) : null,
+      asaRisk: form.asaRisk || null,
     };
   };
 
@@ -681,9 +727,28 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
     toast.success("Atendimento iniciado.");
   };
 
-  const handleSave = async (opts?: { justification?: string }) => {
+  const requireAsaConfirmation = (): Promise<boolean> => {
+    if (form.asaRisk !== "asa_3_or_more") return Promise.resolve(true);
+    return new Promise<boolean>((resolve) => {
+      asaConfirmResolveRef.current = resolve;
+      setAsaConfirmOpen(true);
+    });
+  };
+
+  const resolveAsaConfirmation = (value: boolean) => {
+    const resolver = asaConfirmResolveRef.current;
+    asaConfirmResolveRef.current = null;
+    setAsaConfirmOpen(false);
+    if (resolver) resolver(value);
+  };
+
+  const handleSave = async (opts?: { justification?: string; skipAsaConfirmation?: boolean }) => {
     try {
       const payload = buildPayload("rascunho");
+      if (!opts?.skipAsaConfirmation) {
+        const asaOk = await requireAsaConfirmation();
+        if (!asaOk) return;
+      }
       if (form.id) {
         // Se editando evolução finalizada/assinada, exige justificativa
         if (editingLockedStatus && !opts?.justification) {
@@ -755,7 +820,7 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
         if (isReceptionist) {
           await handleSaveSecretaryNotes();
         } else {
-          await handleSave();
+          await handleSave({ skipAsaConfirmation: true });
         }
       } catch {
         // keep local draft even if network save fails
@@ -769,6 +834,8 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
   const handleFinalize = async (opts?: { justification?: string }) => {
     try {
       const payload = buildPayload("finalizado");
+      const asaOk = await requireAsaConfirmation();
+      if (!asaOk) return;
       if (form.id) {
         if (editingLockedStatus && !opts?.justification) {
           setPendingSaveAction("finalizado");
@@ -904,6 +971,9 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
       endedAt: record.endedAt ? toDateTimeInputValue(new Date(record.endedAt)) : "",
       isRetroactive: Boolean(record.isRetroactive),
       retroactiveJustification: record.retroactiveJustification || "",
+      weightKg: record.weightKg != null && record.weightKg !== "" ? String(record.weightKg) : "",
+      heightCm: record.heightCm != null && record.heightCm !== "" ? String(record.heightCm) : "",
+      asaRisk: (record.asaRisk === "asa_1" || record.asaRisk === "asa_2" || record.asaRisk === "asa_3_or_more") ? record.asaRisk : "",
     });
     // Se a evolução já estava finalizada/assinada, qualquer salvar daqui pra
     // frente vai exigir justificativa (auditada em clinical_evolution_edit_log).
@@ -1491,6 +1561,69 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
             </>
           )}
 
+          <div className="space-y-3 pt-2 border-t border-border/40">
+            <Label className="text-sm font-semibold">Exame físico — dados vitais</Label>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-1">
+                <Label htmlFor="evo-peso" className="text-xs text-muted-foreground">Peso (kg)</Label>
+                <Input
+                  id="evo-peso"
+                  inputMode="decimal"
+                  placeholder="ex.: 72,5"
+                  value={form.weightKg}
+                  onChange={(event) => setForm((current) => ({ ...current, weightKg: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="evo-altura" className="text-xs text-muted-foreground">Altura (cm)</Label>
+                <Input
+                  id="evo-altura"
+                  inputMode="numeric"
+                  placeholder="ex.: 175"
+                  value={form.heightCm}
+                  onChange={(event) => setForm((current) => ({ ...current, heightCm: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">IMC (calculado)</Label>
+                {(() => {
+                  const imc = computeImc(form.weightKg, form.heightCm);
+                  return (
+                    <div className="flex h-10 items-center rounded-md border border-input bg-muted/40 px-3 text-sm">
+                      {imc ? (
+                        <span><strong>{imc.value.toString().replace(".", ",")}</strong> kg/m² <span className="text-muted-foreground">— {imc.label}</span></span>
+                      ) : (
+                        <span className="text-muted-foreground">Informe peso e altura</span>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2 pt-2 border-t border-border/40">
+            <Label htmlFor="evo-asa" className="text-sm font-semibold">Risco cirúrgico (ASA)</Label>
+            <Select
+              value={form.asaRisk || ""}
+              onValueChange={(value) => setForm((current) => ({ ...current, asaRisk: (value as AsaRisk) || "" }))}
+            >
+              <SelectTrigger id="evo-asa" className="max-w-md">
+                <SelectValue placeholder="Selecionar classificação ASA" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="asa_1">{ASA_LABELS.asa_1}</SelectItem>
+                <SelectItem value="asa_2">{ASA_LABELS.asa_2}</SelectItem>
+                <SelectItem value="asa_3_or_more">{ASA_LABELS.asa_3_or_more}</SelectItem>
+              </SelectContent>
+            </Select>
+            {form.asaRisk === "asa_3_or_more" && (
+              <p className="text-xs text-amber-700">
+                Atenção: ASA 3 ou mais é classificação de risco elevado. Ao salvar ou finalizar, será pedida confirmação.
+              </p>
+            )}
+          </div>
+
           <div className="space-y-2 pt-2 border-t border-border/40">
             <Label>CID-10 (obrigatório apenas ao finalizar)</Label>
             <Icd10Search
@@ -1818,6 +1951,37 @@ export function EvolucaoClinicaWorkspace({ patientId, patientName }: Props) {
             </Button>
             <Button onClick={handleExport}>
               Exportar agora
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialogo de confirmacao para ASA 3 ou mais (risco cirurgico elevado) */}
+      <Dialog
+        open={asaConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open) resolveAsaConfirmation(false);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar risco cirúrgico ASA 3 ou mais?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>
+              Você selecionou <strong>ASA 3 ou mais</strong>, que corresponde a paciente com doença sistêmica grave (risco anestésico/cirúrgico elevado).
+            </p>
+            <p>Tem certeza que é essa a classificação correta para este atendimento?</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => resolveAsaConfirmation(false)}>
+              Revisar
+            </Button>
+            <Button
+              className="border-amber-600/30 bg-amber-600 text-white hover:bg-amber-700"
+              onClick={() => resolveAsaConfirmation(true)}
+            >
+              Confirmar ASA 3 ou mais
             </Button>
           </DialogFooter>
         </DialogContent>
